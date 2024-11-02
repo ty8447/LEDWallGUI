@@ -1,8 +1,9 @@
 package com.example.ledwallgui
 
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.bluetooth.BluetoothAdapter
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Bundle
 import android.util.Log
@@ -11,9 +12,8 @@ import android.view.Window
 import android.view.WindowManager
 import android.widget.ImageButton
 import android.widget.ImageView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import com.example.ledwallgui.ui.alarm.AlarmActivity
 import com.example.ledwallgui.ui.modes.modesActivity
 import com.example.ledwallgui.ui.settings.settingsActivity
@@ -31,8 +31,6 @@ class MainActivity : AppCompatActivity() {
       //  private const val PERMISSIONS_REQUEST_BLUETOOTH = 101
     }
 
-    private val PREFS_NAME = "MyPrefs"
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestWindowFeature(Window.FEATURE_NO_TITLE) // Hide the title bar
@@ -46,9 +44,23 @@ class MainActivity : AppCompatActivity() {
         preferenceUtils = PreferenceUtils(this) // Initialize preferenceUtils
         Log.d("INTRO","SWITCHED TO MAIN ACTIVITY!")
         // Check if Bluetooth permissions are granted, and if not, request them
-       /* if (!areBluetoothPermissionsGranted()) {
-            requestBluetoothPermissions()
-        }*/
+        val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
+        if (bluetoothAdapter == null) {
+            // Device doesn't support Bluetooth
+            println("Bluetooth is not supported on this device.")
+        } else {
+            // Device supports Bluetooth
+            println("Bluetooth is supported on this device.")
+            if (bluetoothAdapter.isEnabled) {
+                // Bluetooth is enabled
+                println("Bluetooth is currently enabled.")
+            } else {
+                // Bluetooth is disabled
+                println("Bluetooth is currently disabled.")
+                // Request to enable Bluetooth using enableBluetoothLauncher as before
+            }
+        }
+
 
         val imageButton1: ImageButton = findViewById(R.id.imageButton1)
         val button2: ImageButton = findViewById(R.id.modesbutton)
