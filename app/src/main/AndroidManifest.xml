@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.example.ledwallgui">
+
+
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="true"/>
+    <uses-feature android:name="android.software.companion_device_setup"/>
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@drawable/icon"
+        android:label="@string/app_name"
+        android:roundIcon="@drawable/icon"
+        android:supportsRtl="true"
+        android:theme="@style/DarkAppTheme"
+        tools:targetApi="31">
+        <activity
+            android:name="com.example.ledwallgui.ui.SplashScreenActivity"
+            android:theme="@style/Theme.Splash">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name="com.example.ledwallgui.ui.settings.settingsActivity"
+            android:exported="false" />
+        <activity
+            android:name="com.example.ledwallgui.ui.alarm.AlarmActivity"
+            android:exported="false" />
+        <activity
+            android:name="com.example.ledwallgui.ui.AlarmAlertActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen" />
+
+        <activity
+            android:name="com.example.ledwallgui.ui.modes.modesActivity"
+            android:exported="false"
+            android:label="@string/title_activity_modes"
+            android:theme="@style/Theme.LEDWallGUI"
+            android:screenOrientation="landscape" />
+        <activity
+            android:name="com.example.ledwallgui.ui.alarm.alarmEditorActivity"
+            android:exported="false" />
+        <activity
+            android:name="com.example.ledwallgui.ui.settings.ConnectionActivity"
+            android:exported="false" />
+        <activity
+            android:name="com.example.ledwallgui.PermissionRequestActivity"
+            android:exported="false" />
+        <activity
+            android:name="com.example.ledwallgui.MainActivity"
+            android:exported="true"
+            android:configChanges="keyboardHidden|orientation|screenSize"
+            android:label="@string/app_name"
+            android:theme="@style/DarkAppTheme"
+            android:screenOrientation="landscape">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <service
+            android:name="com.example.ledwallgui.TimeMonitoringService"
+            android:exported="false" />
+    </application>
+
+</manifest>

@@ -1,0 +1,7 @@
+<resources>
+    <dimen name="fab_margin">16dp</dimen>
+    <dimen name="button_corner_radius">15dp</dimen>
+    <dimen name="daySize">50dp</dimen>
+    <dimen name="min_button_text_size">15dp</dimen>
+    <dimen name="max_button_text_size">15dp</dimen>
+</resources>

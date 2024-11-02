@@ -1,0 +1,6 @@
+<!-- res/drawable/button_selector.xml -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Button 1 -->
+    <item android:drawable="@drawable/power_clicked" android:state_pressed="true" />
+    <item android:drawable="@drawable/power_normal" />
+</selector>

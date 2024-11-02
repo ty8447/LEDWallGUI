@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="clicked_item_background">#4b4b4b</color>
+    <color name="default_item_background">#FF252525</color>
+    <color name="splashBackground">#9d21a8</color>
+    <color name="selectedDayColor">#03dac6</color>
+
+
+</resources>
