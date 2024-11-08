@@ -26,12 +26,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.ui.semantics.text
 import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.ledwallgui.R
-import kotlin.io.path.name
 
 class ConnectionActivity : AppCompatActivity() {
 
@@ -47,8 +45,8 @@ class ConnectionActivity : AppCompatActivity() {
     companion object {
         private const val SCAN_PERIOD: Long = 30000 // 1 minute timeout
         private const val PERMISSIONS_REQUEST_BLUETOOTH = 1
-        private const val REQUEST_ENABLE_BLUETOOTH = 2 //
-        private const val REQUEST_ENABLE_BT = 2 // Also used to request enabling Bluetooth
+//        private const val REQUEST_ENABLE_BLUETOOTH = 2 //
+//        private const val REQUEST_ENABLE_BT = 2 // Also used to request enabling Bluetooth
     }
 
     private val bluetoothPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

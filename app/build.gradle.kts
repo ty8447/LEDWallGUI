@@ -9,8 +9,8 @@ android {
     compileSdk = 34
     defaultConfig {
         applicationId = "com.example.ledwallgui"
-        minSdk = 30
-        targetSdk = 30 // Updated to the latest SDK version
+        minSdk = 33
+        targetSdk = 33 // Updated to the latest SDK version
         versionCode = 1
         versionName = "1.0"
 
@@ -64,4 +64,5 @@ dependencies {
     implementation("org.bouncycastle:bcpkix-jdk18on:1.78.1") {
         exclude(group = "org.osgi", module = "org.osgi.core") // Exclude the OSGI bundle
     }
+    implementation("androidx.compose.material3:material3:1.3.1")
 }
