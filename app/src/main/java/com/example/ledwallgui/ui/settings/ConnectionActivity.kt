@@ -130,21 +130,43 @@ class ConnectionActivity : AppCompatActivity() {
 
     private fun checkPermissionsAndStartScan() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // Check if we have the necessary permissions
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED) {
-                startBluetoothScan()
-            } else {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED ||
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED ||
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+            ) {
                 // Request permissions
-                requestPermissions(bluetoothPermissions, PERMISSIONS_REQUEST_BLUETOOTH)
+                requestPermissions(
+                    arrayOf(
+                        Manifest.permission.BLUETOOTH_SCAN,
+                        Manifest.permission.BLUETOOTH_CONNECT,
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    ),
+                    PERMISSIONS_REQUEST_BLUETOOTH
+                )
+                return // Don't proceed with the scan if permissions are not granted
             }
         } else {
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                startBluetoothScan()
-            } else {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+            ) {
                 // Request location permission
-                requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), PERMISSIONS_REQUEST_BLUETOOTH)
+                requestPermissions(
+                    arrayOf(
+                        Manifest.permission.BLUETOOTH,
+                        Manifest.permission.BLUETOOTH_ADMIN,
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    ),
+                    PERMISSIONS_REQUEST_BLUETOOTH
+                )
+                return // Don't proceed with the scan if permissions are not granted
             }
         }
+
+        // Permissions are granted, start the scan
+        startBluetoothScan()
     }
 
     @SuppressLint("MissingPermission")
@@ -199,6 +221,8 @@ class ConnectionActivity : AppCompatActivity() {
                 startBluetoothScan()
             } else {
                 Toast.makeText(this, "Bluetooth permissions required for scanning.", Toast.LENGTH_LONG).show()
+                // Return to settings menu
+//                finish() // Finish the current activity (ConnectionActivity)
             }
         }
     }

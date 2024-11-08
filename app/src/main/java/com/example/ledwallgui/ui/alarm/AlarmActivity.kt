@@ -44,7 +44,7 @@ class AlarmActivity : AppCompatActivity() {
     private lateinit var emptyTextView: TextView
     private var shouldUpdateList = intent?.getBooleanExtra("updatelist", false) ?: false // Retrieve the updatelist value
     private val selectedAlarmIndices = mutableListOf<Int>() // Array to store selected alarm indices
-    private var use12HourTimeFormat = true // Initialize with default value
+    private var use12HourTimeFormat = false // Initialize with default value
     private val daysOfWeek = mutableListOf<String>()
     private val mondayStart = true
     val clock: Clock = Clock.systemDefaultZone()
@@ -89,9 +89,27 @@ class AlarmActivity : AppCompatActivity() {
         timeTillNext = findViewById(R.id.timeTillNext)
         currentTime = findViewById(R.id.currentTime)
         updateCurrentTime()
-        //handler.postDelayed(updateRunnable, updateIntervalMillis)
-       // val sharedPreferences = getSharedPreferences(MainActivity.PREFS_NAME, MODE_PRIVATE)
-       // use12HourTimeFormat = sharedPreferences.getBoolean("use12HourTimeFormat", false)
+
+        val sharedPreferences = getSharedPreferences("settings_prefs", Context.MODE_PRIVATE)
+
+// Get time format option
+        val timeFormatOption = sharedPreferences.getInt("time_format_option", 0) // Default to 0 if not found
+
+// Set use12HourTimeFormat based on time format option
+        use12HourTimeFormat = when (timeFormatOption) {
+            0 -> { // Match Device
+                !android.text.format.DateFormat.is24HourFormat(this)
+            }
+            1 -> { // 12 Hour
+                true
+            }
+            2 -> { // 24 Hour
+                false
+            }
+            else -> { // Default to Match Device
+                !android.text.format.DateFormat.is24HourFormat(this)
+            }
+        }
 
         val backButton: ImageButton = findViewById(R.id.aBackButton)
         cancelButton = findViewById(R.id.cancelButton)
@@ -217,27 +235,6 @@ class AlarmActivity : AppCompatActivity() {
         unregisterReceiver(updateUIReceiver)
     }
 
-
-
- //   override fun onStop() {
-   //     super.onStop()
-
-        // Save the list of alarms using SharedPreferences
-       // val gson = Gson()
-       // val alarmsJson = gson.toJson(alarms)
-      //  val editor = getSharedPreferences(MainActivity.PREFS_NAME, MODE_PRIVATE).edit()
-       // editor.putString("alarmsJson", alarmsJson)
-      //  editor.putBoolean("use12HourTimeFormat", use12HourTimeFormat)
-     //   editor.apply()
-  //  }
-
-   /* private val updateRunnable = object : Runnable {
-        override fun run() {
-            updateCurrentTime()
-            handler.postDelayed(this, updateIntervalMillis)
-        }
-    }*/
-
     fun updateCurrentTime() {
         val calendar = Calendar.getInstance()
         val hour = calendar.get(Calendar.HOUR_OF_DAY)
@@ -302,10 +299,14 @@ class AlarmActivity : AppCompatActivity() {
             }
         }
 
-        if (anyEnabledAlarm){
+        if (anyEnabledAlarm) {
             nextEnabledAlarm?.let {
                 val nextAlarmTime = it.getTimeAsCalendar()
-                val formattedTime = SimpleDateFormat("hh:mm a", Locale.US).format(nextAlarmTime.time)
+                val formattedTime = if (use12HourTimeFormat) {
+                    SimpleDateFormat("hh:mm a", Locale.US).format(nextAlarmTime.time)
+                } else {
+                    SimpleDateFormat("HH:mm", Locale.US).format(nextAlarmTime.time)
+                }
                 timeTillNext.text = "Next Alarm: $formattedTime"
                 timeTillNext.visibility = View.VISIBLE
 

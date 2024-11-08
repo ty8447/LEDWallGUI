@@ -20,6 +20,11 @@ class PreferenceUtils(private val context: Context) {
         editor.apply()
     }
 
+    fun getMotionDetectionEnabled(): Boolean {
+        val sharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return sharedPreferences.getBoolean(KEY_MOTION_DETECTION_ENABLED, false) // Default to false
+    }
+
     fun saveConnectState(connectState: Boolean) {
         val editor = sharedPreferences.edit()
         editor.putBoolean("connectState", connectState)
@@ -53,5 +58,10 @@ class PreferenceUtils(private val context: Context) {
         } else {
             emptyList()
         }
+    }
+
+    companion object {
+        private const val PREFS_NAME = "app_prefs"
+        private const val KEY_MOTION_DETECTION_ENABLED = "motion_detection_enabled"
     }
 }

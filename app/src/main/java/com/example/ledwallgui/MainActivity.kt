@@ -5,17 +5,25 @@ import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.content.res.Configuration
+import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.view.Window
 import android.view.WindowManager
+import android.widget.Button
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import kotlin.system.exitProcess
+import com.google.android.material.snackbar.Snackbar
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import com.example.ledwallgui.ui.MotionDetectionService
 import com.example.ledwallgui.ui.alarm.AlarmActivity
 import com.example.ledwallgui.ui.modes.modesActivity
+import com.example.ledwallgui.ui.settings.ConnectionActivity
 import com.example.ledwallgui.ui.settings.settingsActivity
 
 
@@ -35,8 +43,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         requestWindowFeature(Window.FEATURE_NO_TITLE) // Hide the title bar
         window.setFlags(
-            WindowManager.LayoutParams.FLAG_FULLSCREEN, // Hide the status bar
-            WindowManager.LayoutParams.FLAG_FULLSCREEN
+            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
         )
         setContentView(R.layout.activity_main)
         hideSystemUI()
@@ -45,6 +53,7 @@ class MainActivity : AppCompatActivity() {
         Log.d("INTRO","SWITCHED TO MAIN ACTIVITY!")
         // Check if Bluetooth permissions are granted, and if not, request them
         val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
+        val motionDetectionEnabled = preferenceUtils.getMotionDetectionEnabled()
         if (bluetoothAdapter == null) {
             // Device doesn't support Bluetooth
             println("Bluetooth is not supported on this device.")
@@ -75,7 +84,32 @@ class MainActivity : AppCompatActivity() {
         }
 
         button2.setOnClickListener {
-            showModesMenu()
+            if (connectState) {
+                // Device is connected, start ModesActivity
+                showModesMenu()
+            } else {
+                // Device is not connected, show Snackbar
+                val snackbar = Snackbar.make(
+                    findViewById(android.R.id.content),
+                    "No Device is Connected",
+                    Snackbar.LENGTH_LONG
+                )
+                snackbar.setAction("Connect") {
+                    // Navigate to ConnectionActivity
+                    val intent = Intent(this, ConnectionActivity::class.java)
+                    startActivity(intent)
+                }
+
+                // Customize Snackbar appearance
+                val snackbarView = snackbar.view
+                val textView = snackbarView.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)
+                textView.setTextColor(Color.WHITE) // Set text color to white
+
+                val actionButton = snackbarView.findViewById<Button>(com.google.android.material.R.id.snackbar_action)
+                actionButton.setTextColor(ContextCompat.getColor(this, R.color.light_blue)) // Set button text color to light blue
+
+                snackbar.show()
+            }
         }
         imageButton2.setOnClickListener {
             showAlarmMenu()
@@ -86,44 +120,26 @@ class MainActivity : AppCompatActivity() {
 
         updatePowerButtonImage()
         updateConnectIcon()
+
+        if (motionDetectionEnabled) {
+            val intent = Intent(this, MotionDetectionService::class.java)
+            intent.putExtra("source", "MainActivity") // Add extra data
+            startService(intent)
+            Log.d("Motion Detection", "Detecting Motion")
+        } else {
+            val intent = Intent(this, MotionDetectionService::class.java)
+            intent.putExtra("source", "MainActivity") // Add extra data
+            stopService(intent)
+            Log.d("Motion Detection", "Not Detecting Motion")
+        }
+
     }
 
-   /* private fun areBluetoothPermissionsGranted(): Boolean {
-        val bluetoothPermission = android.Manifest.permission.BLUETOOTH
-        val bluetoothAdminPermission = android.Manifest.permission.BLUETOOTH_ADMIN
-        val fineLocationPermission = android.Manifest.permission.ACCESS_FINE_LOCATION
-
-        return (ContextCompat.checkSelfPermission(this, bluetoothPermission) == PackageManager.PERMISSION_GRANTED
-                && ContextCompat.checkSelfPermission(this, bluetoothAdminPermission) == PackageManager.PERMISSION_GRANTED
-                && ContextCompat.checkSelfPermission(this, fineLocationPermission) == PackageManager.PERMISSION_GRANTED)
-    }*/
-
-    /*private fun requestBluetoothPermissions() {
-        ActivityCompat.requestPermissions(
-            this,
-            arrayOf(
-                android.Manifest.permission.BLUETOOTH,
-                android.Manifest.permission.BLUETOOTH_ADMIN,
-                android.Manifest.permission.ACCESS_FINE_LOCATION
-            ),
-            PERMISSIONS_REQUEST_BLUETOOTH
-        )
-    }*/
-
-   /* override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == PERMISSIONS_REQUEST_BLUETOOTH) {
-            if (areBluetoothPermissionsGranted()) {
-                // Permissions granted, continue with your app's logic
-            } else {
-                // Permissions denied, handle it (show a message, etc.)
-            }
-        }
-    }*/
+    @SuppressLint("ResourceType")
+    private fun showModesMenu() {
+        val intentm = Intent(this, modesActivity::class.java)
+        startActivity(intentm)
+    }
 
     override fun onStop() {
         super.onStop()
@@ -179,12 +195,6 @@ class MainActivity : AppCompatActivity() {
             connectButton.setImageResource(R.drawable.stat_dis_button)
         }
 
-    }
-
-    @SuppressLint("ResourceType")
-    private fun showModesMenu() {
-        val intentm = Intent(this, modesActivity::class.java)
-        startActivity(intentm)
     }
 
     @SuppressLint("ResourceType")

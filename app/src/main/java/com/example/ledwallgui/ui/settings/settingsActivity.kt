@@ -2,13 +2,17 @@ package com.example.ledwallgui.ui.settings
 
 import android.app.Activity
 import android.Manifest
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Bundle
-import android.os.UserHandle
+import android.os.Process
+import android.provider.Settings
 import android.util.Log
 import android.view.View
 import android.view.Window
@@ -16,29 +20,40 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.ImageButton
 import android.widget.Toast
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatButton
-import androidx.compose.ui.semantics.dismiss
-import androidx.compose.ui.semantics.text
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.example.ledwallgui.MainActivity
 import com.example.ledwallgui.R
-import com.example.ledwallgui.ui.alarm.AlarmActivity
-import com.example.ledwallgui.ui.alarm.alarmEditorActivity
 import androidx.appcompat.app.AlertDialog
+import com.example.ledwallgui.TimeMonitoringService
+import com.example.ledwallgui.ui.MotionDetectionService
+import com.google.android.material.snackbar.Snackbar
 
 class settingsActivity : AppCompatActivity() {
     private lateinit var micButton: AppCompatButton
+    private lateinit var locationButton: AppCompatButton
+    private lateinit var motionButton: AppCompatButton
+    private var snackBar: Snackbar? = null
     private var micEnabled = false
     private var lockConfigEnabled = false
     private var motionDetectionEnabled = false
     private var locationEnabled = false
     private var timeFormatOption = 0 // 0: Match Device, 1: 12 Hour, 2: 24 Hour
     private val timeFormatOptions = arrayOf("Match Device", "12 Hour", "24 Hour")
+    val actionFlipCamera = "com.example.ledwallgui.FLIP_CAMERA"
 
     private fun checkMicrophonePermission(): Boolean {
         return ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun checkLocationPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun checkCameraPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun requestMicrophonePermission() {
@@ -46,6 +61,23 @@ class settingsActivity : AppCompatActivity() {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_MICROPHONE_PERMISSION)
         } else {
             toggleMicrophone() // Permission already granted, toggle microphone
+        }
+    }
+
+    private fun requestLocationPermission() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), REQUEST_LOCATION_PERMISSION)
+        } else {
+            toggleLocation() // Permission already granted, toggle location
+        }
+    }
+
+    private fun requestCameraPermission() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
+            ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA, Manifest.permission.WRITE_SETTINGS), REQUEST_CAMERA_PERMISSION)
+        } else {
+            toggleMotionDetection() // Permission already granted, toggle motion detection
         }
     }
 
@@ -67,6 +99,55 @@ class settingsActivity : AppCompatActivity() {
         )
     }
 
+    private fun toggleLocation() {
+        locationEnabled = !locationEnabled
+        // ... (Implement location control logic here using location APIs) ...
+        // Update button text and background
+        locationButton.text = if (locationEnabled) {
+            "Location\n\nOn"
+        } else {
+            "Location\n\nOff"
+        }
+        locationButton.setBackgroundResource(
+            if (locationEnabled) {
+                R.drawable.settings_button_background_enabled
+            } else {
+                R.drawable.settings_button_background
+            }
+        )
+    }
+
+    private fun toggleMotionDetection() {
+        motionDetectionEnabled = !motionDetectionEnabled
+        // ... (Implement motion detection control logic here using camera APIs) ...
+
+        if (motionDetectionEnabled) {
+            val intent = Intent(this, MotionDetectionService::class.java)
+            intent.putExtra("source", "SettingsActivity") // Add extra data
+            startService(intent)
+            Log.d("Motion Detection", "Detecting Motion")
+        } else {
+            val intent = Intent(this, MotionDetectionService::class.java)
+            intent.putExtra("source", "SettingsActivity") // Add extra data
+            stopService(intent)
+            Log.d("Motion Detection", "Not Detecting Motion")
+        }
+
+        // Update button text and background
+        motionButton.text = if (motionDetectionEnabled) {
+            "Motion Detection\n\nOn"
+        } else {
+            "Motion Detection\n\nOff"
+        }
+        motionButton.setBackgroundResource(
+            if (motionDetectionEnabled) {
+                R.drawable.settings_button_background_enabled
+            } else {
+                R.drawable.settings_button_background
+            }
+        )
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_MICROPHONE_PERMISSION) {
@@ -75,6 +156,28 @@ class settingsActivity : AppCompatActivity() {
             } else {
                 // Permission denied, handle accordingly (e.g., show a message)
                 Toast.makeText(this, "Microphone permission denied", Toast.LENGTH_SHORT).show()
+            }
+        } else if (requestCode == REQUEST_LOCATION_PERMISSION) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                toggleLocation() // Permission granted, toggle location
+            } else {
+                // Permission denied, handle accordingly (e.g., show a message)
+                Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show()
+            }
+        } else if (requestCode == REQUEST_CAMERA_PERMISSION) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
+                toggleMotionDetection()
+                // Set system brightness to 15% (0-255 scale)
+                val brightnessValue = (0.15 * 255).toInt()
+                Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, brightnessValue)
+            } else {
+                Toast.makeText(this, "Camera or Storage permission denied", Toast.LENGTH_SHORT).show()
+            }
+        } else if (requestCode == REQUEST_WRITE_SETTINGS) {
+            if (Settings.System.canWrite(this)) {
+                // Permission granted, proceed with your logic
+            } else {
+                // Permission denied, handle accordingly
             }
         }
     }
@@ -93,6 +196,8 @@ class settingsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_settings_menu)
         hideSystemUI()
         micButton = findViewById(R.id.micButton)
+        locationButton = findViewById(R.id.locationButton)
+        motionButton = findViewById(R.id.motionButton)
         timeFormatOption = intent.getIntExtra("timeFormatOption", 0)
         val backButton: ImageButton = findViewById(R.id.sBackButton)
         val lockConfigButton = findViewById<AppCompatButton>(R.id.lockConfigButton)
@@ -115,6 +220,25 @@ class settingsActivity : AppCompatActivity() {
 
         updateTimeButtonState()
 
+        fun showRevokeSuccessSnackBar() {
+            snackBar?.dismiss()
+            snackBar = Snackbar.make(
+                findViewById<View>(android.R.id.content).rootView,
+                "App has been reset! Restart app to see the change.",
+                Snackbar.LENGTH_INDEFINITE,
+            ).apply {
+                setAction("Quit App") {
+                    finishAffinity()
+                    Process.killProcess(Process.myPid())
+                }
+                // Get the Snackbar's TextView
+                val textView = view.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)
+                // Set the text color to white
+                textView.setTextColor(Color.WHITE)
+            }
+            snackBar?.show()
+        }
+
         resetButton.setOnClickListener {
             // Create confirmation popup
             val builder = AlertDialog.Builder(this)
@@ -126,22 +250,42 @@ class settingsActivity : AppCompatActivity() {
                 prefs.edit().clear().apply() // Clear Shared Preferences
                 // Perform other necessary data wiping actions (e.g., clear databases, delete files)
 
+                // Stop the TimeMonitoringService
+                val serviceIntent = Intent(this, TimeMonitoringService::class.java)
+                stopService(serviceIntent)
+
                 // Revoke all granted permissions
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                     val packageManager = packageManager
                     val packageInfo = packageManager.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS)
                     val requestedPermissions = packageInfo.requestedPermissions
+
                     if (requestedPermissions != null) {
-                        // Convert Array<String> to List<String>
-                        val permissionsList = requestedPermissions.toList()
-                        revokeSelfPermissionsOnKill(permissionsList)
+                        val permissionsToRevoke = requestedPermissions.filter { permission ->
+                            // Exclude permissions that cannot be revoked using revokeSelfPermissionsOnKill()
+                            val permissionInfo = packageManager.getPermissionInfo(permission, 0)
+                            permissionInfo.group != null && // Check if permission belongs to a group
+                                    permission != Manifest.permission.BLUETOOTH && // Exclude Bluetooth
+                                    permission != Manifest.permission.BLUETOOTH_ADMIN && // Exclude Bluetooth Admin
+                                    permission != Manifest.permission.FOREGROUND_SERVICE // Exclude Foreground Service
+                        }.toList()
+
+                        try {
+                            revokeSelfPermissionsOnKill(permissionsToRevoke)
+                            showRevokeSuccessSnackBar()
+                        } catch (e: SecurityException) {
+                            // Permission revocation failed
+                            Toast.makeText(this, "Failed to remove permissions", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        // App has no requested permissions
+                        // Handle this case as needed
                     }
+                } else {
+                    // Android version is not high enough
+                    Toast.makeText(this, "Android version is too low to remove permissions automatically", Toast.LENGTH_SHORT).show()
                 }
 
-                // Restart app
-                val intent = Intent(this, MainActivity::class.java) // Replace MainActivity with your main activity class
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                startActivity(intent)
             }
             builder.setNegativeButton("No, Go Back") { dialog: DialogInterface, which: Int ->
                 // Dismiss the popup
@@ -172,25 +316,12 @@ class settingsActivity : AppCompatActivity() {
             editor.apply()
         }
 
-
-
         lockConfigButton.text = if (lockConfigEnabled) {
             "Lock Config\n\nOn"
         } else {
             "Lock Config\n\nOff"
         }
 
-        locationButton.text = if (locationEnabled) {
-            "Location\n\nOn"
-        } else {
-            "Location\n\nOff"
-        }
-
-        motionButton.text = if (motionDetectionEnabled) {
-            "Motion Detection\n\nOn"
-        } else {
-            "Motion Detection\n\nOff"
-        }
         connectButton.setOnClickListener{
             val intent = Intent(this, ConnectionActivity::class.java)
             Log.d("Settings Activity", "Connection Button Pressed")
@@ -228,39 +359,50 @@ class settingsActivity : AppCompatActivity() {
             editor.apply()
         }
 
-        motionButton.setOnClickListener {
-            motionDetectionEnabled = !motionDetectionEnabled
+        if (!checkCameraPermission()) {
+            motionButton.text = "Motion Detection\n\nRequest Permission"
+        } else {
             motionButton.text = if (motionDetectionEnabled) {
                 "Motion Detection\n\nOn"
             } else {
                 "Motion Detection\n\nOff"
             }
-            motionButton.setBackgroundResource(
-            if (motionDetectionEnabled){
-                R.drawable.settings_button_background_enabled
+        }
+
+        motionButton.setOnClickListener {
+            if (!checkCameraPermission()) {
+                requestCameraPermission() // Request permission if not granted
             } else {
-                R.drawable.settings_button_background
+                toggleMotionDetection() // Toggle motion detection if permission is granted
             }
-            )
             val editor = prefs.edit()
             editor.putBoolean("motion_detection_enabled", motionDetectionEnabled)
             editor.apply()
         }
 
-        locationButton.setOnClickListener {
-            locationEnabled = !locationEnabled
+        motionButton.setOnLongClickListener {
+            Log.d("Settings Activity", "Flip Camera")
+            val intent = Intent(actionFlipCamera)
+            sendBroadcast(intent)
+            true // Consume the long click event
+        }
+
+        if (!checkLocationPermission()) {
+            locationButton.text = "Location\n\nRequest Permission"
+        } else {
             locationButton.text = if (locationEnabled) {
                 "Location\n\nOn"
             } else {
                 "Location\n\nOff"
             }
-            locationButton.setBackgroundResource(
-            if (locationEnabled){
-                R.drawable.settings_button_background_enabled
+        }
+
+        locationButton.setOnClickListener {
+            if (!checkLocationPermission()) {
+                requestLocationPermission() // Request permission if not granted
             } else {
-                R.drawable.settings_button_background
+                toggleLocation() // Toggle location if permission is granted
             }
-            )
             val editor = prefs.edit()
             editor.putBoolean("location_enabled", locationEnabled)
             editor.apply()
@@ -291,5 +433,8 @@ class settingsActivity : AppCompatActivity() {
     companion object {
         // ... (other constants) ...
         private const val REQUEST_MICROPHONE_PERMISSION = 100 // Request code for microphone permission
+        private const val REQUEST_LOCATION_PERMISSION = 101 // Request code for location permission
+        private const val REQUEST_CAMERA_PERMISSION = 102 // Request code for camera permission
+        private const val REQUEST_WRITE_SETTINGS = 103 // Request code for write settings permission
     }
 }

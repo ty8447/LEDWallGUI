@@ -58,6 +58,10 @@ dependencies {
     implementation("com.google.accompanist:accompanist-permissions:0.28.0")
     implementation("androidx.compose.ui:ui:1.7.5")
     implementation("com.android.identity:identity-jvm:202408.1")
+    implementation("androidx.camera:camera-core:1.4.0")
+    implementation("androidx.camera:camera-camera2:1.4.0")
+    implementation("androidx.camera:camera-lifecycle:1.4.0")
+    implementation("androidx.camera:camera-view:1.4.0")
     testImplementation("junit:junit:4.13.2") // No change needed
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
