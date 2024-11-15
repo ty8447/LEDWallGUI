@@ -1,7 +1,6 @@
 package com.example.ledwallgui
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.content.res.Configuration
@@ -15,14 +14,13 @@ import android.widget.Button
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
-import kotlin.system.exitProcess
 import com.google.android.material.snackbar.Snackbar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.example.ledwallgui.ui.MotionDetectionService
 import com.example.ledwallgui.ui.alarm.AlarmActivity
 import com.example.ledwallgui.ui.modes.modesActivity
+import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 import com.example.ledwallgui.ui.settings.ConnectionActivity
 import com.example.ledwallgui.ui.settings.settingsActivity
 
@@ -33,6 +31,8 @@ class MainActivity : AppCompatActivity() {
     private var connectState = false
     private var timeFormatOption: Int = 0 // Initialize with default value
     private lateinit var preferenceUtils: PreferenceUtils
+    val isConnected = GlobalBluetoothManager.isConnected
+    val deviceAddress = GlobalBluetoothManager.deviceAddress
 
     companion object {
         private const val SETTINGS_REQUEST_CODE = 100 // A constant for the request code

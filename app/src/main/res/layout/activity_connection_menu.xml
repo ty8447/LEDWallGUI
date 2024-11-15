@@ -42,8 +42,6 @@
         android:layout_marginTop="10dp"/>
 
     <!-- Rescan Button: Positioned immediately to the right of textView3 -->
-
-    <!-- RecyclerView: Positioned below the Rescan button and stretched across the screen -->
     <ImageButton
         android:id="@+id/rescanButton"
         android:layout_width="40dp"
@@ -68,10 +66,52 @@
         android:indeterminate="true"
         android:visibility="gone" />
 
+    <TextView
+        android:id="@+id/textView4"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Disconnected"
+        android:textColor="@color/white"
+        android:textSize="20sp"
+        android:layout_below="@id/textView3"
+        android:layout_alignParentStart="true"
+        android:layout_marginTop="10dp"/>
+
+    <!-- RecyclerView: Positioned below the Rescan button and stretched across the screen -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/connectionlist"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_below="@id/rescanButton"
+        android:layout_below="@id/textView4"
         android:layout_alignParentBottom="true" />
+
+<!--    &lt;!&ndash; Layout for device name and connection status within RecyclerView &ndash;&gt;-->
+<!--    <LinearLayout-->
+<!--        android:id="@+id/deviceLayout"-->
+<!--        android:layout_width="match_parent"-->
+<!--        android:layout_height="wrap_content"-->
+<!--        android:orientation="horizontal"-->
+<!--        android:layout_below="@id/rescanButton"-->
+<!--        android:layout_marginTop="20dp">-->
+
+<!--        &lt;!&ndash; Device Name TextView: Positioned at the start &ndash;&gt;-->
+<!--        <TextView-->
+<!--            android:id="@+id/deviceNameTextView"-->
+<!--            android:layout_width="wrap_content"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:text="Device Name"-->
+<!--            android:textColor="@color/white"-->
+<!--            android:textSize="20sp"-->
+<!--            android:layout_marginEnd="10dp"/>-->
+
+<!--        &lt;!&ndash; Connection Status TextView: Positioned next to the device name &ndash;&gt;-->
+<!--        <TextView-->
+<!--            android:id="@+id/connectionStatusTextView"-->
+<!--            android:layout_width="wrap_content"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:text="Disconnected"-->
+<!--            android:textColor="@color/white"-->
+<!--            android:textSize="16sp"/>-->
+<!--    </LinearLayout>-->
+
 </RelativeLayout>

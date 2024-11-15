@@ -15,6 +15,7 @@ import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.ui.semantics.text
 import com.example.ledwallgui.R
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -34,8 +35,10 @@ class alarmEditorActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.alarm_editor)
+        Log.d("alarmEditorActivity", "onCreate: Activity started")
         hideSystemUI()
-
+// Initialize day buttons and alarms
+        Log.d("alarmEditorActivity", "Initializing day buttons and alarms")
         dayButtons = listOf(
             R.id.day1,
             R.id.day2,
@@ -76,9 +79,17 @@ class alarmEditorActivity : AppCompatActivity() {
         }
         Log.d("alarmEditorActivity", "isEditMode: $isEditMode")
         Log.d("alarmEditorActivity", "clickedAlarmIndex: $clickedAlarmIndex")
-        Log.d("alarmEditorActivity", "alarmsList: $alarmsList")
+        Log.d("alarmEditorActivity", "Received alarmsList: ${alarmsList?.size} items")
+
+        if (alarmsList != null && alarmsList.isNotEmpty()) {
+            alarms.addAll(alarmsList)
+            Log.d("alarmEditorActivity", "Alarms list populated: $alarms")
+        } else {
+            Log.d("alarmEditorActivity", "Received empty or null alarmsList")
+        }
 
         if (clickedAlarmIndex != -1 && alarmsList != null && alarmsList.isNotEmpty()) {
+            alarmToEdit = alarms[clickedAlarmIndex]
             val existingAlarm = alarms[clickedAlarmIndex]
             // Use existingAlarm.time to pre-fill the time picker
             val calendar = Calendar.getInstance()
@@ -157,7 +168,11 @@ class alarmEditorActivity : AppCompatActivity() {
                 // ...
                 if (isEditMode && clickedAlarmIndex != -1) {
                     if (alarmToEdit != null) {
-                        alarms[clickedAlarmIndex] = alarmToEdit
+                        alarms[clickedAlarmIndex] = alarmToEdit // Update the alarms list
+                        val resultIntent = Intent()
+                        resultIntent.putExtra("updatedAlarmIndex", clickedAlarmIndex)
+                        resultIntent.putExtra("updatedAlarm", alarmToEdit as Parcelable)
+                        setResult(Activity.RESULT_OK, resultIntent)
                     }  // Update the edited alarm in the alarms list
                 }
                 val resultIntent = Intent()
@@ -204,6 +219,9 @@ class alarmEditorActivity : AppCompatActivity() {
 
         saveButton.setOnClickListener {
             // Extract user inputs
+            Log.d("alarmEditorActivity", "Save button clicked")
+            Log.d("alarmEditorActivity", "Selected time: ${timePicker.hour}:${timePicker.minute}")
+            Log.d("alarmEditorActivity", "Alarm name: ${alarmName.text}")
             val hour = timePicker.hour
             val minute = timePicker.minute
             val showCheckbox: Boolean = false
@@ -225,9 +243,11 @@ class alarmEditorActivity : AppCompatActivity() {
                 getSelectedDays(dayButtons),
                 selectedDays
             )
+
+            Log.d("alarmEditorActivity", "New alarm created: $newAlarm")
             updatedTime = SimpleDateFormat("h:mm a", Locale.US).format(getCalendar(hour, minute).time)
-            alarmToEdit?.hours = hour
-            alarmToEdit?.minutes = minute
+            alarmToEdit?.hours = timePicker.hour
+            alarmToEdit?.minutes = timePicker.minute
             alarmToEdit?.alarmName = alarmName.text.toString()
             alarmToEdit?.selectedDays = selectedDays
             Log.d("Debug", "updatedTime: $updatedTime")
@@ -236,7 +256,7 @@ class alarmEditorActivity : AppCompatActivity() {
                 if (isEditMode && clickedAlarmIndex != -1) {
                     if (alarmToEdit != null) {
                         alarms[clickedAlarmIndex] = alarmToEdit
-
+                        Log.d("alarmEditorActivity", "Updated alarm at index $clickedAlarmIndex: $newAlarm")
                     }
                     val resultIntent = Intent()
                     resultIntent.putExtra("updatedAlarmIndex", clickedAlarmIndex)
@@ -245,18 +265,21 @@ class alarmEditorActivity : AppCompatActivity() {
                 } else {
                     // Creating a new alarm
                     alarms.add(newAlarm)
+                    Log.d("alarmEditorActivity", "Adding new alarm to list: $alarms")
                     val resultIntent = Intent()
                     resultIntent.putExtra("updatelist", true)
                     resultIntent.putExtra("alarmsList", ArrayList(alarms))
                     resultIntent.putExtra("newAlarm", newAlarm as Parcelable)
                     setResult(Activity.RESULT_OK, resultIntent)
+                    Log.d("alarmEditorActivity", "Result intent sent with new alarm: $newAlarm")
+                    finish()
                 }
-            val selectedDaysLog = selectedDays.joinToString(", ") { it.toString() }
-            Log.d("alarmEditorActivity", "selectedDays2: $selectedDaysLog")
-            Log.d("Debug", "Alarms list after save: $alarms")
-                Log.d("Debug", "Save button pressed")
-                // Finish the activity
-                finish()
+//            val selectedDaysLog = selectedDays.joinToString(", ") { it.toString() }
+//            Log.d("alarmEditorActivity", "selectedDays2: $selectedDaysLog")
+//            Log.d("Debug", "Alarms list after save: $alarms")
+//                Log.d("Debug", "Save button pressed")
+//                // Finish the activity
+//                finish()
         }
 
 

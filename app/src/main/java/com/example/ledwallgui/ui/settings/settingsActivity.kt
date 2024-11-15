@@ -27,6 +27,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.ledwallgui.R
 import androidx.appcompat.app.AlertDialog
+import androidx.camera.core.CameraSelector
 import com.example.ledwallgui.TimeMonitoringService
 import com.example.ledwallgui.ui.MotionDetectionService
 import com.google.android.material.snackbar.Snackbar
@@ -74,8 +75,8 @@ class settingsActivity : AppCompatActivity() {
 
     private fun requestCameraPermission() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
-            ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA, Manifest.permission.WRITE_SETTINGS), REQUEST_CAMERA_PERMISSION)
+            !Settings.System.canWrite(this)) { // Check WRITE_SETTINGS permission
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), REQUEST_CAMERA_PERMISSION)
         } else {
             toggleMotionDetection() // Permission already granted, toggle motion detection
         }
@@ -165,19 +166,10 @@ class settingsActivity : AppCompatActivity() {
                 Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show()
             }
         } else if (requestCode == REQUEST_CAMERA_PERMISSION) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 toggleMotionDetection()
-                // Set system brightness to 15% (0-255 scale)
-                val brightnessValue = (0.15 * 255).toInt()
-                Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, brightnessValue)
             } else {
-                Toast.makeText(this, "Camera or Storage permission denied", Toast.LENGTH_SHORT).show()
-            }
-        } else if (requestCode == REQUEST_WRITE_SETTINGS) {
-            if (Settings.System.canWrite(this)) {
-                // Permission granted, proceed with your logic
-            } else {
-                // Permission denied, handle accordingly
+                Toast.makeText(this, "Camera permission denied", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -188,6 +180,10 @@ class settingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        window.attributes = window.attributes.also {
+            it.screenBrightness = 0f
+        }
         requestWindowFeature(Window.FEATURE_NO_TITLE) // Hide the title bar
         window.setFlags(
             WindowManager.LayoutParams.FLAG_FULLSCREEN, // Hide the status bar
@@ -383,6 +379,28 @@ class settingsActivity : AppCompatActivity() {
         motionButton.setOnLongClickListener {
             Log.d("Settings Activity", "Flip Camera")
             val intent = Intent(actionFlipCamera)
+
+            // Retrieve the current camera selector from shared preferences
+            val prefs = getSharedPreferences("camera_prefs", Context.MODE_PRIVATE)
+            val currentCameraLensFacing = prefs.getInt("currentCameraSelector", CameraSelector.LENS_FACING_BACK)
+
+            // Determine which camera it will switch to
+            val newCameraFacing = if (currentCameraLensFacing == CameraSelector.LENS_FACING_BACK) {
+                CameraSelector.LENS_FACING_FRONT
+            } else {
+                CameraSelector.LENS_FACING_BACK
+            }
+            Log.d("Settings Activity", "Current camera lens facing: $currentCameraLensFacing")
+            Log.d("Settings Activity", "New camera facing after flip: $newCameraFacing")
+
+            // Display the new camera facing in the toast message
+            val cameraFacingString = if (newCameraFacing == CameraSelector.LENS_FACING_FRONT) {
+                "Front"
+            } else {
+                "Back"
+            }
+
+            Toast.makeText(this, "Flipped Motion Camera to $cameraFacingString", Toast.LENGTH_SHORT).show()
             sendBroadcast(intent)
             true // Consume the long click event
         }
@@ -435,6 +453,5 @@ class settingsActivity : AppCompatActivity() {
         private const val REQUEST_MICROPHONE_PERMISSION = 100 // Request code for microphone permission
         private const val REQUEST_LOCATION_PERMISSION = 101 // Request code for location permission
         private const val REQUEST_CAMERA_PERMISSION = 102 // Request code for camera permission
-        private const val REQUEST_WRITE_SETTINGS = 103 // Request code for write settings permission
     }
 }

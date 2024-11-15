@@ -7,6 +7,8 @@
     <color name="splashBackground">#9d21a8</color>
     <color name="selectedDayColor">#03dac6</color>
     <color name="light_blue">#ADD8E6</color>
+    <color name="green">#98A869</color>
+    <color name="red">#DF6967</color>
 
 
 </resources>

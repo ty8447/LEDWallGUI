@@ -15,7 +15,8 @@ data class Alarm(
     var rampBright: Boolean = false,
     var daysOfWeek: BooleanArray,
     var selectedDays: BooleanArray,
-    var isAlarmGoingOff: Boolean = false
+    var isAlarmGoingOff: Boolean = false,
+    var id: Int = generateUniqueId()
 ) : Parcelable {
 
     fun getTimeAsCalendar(): Calendar {
@@ -62,6 +63,12 @@ data class Alarm(
 
         override fun newArray(size: Int): Array<Alarm?> {
             return arrayOfNulls(size)
+        }
+
+        private var nextAlarmId = 0 // Counter for generating unique IDs
+
+        private fun generateUniqueId(): Int {
+            return nextAlarmId++
         }
     }
 

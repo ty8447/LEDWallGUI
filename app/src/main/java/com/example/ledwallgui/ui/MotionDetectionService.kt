@@ -1,5 +1,6 @@
 package com.example.ledwallgui.ui
 
+import android.annotation.TargetApi
 import android.app.Notification
 import android.app.Service
 import android.app.NotificationChannel
@@ -10,10 +11,12 @@ import android.os.Build
 import android.provider.Settings
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.util.DisplayMetrics
 import android.view.Window
 import android.util.Log
 import android.view.Display
@@ -37,6 +40,9 @@ import com.example.ledwallgui.R
 import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import android.os.PowerManager
+
+
 
 class MotionDetectionService : Service(), LifecycleOwner {
 
@@ -44,12 +50,13 @@ class MotionDetectionService : Service(), LifecycleOwner {
     private lateinit var imageAnalyzer: ImageAnalysis
     private lateinit var lifecycleRegistry: LifecycleRegistry
     private val CHANNELID = "motion_detection_channel" // Define
-    private var isScreenOn = true
     private val handler = Handler(Looper.getMainLooper())
     private var inactivityTimer: Runnable? = null
     private val inactivityTimeout = 6000L // 1 minute
     private var currentCameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA // Initial camera
     val actionFlipCamera = "com.example.ledwallgui.FLIP_CAMERA"
+    private lateinit var mPowerManager: PowerManager
+    private var mWakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         Log.d("MotionDetectionService", "Service Running")
@@ -57,6 +64,11 @@ class MotionDetectionService : Service(), LifecycleOwner {
         cameraExecutor = Executors.newSingleThreadExecutor()
         // Create a notification channel (for Android 8.0 and above)
         createNotificationChannel()
+
+        mPowerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+
+        // Optional: Log to track WakeLock behavior
+        Log.d("MotionDetectionService", "WakeLocks initialized.")
 
         // Create a notification
         val notification = createNotification()
@@ -85,9 +97,14 @@ class MotionDetectionService : Service(), LifecycleOwner {
             CameraSelector.DEFAULT_BACK_CAMERA
         }
 
-        // Rebind camera with new cameraSelector
+        // Update shared preferences with the new camera selection
+        val prefs = getSharedPreferences("camera_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putInt("currentCameraSelector", currentCameraSelector.lensFacing ?: CameraSelector.LENS_FACING_BACK).apply()
+        Log.d("MotionDetectionService", "Current camera set to: ${currentCameraSelector.lensFacing}")
+        // Rebind the camera with the new cameraSelector
         startCamera()
     }
+
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -115,6 +132,20 @@ class MotionDetectionService : Service(), LifecycleOwner {
         val source = intent?.getStringExtra("source") ?: "Unknown"
         Log.d("MotionDetectionService", "Started from: $source")
         lifecycleRegistry.currentState = Lifecycle.State.STARTED
+        turnOffScreen()
+        val cameraLensFacing = intent?.getIntExtra("currentCameraSelector", CameraSelector.LENS_FACING_BACK) ?: CameraSelector.LENS_FACING_BACK
+        currentCameraSelector = if (cameraLensFacing == CameraSelector.LENS_FACING_FRONT) {
+            CameraSelector.DEFAULT_FRONT_CAMERA
+        } else {
+            CameraSelector.DEFAULT_BACK_CAMERA
+        }
+        // Example of how to call the methods
+        turnOffScreen()
+
+        // After 10 seconds, turn the screen back on
+        handler.postDelayed({
+            turnOnScreen()
+        }, 10000) // Turn screen back on after 10 seconds
         startCamera()
         return START_STICKY
     }
@@ -122,6 +153,11 @@ class MotionDetectionService : Service(), LifecycleOwner {
     override fun onDestroy() {
         super.onDestroy()
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
+        mWakeLock?.let {
+            if (it.isHeld) {
+                it.release()
+            }
+        }
         cameraExecutor.shutdown()
     }
 
@@ -135,29 +171,15 @@ class MotionDetectionService : Service(), LifecycleOwner {
         cameraProviderFuture.addListener({
             val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
 
-            val preview = Preview.Builder()
-                .build()
-                .also {
-                    // ... (Set preview surface here) ...
-                }
-
-            if (cameraProvider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)) {
-                val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
-                // ... (rest of the camera binding code) ...
-            } else {
-                // Handle case where front camera is not available
-                Log.e("MotionDetectionService", "Front camera not available")
-            }
+            val preview = Preview.Builder().build()
 
             imageAnalyzer = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
                 .also {
                     it.setAnalyzer(cameraExecutor, LuminosityAnalyzer({ luma ->
-                    }, ::keepScreenOn, ::resetInactivityTimer, handler, threshold = 5.0))
+                    }, ::turnOnScreen, ::resetInactivityTimer, handler, threshold = 5.0))
                 }
-
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
             try {
                 cameraProvider.unbindAll()
@@ -177,31 +199,73 @@ class MotionDetectionService : Service(), LifecycleOwner {
         }, ContextCompat.getMainExecutor(this))
     }
 
-    private fun keepScreenOn() {
-        // ... (Implementation for keeping the screen on) ...
-    }
-
     private fun resetInactivityTimer() {
-        // Cancel any existing timer
         inactivityTimer?.let { handler.removeCallbacks(it) }
-
-        // Schedule a new timer
         inactivityTimer = Runnable {
-            // Call turnScreenOff() when the timer expires
-            turnScreenOff()
+//            if (!isScreenDimmed) {
+//                dimScreen()
+//            }
         }
         handler.postDelayed(inactivityTimer!!, inactivityTimeout)
     }
 
-    private fun turnScreenOff() {
-        // Set system brightness to 15% (0-255 scale)
-        val brightnessValue = (0.15 * 255).toInt() // Convert 15% to 0-255 scale
-        Settings.System.putInt(
-            contentResolver,
-            Settings.System.SCREEN_BRIGHTNESS,
-            brightnessValue
-        )
+//    private fun restoreScreenBrightness() {
+//        Log.e("MotionDetectionService", "Screen brightness restoration in progress")
+//        if (!isScreenDimmed) return
+//        // Restore the screen brightness to default
+//        try {
+//            Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, (systemBrightness * 255).toInt()) // Set the system's brightness
+//            isScreenDimmed = false
+//            Log.d("MotionDetectionService", "Screen brightness restored")
+//        } catch (e: Exception) {
+//            Log.e("MotionDetectionService", "Error restoring screen brightness: ${e.message}")
+//        }
+//    }
+
+    // Method to turn the screen on
+    private fun turnOnScreen() {
+        Log.v("MotionDetectionService", "Turning screen ON!")
+        if (mWakeLock == null || !mWakeLock!!.isHeld) {
+            mWakeLock = mPowerManager.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "MotionDetectionService:tag"
+            )
+            mWakeLock?.acquire()
+        }
     }
+
+    // Method to turn the screen off
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP) // To suppress the lint error
+    private fun turnOffScreen() {
+        Log.v("MotionDetectionService", "Turning screen OFF!")
+        if (mWakeLock == null || !mWakeLock!!.isHeld) {
+            mWakeLock = mPowerManager.newWakeLock(
+                PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "MotionDetectionService:tag"
+            )
+            mWakeLock?.acquire()
+
+            // Automatically release after some time (e.g., 10 seconds)
+            handler.postDelayed({
+                if (mWakeLock?.isHeld == true) {
+                    mWakeLock?.release()
+                    Log.v("MotionDetectionService", "Screen off WakeLock released.")
+                }
+            }, 10000) // 10 seconds delay to keep the screen off
+        }
+    }
+
+//    private fun dimScreen() {
+//        // Dim screen
+//        Log.e("MotionDetectionService", "Screen dim in progress")
+//        try {
+//            Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, (0.1f * 255).toInt()) // Dim screen to 10%
+//            systemBrightness = 0.1f
+//            isScreenDimmed = true
+//            Log.d("MotionDetectionService", "Screen brightness dimmed")
+//        } catch (e: Exception) {
+//            Log.e("MotionDetectionService", "Error dimming screen brightness: ${e.message}")
+//        }
+//    }
 
     override val lifecycle: Lifecycle
         get() = lifecycleRegistry
