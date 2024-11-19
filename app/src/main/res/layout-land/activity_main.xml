@@ -8,10 +8,9 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
         android:orientation="horizontal"
-        tools:ignore="UselessParent">
+        >
 
         <ImageButton
             android:id="@+id/imageButton1"
@@ -97,5 +96,15 @@
 
 
     </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/dynamicLayoutContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- Dynamically generated layout will be added here -->
+
+    </FrameLayout>
 
 </LinearLayout>

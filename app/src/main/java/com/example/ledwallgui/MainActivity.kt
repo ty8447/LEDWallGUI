@@ -2,6 +2,7 @@ package com.example.ledwallgui
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
+import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
@@ -11,14 +12,19 @@ import android.view.View
 import android.view.Window
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.SeekBar
+import android.widget.Spinner
 import android.widget.TextView
 import com.google.android.material.snackbar.Snackbar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.example.ledwallgui.ui.MotionDetectionService
 import com.example.ledwallgui.ui.alarm.AlarmActivity
+import com.example.ledwallgui.ui.modes.ModeManager
 import com.example.ledwallgui.ui.modes.modesActivity
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 import com.example.ledwallgui.ui.settings.ConnectionActivity
@@ -30,9 +36,8 @@ class MainActivity : AppCompatActivity() {
     private var powerState = false
     private var connectState = false
     private var timeFormatOption: Int = 0 // Initialize with default value
+    val mode = ColorMode()
     private lateinit var preferenceUtils: PreferenceUtils
-    val isConnected = GlobalBluetoothManager.isConnected
-    val deviceAddress = GlobalBluetoothManager.deviceAddress
 
     companion object {
         private const val SETTINGS_REQUEST_CODE = 100 // A constant for the request code
@@ -48,6 +53,10 @@ class MainActivity : AppCompatActivity() {
         )
         setContentView(R.layout.activity_main)
         hideSystemUI()
+
+        val layout = generateLayout(this, mode.subscribedParameters)
+        val container = findViewById<FrameLayout>(R.id.dynamicLayoutContainer)
+        container.addView(layout)
 
         preferenceUtils = PreferenceUtils(this) // Initialize preferenceUtils
         Log.d("INTRO","SWITCHED TO MAIN ACTIVITY!")
@@ -84,7 +93,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         button2.setOnClickListener {
-            if (connectState) {
+            if (GlobalBluetoothManager.isConnected) {
                 // Device is connected, start ModesActivity
                 showModesMenu()
             } else {
@@ -133,6 +142,91 @@ class MainActivity : AppCompatActivity() {
             Log.d("Motion Detection", "Not Detecting Motion")
         }
 
+    }
+    fun generateLayout(context: Context, parameters: List<Parameter>): View {
+        val frameLayout = FrameLayout(context)
+        val layout = LinearLayout(context)
+        layout.orientation = LinearLayout.VERTICAL
+
+        parameters.forEach { parameter ->
+            when (parameter.type) {
+                ParameterType.COLOR -> {
+                    // Primary/Secondary Color Dropdown and Color Picker
+                    val colorDropdown = Spinner(context)
+                    // Add common colors to the dropdown
+                    // Add a "Custom Color" option to the dropdown
+
+                    val colorPickerButton = Button(context)
+                    colorPickerButton.text = "Select Color"
+                    colorPickerButton.visibility = View.GONE // Initially hidden
+
+                    // Set up color picker dialog to show when colorPickerButton is clicked
+
+                    // Add colorDropdown and colorPickerButton to layout
+                    layout.addView(colorDropdown)
+                    layout.addView(colorPickerButton)
+                }
+                ParameterType.FREQUENCY -> {
+                    // Frequency Slider
+                    val frequencySlider = SeekBar(context)
+                    // Set up slider properties (min, max, etc.)
+                    layout.addView(frequencySlider)
+                }
+                ParameterType.SPEED -> {
+                    // Speed Slider
+                    val speedSlider = SeekBar(context)
+                    // Set up slider properties (min, max, etc.)
+                    layout.addView(speedSlider)
+                }
+                ParameterType.DIVISION -> {
+                    // Max Divisions Slider
+                    val divisionsSlider = SeekBar(context)
+                    // Set up slider properties (min, max, etc.)
+                    layout.addView(divisionsSlider)
+                }
+                // Handle other parameter types if needed
+            }
+        }
+
+        frameLayout.addView(layout)
+        return frameLayout
+    }
+
+    class ColorMode {
+        val subscribedParameters: List<Parameter> = listOf(
+            Parameter("Primary Color", ParameterType.COLOR, Color.RED),
+            Parameter("Secondary Color", ParameterType.COLOR, Color.BLUE),
+            Parameter("Speed", ParameterType.SPEED, 50)
+        )
+                    init {
+                // Subscribe to parameters
+                ParameterList.parameters.filter { it.type == ParameterType.COLOR }.forEach {
+                    // Add parameter to mode's control list
+                }
+            }
+    }
+
+    data class Parameter(
+        val name: String,
+        val type: ParameterType,
+        var value: Any
+    )
+
+    enum class ParameterType {
+        COLOR,
+        FREQUENCY,
+        SPEED,
+        DIVISION,
+        // ... other parameter types
+    }
+
+    object ParameterList {
+        val parameters = mutableListOf<Parameter>(
+            Parameter("LED Color", ParameterType.COLOR, Color.RED),
+            Parameter("Frequency", ParameterType.FREQUENCY, 100),
+            Parameter("Speed", ParameterType.SPEED, 50),
+            // ... other parameters
+        )
     }
 
     @SuppressLint("ResourceType")
@@ -189,12 +283,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateConnectIcon() {
         val connectButton: ImageView = findViewById(R.id.imageView)
-        if (connectState) {
+        if (GlobalBluetoothManager.isConnected) { // Use GlobalBluetoothManager.isConnected
             connectButton.setImageResource(R.drawable.stat_con_button)
         } else {
             connectButton.setImageResource(R.drawable.stat_dis_button)
         }
+    }
 
+    override fun onResume() {
+        super.onResume()
+        // Update connectState based on GlobalBluetoothManager
+        connectState = GlobalBluetoothManager.isConnected
+        Log.d("MainActivity", "Current mode: ${ModeManager.currentMode}")
+
+        // Update UI based on connectState
+        updateConnectIcon()
     }
 
     @SuppressLint("ResourceType")

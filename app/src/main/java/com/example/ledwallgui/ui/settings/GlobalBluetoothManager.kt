@@ -1,41 +1,42 @@
 package com.example.ledwallgui.ui.settings
 
 import android.annotation.SuppressLint
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothServerSocket
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothSocket
+import android.content.Context
 import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import java.io.IOException
-import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
-import kotlin.io.path.name
+
 
 
 object GlobalBluetoothManager {
     // The connection status, device address, and device name are encapsulated to prevent direct modification.
-    private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter() // Get BluetoothAdapter
     private var bluetoothSocket: BluetoothSocket? = null
     private var _isConnected: Boolean = false
     private var _deviceAddress: String? = null
     private var _deviceName: String? = null  // Added device name
-    private val mmSocket: BluetoothSocket? = null
     private var outputStream: OutputStream? = null
-    private var inputStream: InputStream? = null
-    private val valueRead: String? = null
-    private var serverSocket: BluetoothServerSocket? = null
+    private var gatt: BluetoothGatt? = null
+    var shouldLoadSavedStatus = false
+    private val discoveredUUIDs = mutableListOf<UUID>()
 
-    val TARGET_UUID: UUID = UUID.fromString("0000110a-0000-1000-8000-00805f9b34fb")
+    // Public function to get discovered UUIDs
+    fun getDiscoveredUUIDs(): List<UUID> {
+        return discoveredUUIDs
+    }
 
     // Public getter for isConnected
     var isConnected: Boolean = false
         get() = _isConnected
 
     private const val TAG = "GlobalBluetoothManager"
-    private const val ERROR_READ = 0
     private lateinit var handler: Handler
 
     // Public getter for deviceAddress
@@ -58,48 +59,95 @@ object GlobalBluetoothManager {
         Log.d("GlobalBluetoothManager", "Connection state updated: isConnected = $_isConnected, deviceAddress = $_deviceAddress, deviceName = $_deviceName")
     }
 
-    @SuppressLint("MissingPermission", "DiscouragedPrivateApi")
-    fun connectToDevice(address: String, name: String?, callback: (Boolean) -> Unit) {
-        Log.d("GlobalBluetoothManager", "connectToDevice called with address = $address, name = $name")
+    @SuppressLint("MissingPermission")
+    fun connectToDevice(context: Context, device: BluetoothDevice, handler: Handler, callback: (Boolean) -> Unit) {
+        Log.d(TAG, "connectToDevice called with device: ${device.name}")
+        this.handler = handler
 
-        // Simulate connection logic
-        // If connection is successful, call the callback with true
-        // You can add your actual Bluetooth connection logic here
-        // For now, we simulate it with a delay
-
-        // Simulate a successful connection after a short delay
-        Handler(Looper.getMainLooper()).postDelayed({
-            _deviceAddress = address
-            _deviceName = name // Store the device name
-            _isConnected = true
-
-            Log.d("GlobalBluetoothManager", "Connected to device: address = $address, name = $name")
-
-            // Get the BluetoothDevice object
-            val bluetoothDevice = bluetoothAdapter?.getRemoteDevice(address)
-
-            // Retrieve UUIDs after successful connection
-            if (bluetoothDevice != null) {
-                val uuids = bluetoothDevice.uuids
-                if (uuids != null) {
-                    for (uuid in uuids) {
-                        Log.d("GlobalBluetoothManager", "UUID from connected device: ${uuid.uuid}")
-                    }
-                } else {
-                    Log.w("GlobalBluetoothManager", "No UUIDs found on the connected device.")
+        // Create a BluetoothGattCallback to handle GATT events
+        val gattCallback = object : BluetoothGattCallback() {
+            override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
+                if (newState == BluetoothProfile.STATE_CONNECTED) {
+                    Log.i(TAG, "Connected to GATT server.")
+                    setConnectionState(true, device.address, device.name)
+                    gatt?.discoverServices() // Discover services after connection
+                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                    Log.i(TAG, "Disconnected from GATT server.")
+                    setConnectionState(false, null, null)
+                    callback(false) // Notify disconnection
                 }
-            } else {
-                Log.e("GlobalBluetoothManager", "BluetoothDevice is null")
             }
 
-            callback(true) // Notify success
-        }, 2000) // 2-second delay to simulate connection time
+            override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    Log.i(TAG, "Discovered services:")
+                    discoveredUUIDs.clear() // Clear previous UUIDs
+                    gatt?.services?.forEach { service ->
+                        Log.d(TAG, "Service UUID: ${service.uuid}")
+                        discoveredUUIDs.add(service.uuid) // Add service UUID to the list
+                        service.characteristics.forEach { characteristic ->
+                            Log.d(TAG, "  Characteristic UUID: ${characteristic.uuid}")
+                            discoveredUUIDs.add(characteristic.uuid) // Add characteristic UUID to the list
+                        }
+                    }
+                    callback(true) // Notify successful service discovery
+                } else {
+                    Log.w(TAG, "onServicesDiscovered received: $status")
+                    callback(false) // Notify service discovery failure
+                }
+            }
+
+            override fun onCharacteristicRead(
+                gatt: BluetoothGatt?,
+                characteristic: BluetoothGattCharacteristic?,
+                status: Int
+            ) {
+                if (status == BluetoothGatt.GATT_SUCCESS && characteristic != null) {
+                    Log.d(TAG, "Characteristic ${characteristic.uuid} read with value: ${characteristic.value?.contentToString()}")
+                } else {
+                    Log.w(TAG, "Failed to read characteristic: ${characteristic?.uuid}")
+                }
+            }
+
+            override fun onCharacteristicWrite(
+                gatt: BluetoothGatt?,
+                characteristic: BluetoothGattCharacteristic?,
+                status: Int
+            ) {
+                if (status == BluetoothGatt.GATT_SUCCESS && characteristic != null) {
+                    Log.d(TAG, "Characteristic ${characteristic.uuid} successfully written.")
+                } else {
+                    Log.w(TAG, "Failed to write to characteristic: ${characteristic?.uuid}")
+                }
+            }
+        }
+
+        fun readCharacteristic(characteristic: BluetoothGattCharacteristic) {
+            gatt?.let {
+                val success = it.readCharacteristic(characteristic)
+                Log.d(TAG, "Read request for characteristic ${characteristic.uuid} initiated: $success")
+            } ?: Log.w(TAG, "BluetoothGatt is null, cannot read characteristic.")
+        }
+
+        fun writeCharacteristic(characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+            gatt?.let {
+                characteristic.value = value
+                val success = it.writeCharacteristic(characteristic)
+                Log.d(TAG, "Write request for characteristic ${characteristic.uuid} initiated: $success")
+            } ?: Log.w(TAG, "BluetoothGatt is null, cannot write characteristic.")
+        }
+
+        // Connect to the GATT server
+        // Assuming you have an application context available, replace 'context' with it
+        val gatt = device.connectGatt(context,false, gattCallback)
+
+        // Store the GATT object for later use
+        this.gatt = gatt
+
+        _deviceName = device.name
+        Log.d(TAG, "Device name set to: $_deviceName")
+        shouldLoadSavedStatus = true
     }
-
-
-
-
-
     // Method to send a serial command
     fun sendSerialCommand(command: String) {
         Log.d(TAG, "Sending serial command: $command")
@@ -127,5 +175,6 @@ object GlobalBluetoothManager {
         }
         // Log disconnection
         Log.d("GlobalBluetoothManager", "Disconnected from device. Connection state reset.")
+        shouldLoadSavedStatus = false
     }
 }
