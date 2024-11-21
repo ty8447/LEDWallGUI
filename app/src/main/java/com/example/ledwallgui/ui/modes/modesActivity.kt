@@ -7,7 +7,9 @@ import android.util.Log
 import android.view.View
 import android.view.Window
 import android.view.WindowManager
+import android.widget.GridLayout
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatButton
@@ -33,40 +35,52 @@ class modesActivity : AppCompatActivity() {
         )
         setContentView(R.layout.activity_mode_menu)
         hideSystemUI()
+
         val backButton: ImageButton = findViewById(R.id.mBackButton)
+        val modesContainer: GridLayout = findViewById(R.id.modesContainer)
 
-        val buttonNames = GlobalBluetoothManager.modeNames.toTypedArray()
-        val maxButtonSize = buttonNames.size
+        // Get mode names from GlobalBluetoothManager
+        val modeNames = GlobalBluetoothManager.modeNames
 
-        Log.d("ModesActivity", "Button Names: ${buttonNames.joinToString(", ")}")
+        Log.d("ModesActivity", "Mode Names: ${modeNames.joinToString(", ")}")
 
-        buttonIds = Array(maxButtonSize) { index ->
-            resources.getIdentifier("mode${index + 1}", "id", packageName)
-        }
+        // Dynamically create buttons
+        modeNames.forEach { modeName ->
+            val button = AppCompatButton(this).apply {
+                text = modeName
+                textSize = 20f
+                isEnabled = true
+                minimumWidth = 100
+                minimumHeight = 100
+                background = ContextCompat.getDrawable(this@modesActivity, R.drawable.mode_button_shape)
+                setPadding(16, 16, 16, 16) // Padding (left, top, right, bottom)
 
-        for (i in buttonIds.indices) {
-            val button = findViewById<AppCompatButton>(buttonIds[i])
-            Log.d("ModesActivity","Button: ${button}")
-            if (i < minOf(buttonNames.size, buttonIds.size)) {
-                button.text = buttonNames[i]
-                button.textSize = 20F
-                button.isEnabled = true
-                button.background = ContextCompat.getDrawable(this, R.drawable.mode_button_shape)
-                button.setOnClickListener {
-                    ModeManager.currentMode = buttonNames[i]
+                setOnClickListener {
+                    ModeManager.currentMode = modeName
 
                     // Show toast notification
-                    Toast.makeText(this, "Mode changed to ${buttonNames[i]}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@modesActivity, "Mode changed to $modeName", Toast.LENGTH_SHORT).show()
 
                     // Finish the activity to return to MainActivity
                     finish()
                 }
-            } else {
-                button.text = ""
-                button.setBackgroundResource(android.R.color.transparent)
-                button.isEnabled = false
-                button.setOnClickListener(null) // Disable click event handler
             }
+
+            val params = GridLayout.LayoutParams().apply {
+                // Set width and height to match parent with equal weight
+                width = 0
+                height = GridLayout.LayoutParams.WRAP_CONTENT
+
+                // Specify margins for the button (outside padding)
+                setMargins(8, 8, 8, 8) // Margins (left, top, right, bottom)
+
+                // Align to grid position (1f weight to make buttons equally spaced in the grid)
+                columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                rowSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+            }
+
+            // Add the button to the container
+            modesContainer.addView(button, params)
         }
 
         backButton.setOnClickListener {
