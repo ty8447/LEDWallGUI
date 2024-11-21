@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatButton
 import com.example.ledwallgui.MainActivity
 import com.example.ledwallgui.R
+import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 
 object ModeManager {
     var currentMode: String = "" // Global variable to store current mode
@@ -21,6 +22,7 @@ object ModeManager {
 class modesActivity : AppCompatActivity() {
     val buttonNames = arrayOf("Rainbow","Color","Alternating Colors","Fade","Pulse","Breathe","Paint","Strobe","Time","Cylon","Police","Fire","Twinkle","Running Lights","Theatre Chase")
     val maxButtonSize = 20
+    private lateinit var buttonIds: Array<Int>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,7 +35,12 @@ class modesActivity : AppCompatActivity() {
         hideSystemUI()
         val backButton: ImageButton = findViewById(R.id.mBackButton)
 
-        val buttonIds = Array(maxButtonSize) { index ->
+        val buttonNames = GlobalBluetoothManager.modeNames.toTypedArray()
+        val maxButtonSize = buttonNames.size
+
+        Log.d("ModesActivity", "Button Names: ${buttonNames.joinToString(", ")}")
+
+        buttonIds = Array(maxButtonSize) { index ->
             resources.getIdentifier("mode${index + 1}", "id", packageName)
         }
 

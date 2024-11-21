@@ -69,4 +69,7 @@ dependencies {
         exclude(group = "org.osgi", module = "org.osgi.core") // Exclude the OSGI bundle
     }
     implementation("androidx.compose.material3:material3:1.3.1")
+    dependencies {
+        implementation("com.google.android.flexbox:flexbox:3.0.0")
+    }
 }

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
@@ -96,14 +95,22 @@
 
 
     </LinearLayout>
-
+    <View
+        android:id="@+id/settingModeDivider"
+        android:layout_width="match_parent"
+        android:background="@color/light_blue"
+        android:layout_height="2dp"
+        android:layout_marginTop="10dp"/>
     <FrameLayout
         android:id="@+id/dynamicLayoutContainer"
+        android:background="@color/red"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
-
-        <!-- Dynamically generated layout will be added here -->
+        android:layout_weight="1"
+        android:layout_marginTop="20dp"
+        android:layout_marginStart="10dp"
+        android:layout_marginEnd="10dp"
+        android:radius="40dp">
 
     </FrameLayout>
 

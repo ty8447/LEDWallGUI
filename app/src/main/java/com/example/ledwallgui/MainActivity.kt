@@ -6,21 +6,33 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.util.Log
+import android.view.Gravity
 import android.view.View
+import java.util.UUID
 import android.view.Window
+import com.google.android.flexbox.FlexboxLayout
+import com.google.android.flexbox.FlexboxLayoutManager
+import com.google.android.flexbox.FlexWrap
+import com.google.android.flexbox.JustifyContent
+import com.example.ledwallgui.CustomSeekBar
 import android.view.WindowManager
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.FrameLayout
+import android.app.Dialog
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
+import android.widget.Toast
 import com.google.android.material.snackbar.Snackbar
 import androidx.appcompat.app.AppCompatActivity
+import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import com.example.ledwallgui.ui.MotionDetectionService
 import com.example.ledwallgui.ui.alarm.AlarmActivity
@@ -28,6 +40,7 @@ import com.example.ledwallgui.ui.modes.ModeManager
 import com.example.ledwallgui.ui.modes.modesActivity
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 import com.example.ledwallgui.ui.settings.ConnectionActivity
+import com.example.ledwallgui.ui.settings.GlobalBluetoothManager.bluetoothSocket
 import com.example.ledwallgui.ui.settings.settingsActivity
 
 
@@ -79,6 +92,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        val settingModeDivider = findViewById<View>(R.id.settingModeDivider)
+        val dynamicLayoutContainer = findViewById<FrameLayout>(R.id.dynamicLayoutContainer)
+
+        // Check if there are any child views in the container
+        if (dynamicLayoutContainer.childCount > 0) {
+            settingModeDivider.visibility = View.VISIBLE
+        } else {
+            settingModeDivider.visibility = View.GONE
+        }
 
         val imageButton1: ImageButton = findViewById(R.id.imageButton1)
         val button2: ImageButton = findViewById(R.id.modesbutton)
@@ -89,6 +111,7 @@ class MainActivity : AppCompatActivity() {
             powerState = !powerState
             Log.d("PowerState", "Power state clicked: $powerState")
             updatePowerButtonImage()
+            sendPowerStateToArduino(powerState) // Send the power state to Arduino
             saveSharedPreferences()
         }
 
@@ -144,53 +167,186 @@ class MainActivity : AppCompatActivity() {
 
     }
     fun generateLayout(context: Context, parameters: List<Parameter>): View {
-        val frameLayout = FrameLayout(context)
-        val layout = LinearLayout(context)
-        layout.orientation = LinearLayout.VERTICAL
+        val layout = FlexboxLayout(context).apply {
+            flexWrap = FlexWrap.WRAP // Allow wrapping of child views
+            justifyContent = JustifyContent.SPACE_AROUND // Align tiles with equal spacing
+            setBackgroundColor(Color.TRANSPARENT) // Background for entire layout
+        }
 
+        val tileMargin = 16 // Margin around tiles
         parameters.forEach { parameter ->
             when (parameter.type) {
                 ParameterType.COLOR -> {
-                    // Primary/Secondary Color Dropdown and Color Picker
-                    val colorDropdown = Spinner(context)
-                    // Add common colors to the dropdown
-                    // Add a "Custom Color" option to the dropdown
+                    // Create a color tile
+                    val colorTile = CardView(context).apply {
+                        radius = 16f // Rounded corners
+                        setCardBackgroundColor(Color.BLACK) // Black background for tiles
+                        layoutParams = FlexboxLayout.LayoutParams(
+                            FlexboxLayout.LayoutParams.WRAP_CONTENT,
+                            FlexboxLayout.LayoutParams.WRAP_CONTENT
+                        ).apply {
+                            setMargins(tileMargin, tileMargin, tileMargin, tileMargin)
+                            flexBasisPercent = 0.4f // Allow tiles to take up to 40% width
+                        }
+                    }
 
-                    val colorPickerButton = Button(context)
-                    colorPickerButton.text = "Select Color"
-                    colorPickerButton.visibility = View.GONE // Initially hidden
+                    val tileContent = LinearLayout(context).apply {
+                        orientation = LinearLayout.VERTICAL
+                        gravity = Gravity.CENTER
+                        setPadding(16, 16, 16, 16)
+                    }
 
-                    // Set up color picker dialog to show when colorPickerButton is clicked
+                    val bulbImageView = ImageView(context).apply {
+                        setImageResource(R.drawable.bulb)
+                        layoutParams = LinearLayout.LayoutParams(80, 80).apply {
+                            gravity = Gravity.CENTER_HORIZONTAL
+                        }
+                    }
 
-                    // Add colorDropdown and colorPickerButton to layout
-                    layout.addView(colorDropdown)
-                    layout.addView(colorPickerButton)
+                    val titleTextView = TextView(context).apply {
+                        text = parameter.name
+                        setTextColor(Color.WHITE)
+                        textSize = 18f
+                        gravity = Gravity.CENTER
+                    }
+
+                    tileContent.addView(bulbImageView)
+                    tileContent.addView(titleTextView)
+                    colorTile.addView(tileContent)
+
+                    colorTile.setOnClickListener {
+                        showPopup(context, parameter, ParameterType.COLOR)
+                    }
+
+                    layout.addView(colorTile)
                 }
-                ParameterType.FREQUENCY -> {
-                    // Frequency Slider
-                    val frequencySlider = SeekBar(context)
-                    // Set up slider properties (min, max, etc.)
-                    layout.addView(frequencySlider)
+
+                ParameterType.FREQUENCY, ParameterType.SPEED, ParameterType.DIVISION -> {
+                    // Create a slider tile
+                    val sliderTile = CardView(context).apply {
+                        radius = 16f
+                        setCardBackgroundColor(Color.BLACK)
+                        layoutParams = FlexboxLayout.LayoutParams(
+                            FlexboxLayout.LayoutParams.MATCH_PARENT,
+                            FlexboxLayout.LayoutParams.WRAP_CONTENT
+                        ).apply {
+                            setMargins(tileMargin, tileMargin, tileMargin, tileMargin)
+                        }
+                    }
+
+                    val titleTextView = TextView(context).apply {
+                        text = parameter.name
+                        textSize = 16f
+                        setTextColor(Color.WHITE)
+                        setPadding(16, 16, 16, 8)
+                    }
+
+                    val sliderContainer = LinearLayout(context).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(16, 8, 16, 16)
+                    }
+
+                    val slider = SeekBar(context).apply {
+                        max = 100
+                        progress = parameter.value as Int // Assuming slider values are integers
+                        thumb.setTint(Color.LTGRAY) // Thumb color
+                        progressDrawable = ContextCompat.getDrawable(context, R.drawable.custom_slider_drawable)
+                    }
+
+                    val valueTextView = TextView(context).apply {
+                        text = "Value: ${slider.progress}"
+                        textSize = 14f
+                        setTextColor(Color.LTGRAY)
+                        gravity = Gravity.CENTER
+                    }
+
+                    slider.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                        override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                            valueTextView.text = "Value: $progress"
+                        }
+
+                        override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                        override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+                    })
+
+                    sliderContainer.addView(slider)
+                    sliderContainer.addView(valueTextView)
+
+                    sliderTile.addView(titleTextView)
+                    sliderTile.addView(sliderContainer)
+
+                    sliderTile.setOnClickListener {
+                        showPopup(context, parameter, ParameterType.SLIDER)
+                    }
+
+                    layout.addView(sliderTile)
                 }
-                ParameterType.SPEED -> {
-                    // Speed Slider
-                    val speedSlider = SeekBar(context)
-                    // Set up slider properties (min, max, etc.)
-                    layout.addView(speedSlider)
+
+                ParameterType.SLIDER -> {
+                    // Handle SLIDER (if not already done)
                 }
-                ParameterType.DIVISION -> {
-                    // Max Divisions Slider
-                    val divisionsSlider = SeekBar(context)
-                    // Set up slider properties (min, max, etc.)
-                    layout.addView(divisionsSlider)
-                }
-                // Handle other parameter types if needed
             }
         }
 
-        frameLayout.addView(layout)
-        return frameLayout
+        return layout
     }
+
+    fun showPopup(context: Context, parameter: Parameter, type: ParameterType) {
+        val popup = Dialog(context).apply {
+            setContentView(R.layout.parameter_popup) // Ensure this file exists
+            window?.setLayout(
+                (context.resources.displayMetrics.widthPixels * 0.8).toInt(),
+                (context.resources.displayMetrics.heightPixels * 0.25).toInt()
+            )
+            window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT)) // Transparent background for sleek look
+            setCancelable(true)
+        }
+
+        val titleTextView = popup.findViewById<TextView>(R.id.parameterTitle)
+        titleTextView.text = parameter.name
+
+        when (type) {
+            ParameterType.COLOR -> {
+                val dropdown = popup.findViewById<Spinner>(R.id.colorDropdown).apply {
+                    visibility = View.VISIBLE
+                    val colorsAdapter = ArrayAdapter(
+                        context,
+                        android.R.layout.simple_spinner_item,
+                        arrayOf("Red", "Blue", "Green", "Yellow", "White") // Example colors
+                    )
+                    adapter = colorsAdapter
+                }
+            }
+
+            ParameterType.SLIDER -> {
+                val slider = popup.findViewById<SeekBar>(R.id.parameterSlider).apply {
+                    visibility = View.VISIBLE
+                    progress = parameter.value as Int
+                    setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                        override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                            parameter.value = progress
+                        }
+
+                        override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                        override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+                    })
+                }
+            }
+
+            ParameterType.FREQUENCY -> {
+
+            }
+            ParameterType.SPEED -> {}
+            ParameterType.DIVISION -> {}
+        }
+
+        popup.show()
+    }
+
+
+
+
+    private val colorOptions = arrayOf("Off", "Red", "Orange", "Yellow", "Green", "Blue", "Purple", "White")
 
     class ColorMode {
         val subscribedParameters: List<Parameter> = listOf(
@@ -217,7 +373,7 @@ class MainActivity : AppCompatActivity() {
         FREQUENCY,
         SPEED,
         DIVISION,
-        // ... other parameter types
+        SLIDER
     }
 
     object ParameterList {
@@ -227,6 +383,49 @@ class MainActivity : AppCompatActivity() {
             Parameter("Speed", ParameterType.SPEED, 50),
             // ... other parameters
         )
+    }
+
+    private fun sendPowerStateToArduino(state: Boolean) {
+        // Determine the message based on the state
+        val message = if (state) "ON" else "OFF"
+
+        // Define UUIDs for the service and characteristic
+        val serviceUUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef0")  // Your service UUID
+        val characteristicUUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef1")  // Your characteristic UUID
+
+        // Get the GATT connection
+        val gatt = GlobalBluetoothManager.getGatt()
+
+        if (GlobalBluetoothManager.isConnected && gatt != null) {
+            // Find the characteristic for the service
+            val characteristic = gatt.getService(serviceUUID)?.getCharacteristic(characteristicUUID)
+
+            if (characteristic != null) {
+                // Ensure the characteristic value is cleared before writing the new message
+                characteristic.value = ByteArray(0)  // Clear any previous data in the characteristic
+
+                // Convert the message to a byte array
+                val byteArray = message.toByteArray(Charsets.UTF_8)
+
+                // Log the byte array content to ensure it's correct before sending
+                Log.d("Bluetooth", "Sending message: $message, Byte array: ${byteArray.joinToString(", ")}")
+
+                // Set the characteristic's value and write it
+                characteristic.value = byteArray
+                val success = gatt.writeCharacteristic(characteristic)
+
+                // Log the result of the write operation
+                if (success) {
+                    Log.d("Bluetooth", "Sent power state to Arduino: $message")
+                } else {
+                    Log.w("Bluetooth", "Failed to write characteristic.")
+                }
+            } else {
+                Log.w("Bluetooth", "Characteristic not found.")
+            }
+        } else {
+            Log.w("Bluetooth", "Not connected or GATT is null.")
+        }
     }
 
     @SuppressLint("ResourceType")

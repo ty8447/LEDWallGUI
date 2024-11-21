@@ -9,6 +9,8 @@
     <color name="light_blue">#ADD8E6</color>
     <color name="green">#98A869</color>
     <color name="red">#DF6967</color>
+    <color name="dark_gray">#333333</color>
+    <color name="light_gray">#888888</color>
 
 
 </resources>
