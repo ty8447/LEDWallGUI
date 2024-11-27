@@ -51,19 +51,10 @@ class ConnectionActivity : AppCompatActivity() {
     private lateinit var statusTextView: TextView
     private lateinit var rescanButton: ImageButton
     private lateinit var scanProgressBar: ProgressBar
-    private var bluetoothGatt: BluetoothGatt? = null
 
     companion object {
         private const val SCAN_PERIOD: Long = 30000 // 1 minute timeout
         private const val PERMISSIONS_REQUEST_BLUETOOTH = 1
-//        private const val REQUEST_ENABLE_BLUETOOTH = 2 //
-//        private const val REQUEST_ENABLE_BT = 2 // Also used to request enabling Bluetooth
-    }
-
-    private val bluetoothPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
-    } else {
-        arrayOf(Manifest.permission.BLUETOOTH, Manifest.permission.BLUETOOTH_ADMIN)
     }
 
     @SuppressLint("MissingPermission")
@@ -138,22 +129,6 @@ class ConnectionActivity : AppCompatActivity() {
             startBluetoothScan()
             }
         }
-
-//        GlobalBluetoothManager.uuidDiscoveryListener = object : GlobalBluetoothManager.UUIDDiscoveryListener {
-//            override fun onUUIDsDiscovered(uuids: List<UUID>) {
-//                runOnUiThread {
-//                    // Check if a specific UUID is present
-//                    val targetUUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef1") // Replace with your target UUID
-//                    if (uuids.contains(targetUUID)) { // Explicitly specify the type of the elements in the list
-//                        Log.d("ConnectionActivity", "Target UUID found!")
-//                        // Perform actions if the target UUID is found
-//                    } else {
-//                        Log.d("ConnectionActivity", "Target UUID not found.")
-//                        // Perform actions if the target UUID is not found
-//                    }
-//                }
-//            }
-//        }
 
         // Initialize statusTextView here
         statusTextView =
@@ -417,21 +392,6 @@ class ConnectionActivity : AppCompatActivity() {
         // Register a receiver to listen for found devices
         val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
         registerReceiver(deviceFoundReceiver, filter)
-//        registerReceiver(object : BroadcastReceiver() {
-//            override fun onReceive(context: Context?, intent: Intent?) {
-//                if (intent?.action == BluetoothDevice.ACTION_FOUND) {
-//                    val device: BluetoothDevice? =
-//                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-//                    device?.let {
-//                        Log.d(
-//                            "ConnectionActivity",
-//                            "Device found: ${it.name ?: "Unknown Device"} - ${it.address}"
-//                        )
-//                        adapter.addDevice(it)
-//                    }
-//                }
-//            }
-//        }, filter)
 
         bluetoothAdapter.startDiscovery() // Start scanning for devices
 
@@ -488,8 +448,6 @@ class ConnectionActivity : AppCompatActivity() {
                     "Bluetooth permissions required for scanning.",
                     Toast.LENGTH_LONG
                 ).show()
-                // Return to settings menu
-//                finish() // Finish the current activity (ConnectionActivity)
             }
         }
     }

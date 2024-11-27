@@ -112,6 +112,21 @@
         android:layout_marginEnd="10dp"
         android:radius="40dp">
 
+        <SeekBar
+            android:id="@+id/speedSeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <SeekBar
+            android:id="@+id/frequencySeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <SeekBar
+            android:id="@+id/divSeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
     </FrameLayout>
 
 </LinearLayout>

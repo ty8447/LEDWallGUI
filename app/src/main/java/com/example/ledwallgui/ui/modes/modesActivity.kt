@@ -22,9 +22,9 @@ object ModeManager {
 }
 
 class modesActivity : AppCompatActivity() {
-    val buttonNames = arrayOf("Rainbow","Color","Alternating Colors","Fade","Pulse","Breathe","Paint","Strobe","Time","Cylon","Police","Fire","Twinkle","Running Lights","Theatre Chase")
-    val maxButtonSize = 20
-    private lateinit var buttonIds: Array<Int>
+//    val buttonNames = arrayOf("Rainbow","Color","Alternating Colors","Fade","Pulse","Breathe","Paint","Strobe","Time","Cylon","Police","Fire","Twinkle","Running Lights","Theatre Chase")
+//    val maxButtonSize = 20
+//    private lateinit var buttonIds: Array<Int>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,11 +57,13 @@ class modesActivity : AppCompatActivity() {
 
                 setOnClickListener {
                     ModeManager.currentMode = modeName
+                    GlobalBluetoothManager.setLedMode(modeName)
 
                     // Show toast notification
                     Toast.makeText(this@modesActivity, "Mode changed to $modeName", Toast.LENGTH_SHORT).show()
 
                     // Finish the activity to return to MainActivity
+                    setResult(RESULT_OK)
                     finish()
                 }
             }

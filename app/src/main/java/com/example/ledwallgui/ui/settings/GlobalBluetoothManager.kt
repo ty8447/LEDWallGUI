@@ -12,23 +12,28 @@ import android.content.Context
 import android.os.Handler
 import android.util.Log
 import java.io.IOException
-import java.io.OutputStream
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 
 object GlobalBluetoothManager {
+    private val LED_CONNECTION_SERVER: UUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef0") //Server for Modes
+    private val LED_BRIGHTNESS_CHARACTERISTIC: UUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef1") //Server for Modes
     // The connection status, device address, and device name are encapsulated to prevent direct modification.
-    private val LED_MODE_LIST_UUID: UUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef2") // Replace with actual UUID
+    private val LED_MODE_LIST_UUID: UUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef2") //Get List from Arduino
     // UUID for the Client Characteristic Configuration descriptor (for enabling notifications)
-    private val CLIENT_CHARACTERISTIC_CONFIG_UUID: UUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef2")
+    private val CLIENT_CHARACTERISTIC_CONFIG_UUID: UUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef3") //Enable Notifications
+    private val PARAMETER_REQUEST_UUID: UUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef4") //GET LED Parameter Values
+    private val MODE_CONTROL_UUID: UUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef5") //Write Current Mode
     var bluetoothSocket: BluetoothSocket? = null
     private var _isConnected: Boolean = false
     private var _deviceAddress: String? = null
     private var _deviceName: String? = null  // Added device name
     private var gatt: BluetoothGatt? = null
     var shouldLoadSavedStatus = false
-    private val discoveredUUIDs = mutableListOf<UUID>()
+    private val discoveredUUIDs = CopyOnWriteArrayList<UUID>()
     private val ledModeData = mutableListOf<String>()
     var modeNames: MutableList<String> = mutableListOf()
+    private var modeInfoList: List<ModeInfo> = emptyList()
 
     // Public function to get discovered UUIDs
     fun getDiscoveredUUIDs(): List<UUID> {
@@ -84,22 +89,23 @@ object GlobalBluetoothManager {
             override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
                 if (status == BluetoothGatt.GATT_SUCCESS) {
                     Log.i(TAG, "Discovered services:")
-                    discoveredUUIDs.clear()
+                    synchronized(discoveredUUIDs) {
+                        discoveredUUIDs.clear()
 
-                    gatt?.services?.forEach { service ->
-                        Log.d(TAG, "Service UUID: ${service.uuid}")
-                        discoveredUUIDs.add(service.uuid)
-                        service.characteristics.forEach { characteristic ->
-                            Log.d(TAG, "  Characteristic UUID: ${characteristic.uuid}")
-                            discoveredUUIDs.add(characteristic.uuid)
+                        gatt?.services?.forEach { service ->
+                            Log.d(TAG, "Service UUID: ${service.uuid}")
+                            discoveredUUIDs.add(service.uuid)
+                            service.characteristics.forEach { characteristic ->
+                                Log.d(TAG, "  Characteristic UUID: ${characteristic.uuid}")
+                                discoveredUUIDs.add(characteristic.uuid)
 
-                            if (characteristic.uuid == LED_MODE_LIST_UUID) {
-                                enableNotificationsForCharacteristic(gatt, characteristic)
-                                gatt.readCharacteristic(characteristic)
+                                if (characteristic.uuid == LED_MODE_LIST_UUID) {
+                                    enableNotificationsForCharacteristic(gatt, characteristic)
+                                    gatt.readCharacteristic(characteristic)
+                                }
                             }
                         }
                     }
-
                     callback(true) // Notify successful service discovery
                 } else {
                     Log.w(TAG, "onServicesDiscovered received: $status")
@@ -120,7 +126,16 @@ object GlobalBluetoothManager {
                     modeNames = modeList.split(",").map { it.trim() }.toMutableList()
 
                     // Log the parsed mode names
-                    Log.d(TAG, "Parsed Mode Names: $modeNames")
+                    Log.d(TAG, "Parsed Mode Names 1: $modeNames")
+                } else if (characteristic != null && characteristic.uuid == PARAMETER_REQUEST_UUID) {
+                    val response = String(characteristic.value, Charsets.UTF_8)
+                    Log.d(TAG, "Received parameter values: $response")
+
+                    // Parse the response and update parameter values in your data structures
+                    // ... (Your parsing logic here) ...
+
+                    // Update UI with the new parameter values
+                    // ... (Your UI update logic here) ...
                 }
             }
 
@@ -138,16 +153,28 @@ object GlobalBluetoothManager {
                         // Log the raw data for debugging
                         Log.d(TAG, "Characteristic ${characteristic.uuid} read with raw data: $rawData")
 
-                        // Parse mode names: split by newline, and extract the first part before ':'
-                        modeNames = rawData.split("\n")
+                        val modeInfoList = rawData.split("\n")
                             .mapNotNull { line ->
-                                line.split(":").firstOrNull()?.trim()
+                                val parts = line.split(":")
+                                if (parts.size >= 3) {
+                                    val name = parts[0].trim()
+                                    val description = parts[1].trim()
+                                    val parameters = parts[2].trim().split(",").map { it.trim() }
+                                    ModeInfo(name, description, parameters)
+                                } else {
+                                    null
+                                }
                             }
-                            .filter { it.isNotEmpty() }
-                            .toMutableList()
+                            .filter { it.name.isNotEmpty() }
+
+                        // Store modeInfoList in GlobalBluetoothManager (e.g., as a property)
+                        this@GlobalBluetoothManager.modeInfoList = modeInfoList
+
+                        modeNames.clear() // Clear existing mode names
+                        modeNames.addAll(modeInfoList.map { it.name }) // Add names from modeInfoList
 
                         // Log the parsed mode names
-                        Log.d(TAG, "Parsed Mode Names: $modeNames")
+                        Log.d(TAG, "Parsed Mode Names2: $modeNames")
                     } else {
                         Log.d(TAG, "Characteristic ${characteristic.uuid} read but not the target UUID.")
                     }
@@ -162,13 +189,21 @@ object GlobalBluetoothManager {
                 status: Int
             ) {
                 if (status == BluetoothGatt.GATT_SUCCESS && characteristic != null) {
+                    // Clear the buffer before sending the message
+                    Log.d(TAG, "onCharacteristicWrite: Before clearing buffer - characteristic value: ${characteristic.value?.toString(Charsets.UTF_8)}")
+                    characteristic.setValue(ByteArray(0)) // Clear the buffer
+                    Log.d(TAG, "onCharacteristicWrite: After clearing buffer - characteristic value: ${characteristic.value?.toString(Charsets.UTF_8)}")
                     val message = characteristic.value?.toString(Charsets.UTF_8) ?: "null"
                     Log.d(TAG, "Characteristic ${characteristic.uuid} successfully written. Message: $message")
+                    if (characteristic.uuid == MODE_CONTROL_UUID) {
+                        // You can remove this additional buffer clearing if it's redundant
+                        characteristic.setValue(ByteArray(0))
+                        Log.d(TAG, "onCharacteristicWrite: After clearing buffer for MODE_CONTROL_UUID - characteristic value: ${characteristic.value?.toString(Charsets.UTF_8)}")
+                    }
                 } else {
                     Log.w(TAG, "Failed to write to characteristic: ${characteristic?.uuid}, Status: $status")
                 }
             }
-
         }
 
         // Connect to the GATT server
@@ -183,41 +218,51 @@ object GlobalBluetoothManager {
         shouldLoadSavedStatus = true
     }
 
-//    private fun writeToCharacteristic(uuid: UUID, value: ByteArray) {
-//        gatt?.let { bluetoothGatt ->
-//            val characteristic = bluetoothGatt.services
-//                ?.flatMap { it.characteristics }
-//                ?.find { it.uuid == uuid }
-//
-//            if (characteristic != null) {
-//                // Log the message and byte array to verify it before writing
-//                val message = value.toString(Charsets.UTF_8)
-//                Log.d(TAG, "Write request for characteristic ${characteristic.uuid} initiated. Message: $message, Byte array: ${value.joinToString(", ")}")
-//
-//                characteristic.value = value
-//                val success = bluetoothGatt.writeCharacteristic(characteristic)
-//
-//                // Log the result of the write operation
-//                Log.d(TAG, "Write request for characteristic ${characteristic.uuid} initiated: $success")
-//            } else {
-//                Log.w(TAG, "Characteristic with UUID $uuid not found.")
-//            }
-//        } ?: Log.w(TAG, "BluetoothGatt is null, cannot write to characteristic.")
-//    }
+    fun setLedMode(modeName: String) {
+        val gatt = getGatt()
+        Log.d(TAG, "writeModeName called with modeName: $modeName")
+        if (gatt != null && isConnected) {
+            val modeControlCharacteristic = gatt.getService(LED_CONNECTION_SERVER)?.getCharacteristic(MODE_CONTROL_UUID)
+            Log.d(TAG, "Mode control characteristic: $modeControlCharacteristic")
+            if (modeControlCharacteristic != null) {
+                modeControlCharacteristic.setValue(modeName.toByteArray())
+                Log.d(TAG, "setLedMode: After setting value - characteristic value: ${modeControlCharacteristic.value?.toString(Charsets.UTF_8)}")
+                gatt.writeCharacteristic(modeControlCharacteristic)
+                modeControlCharacteristic.setValue(ByteArray(0)) // Clear the buffer
+                Log.d(TAG, "Mode name written: $modeName")
+            } else {
+                Log.w(TAG, "Mode control characteristic not found")
+            }
+        } else {
+            Log.w(TAG, "Not connected to device")
+        }
+    }
 
+    fun setLedParameters(primaryColor: String, speed: Int, frequency: Int, div: Int) {
+        val gatt = getGatt()
+        if (gatt != null && isConnected) {
+            val modeControlCharacteristic = gatt.getService(LED_CONNECTION_SERVER)?.getCharacteristic(MODE_CONTROL_UUID)
+            if (modeControlCharacteristic != null) {
+                val parametersData = "primaryColor:$primaryColor,speed:$speed,frequency:$frequency,div:$div"
+                Log.d(TAG, "setLedParameters: Before clearing buffer - characteristic value: ${modeControlCharacteristic.value?.toString(Charsets.UTF_8)}")
+                modeControlCharacteristic.setValue(ByteArray(0)) // Clear the buffer
+                Log.d(TAG, "setLedParameters: After clearing buffer - characteristic value: ${modeControlCharacteristic.value?.toString(Charsets.UTF_8)}")
+                val parametersDataWithNull = parametersData + '\u0000' // Add null terminator
+                modeControlCharacteristic.setValue(parametersDataWithNull.toByteArray(Charsets.UTF_8)) // Specify encoding
+                Log.d(TAG, "setLedParameters: After setting value - characteristic value: ${modeControlCharacteristic.value?.toString(Charsets.UTF_8)}")
+                gatt.writeCharacteristic(modeControlCharacteristic)
+                Log.d(TAG, "Parameters written: $parametersData")
+            } else {
+                Log.w(TAG, "Mode control characteristic not found")
+            }
+        } else {
+            Log.w(TAG, "Not connected to device")
+        }
+    }
 
-//    fun sendGattCommand(serviceUUID: UUID, characteristicUUID: UUID, value: ByteArray): Boolean {
-//        gatt?.let {
-//            val characteristic = it.getService(serviceUUID)?.getCharacteristic(characteristicUUID)
-//            if (characteristic != null) {
-//                characteristic.value = value
-//                return it.writeCharacteristic(characteristic)
-//            }
-//            Log.w(TAG, "Characteristic not found for UUID: $characteristicUUID")
-//        }
-//        Log.w(TAG, "GATT is null, cannot send command.")
-//        return false
-//    }
+    fun getModeInfo(modeName: String): ModeInfo? {
+        return modeInfoList.find { it.name == modeName }
+    }
 
     private fun enableNotificationsForCharacteristic(
         gatt: BluetoothGatt,
@@ -253,18 +298,24 @@ object GlobalBluetoothManager {
         return ledModeData
     }
 
-    // Method to send a serial command
-//    fun sendSerialCommand(command: String) {
-//        Log.d(TAG, "Sending serial command: $command")
-//        try {
-//            outputStream?.let {
-//                it.write(command.toByteArray())
-//                it.flush()
-//            }
-//        } catch (e: IOException) {
-//            Log.e(TAG, "Error sending serial command", e)
-//        }
-//    }
+    fun requestParameterValues(modeName: String) {
+        val gatt = getGatt()
+        if (gatt != null && isConnected) {
+            val characteristic = gatt.getService(LED_CONNECTION_SERVER)?.getCharacteristic(PARAMETER_REQUEST_UUID)
+            if (characteristic != null) {
+//                characteristic.setValue(ByteArray(0)) // Clear the buffer
+//                characteristic.value = modeName.toByteArray() // Send mode name as request
+                val modeNameBytes = modeName.toByteArray(Charsets.UTF_8) + 0.toByte()
+                characteristic.value = modeNameBytes
+                gatt.writeCharacteristic(characteristic)
+                Log.d(TAG, "Requested parameter values for mode: $modeName")
+            } else {
+                Log.w(TAG, "Parameter request characteristic not found")
+            }
+        } else {
+            Log.w(TAG, "Not connected to device")
+        }
+    }
 
     // Method to disconnect from a device
     fun disconnect() {
@@ -282,4 +333,10 @@ object GlobalBluetoothManager {
         Log.d("GlobalBluetoothManager", "Disconnected from device. Connection state reset.")
         shouldLoadSavedStatus = false
     }
+
+    data class ModeInfo(
+        val name: String,
+        val description: String,
+        val parameters: List<String>
+    )
 }
