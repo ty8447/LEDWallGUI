@@ -1,5 +1,6 @@
 package com.example.ledwallgui.ui.modes
 
+import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import android.os.Bundle
@@ -9,7 +10,6 @@ import android.view.Window
 import android.view.WindowManager
 import android.widget.GridLayout
 import android.widget.ImageButton
-import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatButton
@@ -22,9 +22,6 @@ object ModeManager {
 }
 
 class modesActivity : AppCompatActivity() {
-//    val buttonNames = arrayOf("Rainbow","Color","Alternating Colors","Fade","Pulse","Breathe","Paint","Strobe","Time","Cylon","Police","Fire","Twinkle","Running Lights","Theatre Chase")
-//    val maxButtonSize = 20
-//    private lateinit var buttonIds: Array<Int>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,28 +36,30 @@ class modesActivity : AppCompatActivity() {
         val backButton: ImageButton = findViewById(R.id.mBackButton)
         val modesContainer: GridLayout = findViewById(R.id.modesContainer)
 
-        // Get mode names from GlobalBluetoothManager
-        val modeNames = GlobalBluetoothManager.modeNames
+        val modeInfoList = GlobalBluetoothManager.modeInfoList // Fetch from GlobalBluetoothManager
 
-        Log.d("ModesActivity", "Mode Names: ${modeNames.joinToString(", ")}")
+        if (modeInfoList.isEmpty()) {
+            Log.w("ModesActivity", "No modes available in GlobalBluetoothManager")
+        } else {
+            Log.d("ModesActivity", "Mode Names: ${modeInfoList.joinToString(", ") { it.name }}")
+        }
 
-        // Dynamically create buttons
-        modeNames.forEach { modeName ->
+            // Dynamically create buttons based on the mode names
+        modeInfoList.forEach { modeInfo ->
             val button = AppCompatButton(this).apply {
-                text = modeName
+                text = modeInfo.name   // Use mode name from ModeInfo
                 textSize = 20f
                 isEnabled = true
-                minimumWidth = 100
-                minimumHeight = 100
                 background = ContextCompat.getDrawable(this@modesActivity, R.drawable.mode_button_shape)
                 setPadding(16, 16, 16, 16) // Padding (left, top, right, bottom)
 
                 setOnClickListener {
-                    ModeManager.currentMode = modeName
-                    GlobalBluetoothManager.setLedMode(modeName)
+                    // Use modeInfo.name for the current mode
+                    ModeManager.currentMode = modeInfo.name
+                    GlobalBluetoothManager.setLedMode(modeInfo.name)
 
                     // Show toast notification
-                    Toast.makeText(this@modesActivity, "Mode changed to $modeName", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@modesActivity, "Mode changed to ${modeInfo.name}", Toast.LENGTH_SHORT).show()
 
                     // Finish the activity to return to MainActivity
                     setResult(RESULT_OK)
@@ -71,7 +70,7 @@ class modesActivity : AppCompatActivity() {
             val params = GridLayout.LayoutParams().apply {
                 // Set width and height to match parent with equal weight
                 width = 0
-                height = GridLayout.LayoutParams.WRAP_CONTENT
+                height = 0
 
                 // Specify margins for the button (outside padding)
                 setMargins(8, 8, 8, 8) // Margins (left, top, right, bottom)
@@ -91,7 +90,8 @@ class modesActivity : AppCompatActivity() {
     }
 
     private fun returnHome() {
-        startActivity(Intent(this, MainActivity::class.java))
+        // Pass the visibility state back to MainActivity
+        finish()
     }
 
     private fun hideSystemUI() {

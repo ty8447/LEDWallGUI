@@ -48,9 +48,11 @@ class ConnectionActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private var isScanning = false
     private lateinit var stateTextView: TextView
+    private lateinit var toggleUnnamedDevices: TextView
     private lateinit var statusTextView: TextView
     private lateinit var rescanButton: ImageButton
     private lateinit var scanProgressBar: ProgressBar
+    private var showUnnamedDevices = false
 
     companion object {
         private const val SCAN_PERIOD: Long = 30000 // 1 minute timeout
@@ -65,6 +67,7 @@ class ConnectionActivity : AppCompatActivity() {
 
         rescanButton = findViewById(R.id.rescanButton)
         scanProgressBar = findViewById(R.id.scanProgressBar)
+        toggleUnnamedDevices = findViewById(R.id.textView2)
         stateTextView = findViewById(R.id.textView4)
         statusTextView = findViewById(R.id.textView3)
 
@@ -129,6 +132,18 @@ class ConnectionActivity : AppCompatActivity() {
             startBluetoothScan()
             }
         }
+
+        toggleUnnamedDevices.setOnLongClickListener {
+            // Toggle the state of the variable
+            showUnnamedDevices = !showUnnamedDevices
+
+            // Show a toast notification with the updated state
+            val status = if (showUnnamedDevices) "ON" else "OFF"
+            Toast.makeText(this, "Toggled Unnamed Devices to $status", Toast.LENGTH_SHORT).show()
+
+            true // Indicate the event has been handled
+        }
+
 
         // Initialize statusTextView here
         statusTextView =
@@ -284,6 +299,7 @@ class ConnectionActivity : AppCompatActivity() {
                     GlobalBluetoothManager.isConnected = true
                     deviceAddress = device.address
                     GlobalBluetoothManager.deviceName = device.name ?: "Unknown Device"
+                    stopBluetoothScan()
 
                     Toast.makeText(this, "Connected to ${device.name ?: "Unknown Device"}", Toast.LENGTH_SHORT).show()
 
@@ -423,11 +439,14 @@ class ConnectionActivity : AppCompatActivity() {
                 val device: BluetoothDevice? =
                     intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                 device?.let {
-                    Log.d(
-                        "ConnectionActivity",
-                        "Device found: ${it.name ?: "Unknown Device"} - ${it.address}"
-                    )
-                    adapter.addDevice(it)
+                    if (showUnnamedDevices || !it.name.isNullOrEmpty()) {
+                        adapter.addDevice(it) // Add to the adapter if it matches the filter
+                        adapter.notifyDataSetChanged()
+                        Log.d(
+                            "ConnectionActivity",
+                            "Device found: ${it.name ?: "Unknown Device"} - ${it.address}"
+                        )
+                    }
                 }
             }
         }

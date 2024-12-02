@@ -44,6 +44,7 @@ import com.example.ledwallgui.ui.modes.modesActivity
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 import com.example.ledwallgui.ui.settings.ConnectionActivity
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager.bluetoothSocket
+import com.example.ledwallgui.ui.settings.GlobalBluetoothManager.sendPowerStateToArduino
 import com.example.ledwallgui.ui.settings.settingsActivity
 
 
@@ -77,152 +78,137 @@ class MainActivity : AppCompatActivity() {
         divSeekBar = findViewById(R.id.divSeekBar)
 
         val layout = generateLayout(this, mode.subscribedParameters)
-        val container = findViewById<FrameLayout>(R.id.dynamicLayoutContainer)
-        container.addView(layout)
+        val dynamicLayoutContainer = findViewById<FrameLayout>(R.id.dynamicLayoutContainer)
 
-        preferenceUtils = PreferenceUtils(this) // Initialize preferenceUtils
-        Log.d("INTRO","SWITCHED TO MAIN ACTIVITY!")
-        // Check if Bluetooth permissions are granted, and if not, request them
+        // Add the dynamically generated layout to the container
+        dynamicLayoutContainer.addView(layout)
+
+        // Initialize preferenceUtils
+        preferenceUtils = PreferenceUtils(this)
+        Log.d("INTRO", "SWITCHED TO MAIN ACTIVITY!")
+
+        // Check Bluetooth permissions and connectivity
         val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
         val motionDetectionEnabled = preferenceUtils.getMotionDetectionEnabled()
         if (bluetoothAdapter == null) {
-            // Device doesn't support Bluetooth
             println("Bluetooth is not supported on this device.")
         } else {
-            // Device supports Bluetooth
             println("Bluetooth is supported on this device.")
             if (bluetoothAdapter.isEnabled) {
-                // Bluetooth is enabled
                 println("Bluetooth is currently enabled.")
             } else {
-                // Bluetooth is disabled
                 println("Bluetooth is currently disabled.")
-                // Request to enable Bluetooth using enableBluetoothLauncher as before
             }
         }
 
-        val settingModeDivider = findViewById<View>(R.id.settingModeDivider)
-        val dynamicLayoutContainer = findViewById<FrameLayout>(R.id.dynamicLayoutContainer)
+        // Log the visibility of dynamicLayoutContainer before checking child count
+        Log.d("MainActivity", "dynamicLayoutContainer visibility before check: ${dynamicLayoutContainer.visibility}")
 
+        val settingModeDivider = findViewById<View>(R.id.settingModeDivider)
+        Log.d("MainActivity", "Child count of dynamicLayoutContainer: ${dynamicLayoutContainer.childCount}")
         // Check if there are any child views in the container
         if (dynamicLayoutContainer.childCount > 0) {
             settingModeDivider.visibility = View.VISIBLE
+            Log.d("MainActivity", "Setting mode divider visible, child count > 0")
         } else {
             settingModeDivider.visibility = View.GONE
+            Log.d("MainActivity", "Setting mode divider hidden, child count <= 0")
         }
 
+        // Handle button clicks
         val imageButton1: ImageButton = findViewById(R.id.imageButton1)
         val button2: ImageButton = findViewById(R.id.modesbutton)
         val imageButton2: ImageButton = findViewById(R.id.imageButton2)
         val imageButton3: ImageButton = findViewById(R.id.imageButton3)
 
+        // Handle PowerState button click
         imageButton1.setOnClickListener {
             if (GlobalBluetoothManager.isConnected) {
                 powerState = !powerState
                 Log.d("PowerState", "Power state clicked: $powerState")
                 updatePowerButtonImage()
-                sendPowerStateToArduino(powerState) // Send the power state to Arduino
+                sendPowerStateToArduino(powerState)
                 saveSharedPreferences()
             } else {
-                // Device is not connected, show Snackbar
-                val snackbar = Snackbar.make(
-                    findViewById(android.R.id.content),
-                    "No Device is Connected",
-                    Snackbar.LENGTH_LONG
-                )
-                snackbar.setAction("Connect") {
-                    // Navigate to ConnectionActivity
-                    val intent = Intent(this, ConnectionActivity::class.java)
-                    startActivity(intent)
-                }
-
-                // Customize Snackbar appearance
-                val snackbarView = snackbar.view
-                val textView = snackbarView.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)
-                textView.setTextColor(Color.WHITE) // Set text color to white
-
-                val actionButton = snackbarView.findViewById<Button>(com.google.android.material.R.id.snackbar_action)
-                actionButton.setTextColor(ContextCompat.getColor(this, R.color.light_blue)) // Set button text color to light blue
-
-                snackbar.show()
+                showConnectionSnackbar()
             }
         }
 
+        // Handle Mode button click
         button2.setOnClickListener {
             if (GlobalBluetoothManager.isConnected) {
-                // Device is connected, start ModesActivity
                 showModesMenu()
             } else {
-                // Device is not connected, show Snackbar
-                val snackbar = Snackbar.make(
-                    findViewById(android.R.id.content),
-                    "No Device is Connected",
-                    Snackbar.LENGTH_LONG
-                )
-                snackbar.setAction("Connect") {
-                    // Navigate to ConnectionActivity
-                    val intent = Intent(this, ConnectionActivity::class.java)
-                    startActivity(intent)
-                }
-
-                // Customize Snackbar appearance
-                val snackbarView = snackbar.view
-                val textView = snackbarView.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)
-                textView.setTextColor(Color.WHITE) // Set text color to white
-
-                val actionButton = snackbarView.findViewById<Button>(com.google.android.material.R.id.snackbar_action)
-                actionButton.setTextColor(ContextCompat.getColor(this, R.color.light_blue)) // Set button text color to light blue
-
-                snackbar.show()
+                showConnectionSnackbar()
             }
         }
-        imageButton2.setOnClickListener {
-            showAlarmMenu()
-        }
-        imageButton3.setOnClickListener {
-            showSettingsMenu()
-        }
+
+        // Handle other button clicks
+        imageButton2.setOnClickListener { showAlarmMenu() }
+        imageButton3.setOnClickListener { showSettingsMenu() }
 
         updatePowerButtonImage()
         updateConnectIcon()
 
+        // Handle motion detection service
         if (motionDetectionEnabled) {
             val intent = Intent(this, MotionDetectionService::class.java)
-            intent.putExtra("source", "MainActivity") // Add extra data
+            intent.putExtra("source", "MainActivity")
             startService(intent)
             Log.d("Motion Detection", "Detecting Motion")
         } else {
             val intent = Intent(this, MotionDetectionService::class.java)
-            intent.putExtra("source", "MainActivity") // Add extra data
+            intent.putExtra("source", "MainActivity")
             stopService(intent)
             Log.d("Motion Detection", "Not Detecting Motion")
         }
-
     }
-    fun generateLayout(context: Context, parameters: List<Parameter>): View {
-        val layout = FlexboxLayout(context).apply {
-            flexWrap = FlexWrap.WRAP // Allow wrapping of child views
-            justifyContent = JustifyContent.SPACE_AROUND // Align tiles with equal spacing
-            setBackgroundColor(Color.TRANSPARENT) // Background for entire layout
+
+    fun showConnectionSnackbar() {
+        val snackbar = Snackbar.make(
+            findViewById(android.R.id.content),
+            "No Device is Connected",
+            Snackbar.LENGTH_LONG
+        )
+        snackbar.setAction("Connect") {
+            // Navigate to ConnectionActivity
+            val intent = Intent(this, ConnectionActivity::class.java)
+            startActivity(intent)
         }
 
-        val tileMargin = 16 // Margin around tiles
+        val snackbarView = snackbar.view
+        val textView = snackbarView.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)
+        textView.setTextColor(Color.WHITE)
+
+        val actionButton = snackbarView.findViewById<Button>(com.google.android.material.R.id.snackbar_action)
+        actionButton.setTextColor(ContextCompat.getColor(this, R.color.light_blue))
+
+        snackbar.show()
+    }
+
+    fun generateLayout(context: Context, parameters: List<Parameter>): View {
+        val layout = FlexboxLayout(context).apply {
+            flexWrap = FlexWrap.WRAP
+            justifyContent = JustifyContent.SPACE_AROUND
+            setBackgroundColor(Color.TRANSPARENT)
+        }
+
+        val tileMargin = 16
         parameters.forEach { parameter ->
-            when (parameter.type) {
+            val parameterView = when (parameter.type) {
                 ParameterType.COLOR -> {
                     // Create a color tile
                     val colorTile = CardView(context).apply {
-                        radius = 16f // Rounded corners
-                        setCardBackgroundColor(Color.BLACK) // Black background for tiles
+                        radius = 16f
+                        setCardBackgroundColor(Color.BLACK)
                         layoutParams = FlexboxLayout.LayoutParams(
                             FlexboxLayout.LayoutParams.WRAP_CONTENT,
                             FlexboxLayout.LayoutParams.WRAP_CONTENT
                         ).apply {
                             setMargins(tileMargin, tileMargin, tileMargin, tileMargin)
-                            flexBasisPercent = 0.4f // Allow tiles to take up to 40% width
+                            flexBasisPercent = 0.4f
                         }
                     }
-
                     val tileContent = LinearLayout(context).apply {
                         orientation = LinearLayout.VERTICAL
                         gravity = Gravity.CENTER
@@ -251,7 +237,7 @@ class MainActivity : AppCompatActivity() {
                         showPopup(context, parameter, ParameterType.COLOR)
                     }
 
-                    layout.addView(colorTile)
+                    colorTile
                 }
 
                 ParameterType.FREQUENCY, ParameterType.SPEED, ParameterType.DIVISION -> {
@@ -277,73 +263,31 @@ class MainActivity : AppCompatActivity() {
                     val sliderContainer = LinearLayout(context).apply {
                         orientation = LinearLayout.VERTICAL
                         setPadding(16, 8, 16, 16)
-                    }
+                        addView(titleTextView)
 
-                    val slider = SeekBar(context).apply {
-                        max = 100
-                        progress = parameter.value as Int // Assuming slider values are integers
-                        thumb.setTint(Color.LTGRAY) // Thumb color
-                        progressDrawable = ContextCompat.getDrawable(context, R.drawable.custom_slider_drawable)
-                    }
-
-                    val valueTextView = TextView(context).apply {
-                        text = "Value: ${slider.progress}"
-                        textSize = 14f
-                        setTextColor(Color.LTGRAY)
-                        gravity = Gravity.CENTER
-                    }
-
-                    // ... (In MainActivity.kt, inside the SeekBar's OnSeekBarChangeListener) ...
-
-                    slider.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                        override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                            valueTextView.text = "Value: $progress"
-                            parameter.value = progress // Update the parameter value
-
-                            // Call setLedParameters() to write parameter values
-                            GlobalBluetoothManager.setLedParameters(
-                                // ... (Get other parameter values - primaryColor, etc.) ...
-                                progress.toString(), // Pass the updated progress value as a String
-                                speedSeekBar.progress, // Get speed value as Int
-                                frequencySeekBar.progress, // Get frequency value as Int
-                                divSeekBar.progress // Get div value as Int
-                            )
+                        // Add SeekBar based on the type of parameter
+                        val seekBar = SeekBar(context).apply {
+                            max = 100 // Set the max value, this can vary based on parameter
+                            setProgress(50) // Set a default value
                         }
-
-                        override fun onStartTrackingTouch(seekBar: SeekBar?) {
-                            // Do nothing or add your logic here
-                        }
-
-                        override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                            // Do nothing or add your logic here
-                        }
-
-                        // ... (onStartTrackingTouch and onStopTrackingTouch) ...
-                    })
-
-// ... (Rest of MainActivity.kt) ...
-
-                    sliderContainer.addView(slider)
-                    sliderContainer.addView(valueTextView)
-
-                    sliderTile.addView(titleTextView)
+                        addView(seekBar)
+                    }
                     sliderTile.addView(sliderContainer)
 
-                    sliderTile.setOnClickListener {
-                        showPopup(context, parameter, ParameterType.SLIDER)
-                    }
-
-                    layout.addView(sliderTile)
+                    sliderTile
                 }
 
-                ParameterType.SLIDER -> {
-                    // Handle SLIDER (if not already done)
+                else -> {
+                    // If the parameter type is unsupported, return an empty view
+                    View(context)
                 }
             }
+            layout.addView(parameterView)
         }
 
         return layout
     }
+
 
     fun showPopup(context: Context, parameter: Parameter, type: ParameterType) {
         val popup = Dialog(context).apply {
@@ -439,54 +383,6 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    private fun sendPowerStateToArduino(state: Boolean) {
-        // Determine the message based on the state
-        val message = if (state) "ON" else "OFF"
-
-        // Define UUIDs for the service and characteristic
-        val serviceUUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef0")  // Your service UUID
-        val characteristicUUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef1")  // Your characteristic UUID
-
-        // Get the GATT connection
-        val gatt = GlobalBluetoothManager.getGatt()
-
-        if (GlobalBluetoothManager.isConnected && gatt != null) {
-            // Find the characteristic for the service
-            val characteristic = gatt.getService(serviceUUID)?.getCharacteristic(characteristicUUID)
-
-            if (characteristic != null) {
-                val currentValue = characteristic.value
-                if (currentValue != null && currentValue.isNotEmpty()) {
-                    Log.d("Bluetooth", "Current buffer before clearing: ${currentValue.joinToString(", ")}")
-                } else {
-                    Log.d("Bluetooth", "Current buffer before clearing is empty or null.")
-                }
-                characteristic.value = ByteArray(0)  // Clear any previous data in the characteristic
-
-                // Convert the message to a byte array
-                val byteArray = message.toByteArray(Charsets.UTF_8)
-
-                // Log the byte array content to ensure it's correct before sending
-                Log.d("Bluetooth", "Sending message: $message, Byte array: ${byteArray.joinToString(", ")}")
-
-                // Set the characteristic's value and write it
-                characteristic.value = byteArray
-                val success = gatt.writeCharacteristic(characteristic)
-
-                // Log the result of the write operation
-                if (success) {
-                    Log.d("Bluetooth", "Sent power state to Arduino: $message")
-                } else {
-                    Log.w("Bluetooth", "Failed to write characteristic.")
-                }
-            } else {
-                Log.w("Bluetooth", "Characteristic not found.")
-            }
-        } else {
-            Log.w("Bluetooth", "Not connected or GATT is null.")
-        }
-    }
-
     @SuppressLint("ResourceType")
     private fun showModesMenu() {
         val intent = Intent(this, modesActivity::class.java)
@@ -510,11 +406,9 @@ class MainActivity : AppCompatActivity() {
         super.onConfigurationChanged(newConfig)
         // Check if the orientation has changed
         if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            // Handle landscape orientation
-            // For example, adjust UI layout, update views, etc.
+            Log.d("MainActivity", "Orientation changed to LANDSCAPE")
         } else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) {
-            // Handle portrait orientation
-            // For example, adjust UI layout, update views, etc.
+            Log.d("MainActivity", "Orientation changed to PORTRAIT")
         }
     }
 
@@ -550,6 +444,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+
+        // Find the dynamicLayoutContainer view
+        val dynamicLayoutContainer: View = findViewById(R.id.dynamicLayoutContainer)
+
+        // Set dynamicLayoutContainer visibility to VISIBLE by default
+        dynamicLayoutContainer.visibility = View.VISIBLE
+
         // Update connectState based on GlobalBluetoothManager
         connectState = GlobalBluetoothManager.isConnected
         Log.d("MainActivity", "Current mode: $currentMode")
@@ -586,25 +487,25 @@ class MainActivity : AppCompatActivity() {
                 0 -> {
                     // Logic to determine the device's time format
                     val is12Hour = isDeviceTimeIn12HourFormat()
-                    // Print log statement
                     if (is12Hour) {
-                        // Device time format is 12-hour
                         ("Device time format: 12-hour")
                     } else {
-                        // Device time format is 24-hour
                         println("Device time format: 24-hour")
                     }
-                    is12Hour // Set use12HourTimeFormat based on device's time format
+                    is12Hour
                 }
                 else -> use12HourTimeFormat // Default value
             }
 
-            // Now you can use the use12HourTimeFormat value in MainActivity
+            // Update visibility based on mode selected
+            val dynamicLayoutContainer: View = findViewById(R.id.dynamicLayoutContainer)
+            if (currentMode != null) {
+                dynamicLayoutContainer.visibility = View.VISIBLE
+            }
+
         } else if (requestCode == MODES_REQUEST_CODE && resultCode == RESULT_OK) {
             val selectedMode = currentMode
-//            Log.d("MainActivity", "Selected mode: $selectedMode")
-//            GlobalBluetoothManager.setLedMode(selectedMode)
-
+            Log.d("MainActivity", "Selected mode: $selectedMode")
 
             // Get mode info from GlobalBluetoothManager
             val modeInfo = GlobalBluetoothManager.getModeInfo(selectedMode)
@@ -613,11 +514,17 @@ class MainActivity : AppCompatActivity() {
             if (modeInfo != null) {
                 Log.d("MainActivity", "Mode info found for mode: $selectedMode")
                 updateLayoutWithModeInfo(modeInfo)
+                GlobalBluetoothManager.requestParameterValues(selectedMode)
+
+                // Ensure dynamicLayoutContainer is made visible when a mode is selected
+                val dynamicLayoutContainer: View = findViewById(R.id.dynamicLayoutContainer)
+                dynamicLayoutContainer.visibility = View.VISIBLE
             } else {
                 Log.w("MainActivity", "Mode info not found for mode: $selectedMode")
             }
         }
     }
+
 
     private fun isDeviceTimeIn12HourFormat(): Boolean {
         // Implement the logic to determine if the device's time format is 12-hour
@@ -649,6 +556,9 @@ class MainActivity : AppCompatActivity() {
     private fun updateLayoutWithModeInfo(modeInfo: GlobalBluetoothManager.ModeInfo) {
         // Remove existing views from the dynamic layout container
         val container = findViewById<FrameLayout>(R.id.dynamicLayoutContainer)
+
+        Log.d("MainActivity", "Updating layout for mode: ${modeInfo.name}, Parameters: ${modeInfo.parameters.joinToString(", ")}")
+
         container.removeAllViews()
 
         // Log the parameters that will be used for the layout
@@ -661,12 +571,17 @@ class MainActivity : AppCompatActivity() {
             val parameterValue = getParameterValue(parameterName) // Replace with your logic
             Parameter(parameterName, parameterType, parameterValue)
         }
+        // Create the updated layout
+        val updatedLayout = generateLayout(this, parameters)
 
-        // Generate new layout
-        val newLayout = generateLayout(this, parameters)
-        container.addView(newLayout)
+        // Add the new layout to the container
+        container.addView(updatedLayout)
 
-        GlobalBluetoothManager.requestParameterValues(modeInfo.name)
+        // Invalidate and refresh the container to ensure UI updates
+        container.invalidate()
+        container.requestLayout()
+
+        Log.d("MainActivity", "Layout updated successfully for mode: ${modeInfo.name}")
     }
 
 }
