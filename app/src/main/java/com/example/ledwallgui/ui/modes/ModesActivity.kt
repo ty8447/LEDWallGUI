@@ -1,7 +1,5 @@
 package com.example.ledwallgui.ui.modes
 
-import android.content.Context
-import android.content.Intent
 import androidx.core.content.ContextCompat
 import android.os.Bundle
 import android.util.Log
@@ -13,7 +11,6 @@ import android.widget.ImageButton
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatButton
-import com.example.ledwallgui.MainActivity
 import com.example.ledwallgui.R
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 
@@ -21,7 +18,7 @@ object ModeManager {
     var currentMode: String = "" // Global variable to store current mode
 }
 
-class modesActivity : AppCompatActivity() {
+class ModesActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,7 +47,7 @@ class modesActivity : AppCompatActivity() {
                 text = modeInfo.name   // Use mode name from ModeInfo
                 textSize = 20f
                 isEnabled = true
-                background = ContextCompat.getDrawable(this@modesActivity, R.drawable.mode_button_shape)
+                background = ContextCompat.getDrawable(this@ModesActivity, R.drawable.mode_button_shape)
                 setPadding(16, 16, 16, 16) // Padding (left, top, right, bottom)
 
                 setOnClickListener {
@@ -59,7 +56,7 @@ class modesActivity : AppCompatActivity() {
                     GlobalBluetoothManager.setLedMode(modeInfo.name)
 
                     // Show toast notification
-                    Toast.makeText(this@modesActivity, "Mode changed to ${modeInfo.name}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ModesActivity, "Mode changed to ${modeInfo.name}", Toast.LENGTH_SHORT).show()
 
                     // Finish the activity to return to MainActivity
                     setResult(RESULT_OK)
@@ -90,7 +87,6 @@ class modesActivity : AppCompatActivity() {
     }
 
     private fun returnHome() {
-        // Pass the visibility state back to MainActivity
         finish()
     }
 

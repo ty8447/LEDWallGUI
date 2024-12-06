@@ -98,75 +98,51 @@
         android:layout_marginTop="10dp"
         android:background="@color/light_blue" />
 
-    <!-- Container for dynamic layout (SeekBars) -->
-    <FrameLayout
-        android:id="@+id/dynamicLayoutContainer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="10dp"
-        android:layout_marginTop="20dp"
-        android:layout_marginEnd="10dp"
-        android:background="@color/red"
-        android:radius="40dp">
-
-        <SeekBar
-            android:id="@+id/speedSeekBar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <SeekBar
-            android:id="@+id/frequencySeekBar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <SeekBar
-            android:id="@+id/divSeekBar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-    </FrameLayout>
-
-    <!-- Section to enable/disable primary and secondary colors -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="20dp"
-        android:padding="10dp">
+        android:layout_height="match_parent"
+        android:baselineAligned="false"
+        android:orientation="horizontal">
 
-        <!-- Primary Color Toggle -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Enable Primary Color"
-            android:layout_gravity="center_vertical" />
+        <!-- Container for dynamic layout (SeekBars) -->
+        <FrameLayout
+            android:id="@+id/dynamicLayoutContainer"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="10dp"
+            android:layout_marginTop="20dp"
+            android:layout_marginEnd="5dp"
+            android:layout_weight="10"
+            android:background="@color/red" />
 
-        <Switch
-            android:id="@+id/primaryColorSwitch"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+        <!-- Slider Section -->
+        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="20dp"
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+            <FrameLayout
+                android:id="@+id/sliderContainer"
+                android:layout_width="50dp"
+                android:layout_height="match_parent"
+                android:layout_margin="10dp">
 
+                <!-- Slider Background -->
+                <View
+                    android:id="@+id/sliderBackground"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/slider_background" />
+
+                <!-- Slider Thumb -->
+                <View
+                    android:id="@+id/sliderThumb"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_gravity="bottom"
+                    android:background="@drawable/slider_thumb" />
+            </FrameLayout>
+        </LinearLayout>
     </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="20dp"
-        android:padding="10dp">
-
-        <!-- Secondary Color Toggle -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Enable Secondary Color"
-            android:layout_gravity="center_vertical" />
-
-        <Switch
-            android:id="@+id/secondaryColorSwitch"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-
-    </LinearLayout>
-
 </LinearLayout>

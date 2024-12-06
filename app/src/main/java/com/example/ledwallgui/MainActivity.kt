@@ -9,41 +9,37 @@ import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.util.Log
-import android.view.Gravity
 import android.view.View
-import java.util.UUID
 import android.view.Window
 import com.google.android.flexbox.FlexboxLayout
-import com.google.android.flexbox.FlexboxLayoutManager
 import com.google.android.flexbox.FlexWrap
 import com.google.android.flexbox.JustifyContent
-import com.example.ledwallgui.CustomSeekBar
 import android.view.WindowManager
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.FrameLayout
 import android.app.Dialog
+import android.content.ContentValues.TAG
+import android.view.MotionEvent
+import android.view.ViewGroup
+import android.widget.AdapterView
 import android.widget.ImageButton
 import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
-import android.widget.Toast
 import com.google.android.material.snackbar.Snackbar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
-import androidx.compose.ui.semantics.text
 import androidx.core.content.ContextCompat
-import androidx.core.text.color
+import androidx.core.view.children
 import com.example.ledwallgui.ui.MotionDetectionService
 import com.example.ledwallgui.ui.alarm.AlarmActivity
 import com.example.ledwallgui.ui.modes.ModeManager
 import com.example.ledwallgui.ui.modes.ModeManager.currentMode
-import com.example.ledwallgui.ui.modes.modesActivity
+import com.example.ledwallgui.ui.modes.ModesActivity
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 import com.example.ledwallgui.ui.settings.ConnectionActivity
-import com.example.ledwallgui.ui.settings.GlobalBluetoothManager.bluetoothSocket
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager.sendPowerStateToArduino
 import com.example.ledwallgui.ui.settings.settingsActivity
 
@@ -55,9 +51,10 @@ class MainActivity : AppCompatActivity() {
     private var timeFormatOption: Int = 0 // Initialize with default value
     val mode = ColorMode()
     private lateinit var preferenceUtils: PreferenceUtils
-    private lateinit var speedSeekBar: SeekBar // Declare the variable here
-    private lateinit var frequencySeekBar: SeekBar // Declare the variable here
-    private lateinit var divSeekBar: SeekBar // Declare the variable here
+    private lateinit var dynamicLayoutContainer: FrameLayout // Declare without initialization
+    private lateinit var settingModeDivider: View // Declare without initialization
+    private lateinit var flexboxLayout: FlexboxLayout
+
     companion object {
         private const val SETTINGS_REQUEST_CODE = 100
         private const val MODES_REQUEST_CODE = 101 // Add this line
@@ -65,6 +62,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         requestWindowFeature(Window.FEATURE_NO_TITLE) // Hide the title bar
         window.setFlags(
             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
@@ -73,15 +71,33 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         hideSystemUI()
 
-        speedSeekBar = findViewById(R.id.speedSeekBar)
-        frequencySeekBar = findViewById(R.id.frequencySeekBar)
-        divSeekBar = findViewById(R.id.divSeekBar)
+        val sliderBackground = findViewById<View>(R.id.sliderBackground)
+        val sliderThumb = findViewById<View>(R.id.sliderThumb)
+        dynamicLayoutContainer = findViewById(R.id.dynamicLayoutContainer)
 
-        val layout = generateLayout(this, mode.subscribedParameters)
-        val dynamicLayoutContainer = findViewById<FrameLayout>(R.id.dynamicLayoutContainer)
+        settingModeDivider = findViewById(R.id.settingModeDivider)
+        if (settingModeDivider == null) {
+            Log.e("MainActivity", "Failed to find settingModeDivider. Check layout.")
+        }
 
-        // Add the dynamically generated layout to the container
+        flexboxLayout = FlexboxLayout(this).apply {
+            flexWrap = FlexWrap.WRAP
+            justifyContent = JustifyContent.SPACE_AROUND
+            setBackgroundColor(Color.TRANSPARENT)
+            id = View.generateViewId()
+        }
+
+        val layout = generateLayout(this, mode.subscribedParameters, flexboxLayout)
+
+        dynamicLayoutContainer.removeAllViews()
         dynamicLayoutContainer.addView(layout)
+
+        for (i in 0 until dynamicLayoutContainer.childCount) {
+            val child = dynamicLayoutContainer.getChildAt(i)
+            if (child is CardView && (child.tag == "Color" || child.tag == "SColor" || child.tag == "Speed" || child.tag == "Frequency" || child.tag == "Division")) {
+                child.visibility = View.GONE
+            }
+        }
 
         // Initialize preferenceUtils
         preferenceUtils = PreferenceUtils(this)
@@ -101,20 +117,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Log the visibility of dynamicLayoutContainer before checking child count
-        Log.d("MainActivity", "dynamicLayoutContainer visibility before check: ${dynamicLayoutContainer.visibility}")
-
-        val settingModeDivider = findViewById<View>(R.id.settingModeDivider)
-        Log.d("MainActivity", "Child count of dynamicLayoutContainer: ${dynamicLayoutContainer.childCount}")
-        // Check if there are any child views in the container
-        if (dynamicLayoutContainer.childCount > 0) {
-            settingModeDivider.visibility = View.VISIBLE
-            Log.d("MainActivity", "Setting mode divider visible, child count > 0")
-        } else {
-            settingModeDivider.visibility = View.GONE
-            Log.d("MainActivity", "Setting mode divider hidden, child count <= 0")
-        }
-
         // Handle button clicks
         val imageButton1: ImageButton = findViewById(R.id.imageButton1)
         val button2: ImageButton = findViewById(R.id.modesbutton)
@@ -128,9 +130,29 @@ class MainActivity : AppCompatActivity() {
                 Log.d("PowerState", "Power state clicked: $powerState")
                 updatePowerButtonImage()
                 sendPowerStateToArduino(powerState)
-                saveSharedPreferences()
+//                saveSharedPreferences()
             } else {
                 showConnectionSnackbar()
+            }
+        }
+
+        sliderBackground.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                    val y = event.y
+                    updateThumbPosition(sliderBackground, sliderThumb, y)
+
+                    // Calculate brightness percentage
+                    val sliderHeight = sliderBackground.height
+                    val adjustedY = y.coerceIn(0f, sliderHeight.toFloat())
+                    val percentage = ((sliderHeight - adjustedY) / sliderHeight * 100).toInt()
+
+                    // Write brightness to BLE characteristic
+                    GlobalBluetoothManager.setBrightness(percentage)
+
+                    true
+                }
+                else -> false
             }
         }
 
@@ -164,6 +186,28 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateThumbPosition(sliderBackground: View, sliderThumb: View, touchY: Float) {
+        val sliderHeight = sliderBackground.height
+        val minHeight = 20 // Minimum height for the thumb in pixels
+        val adjustedY = touchY.coerceIn(0f, sliderHeight.toFloat()) // Keep touch within bounds
+        val percentage = ((sliderHeight - adjustedY) / sliderHeight * 100).toInt()
+
+        // Calculate the new thumb height
+        val newHeight = (sliderHeight * (percentage / 100f)).toInt().coerceAtLeast(minHeight)
+
+        // Update the thumb's height while maintaining its width
+        val thumbParams = sliderThumb.layoutParams
+        thumbParams.height = newHeight
+        sliderThumb.layoutParams = thumbParams
+
+        sliderThumb.requestLayout()
+
+        // Log or handle the percentage
+        Log.d("Slider", "Current Percentage: $percentage")
+    }
+
+
+
     fun showConnectionSnackbar() {
         val snackbar = Snackbar.make(
             findViewById(android.R.id.content),
@@ -186,110 +230,125 @@ class MainActivity : AppCompatActivity() {
         snackbar.show()
     }
 
-    fun generateLayout(context: Context, parameters: List<Parameter>): View {
-        val layout = FlexboxLayout(context).apply {
-            flexWrap = FlexWrap.WRAP
-            justifyContent = JustifyContent.SPACE_AROUND
-            setBackgroundColor(Color.TRANSPARENT)
-        }
+    fun generateLayout(context: Context, parameters: List<Parameter>, flexboxLayout: FlexboxLayout): View {
 
-        val tileMargin = 16
         parameters.forEach { parameter ->
+            Log.d("MainActivity", "Creating view for parameter: ${parameter.name} of type ${parameter.type}")
             val parameterView = when (parameter.type) {
-                ParameterType.COLOR -> {
-                    // Create a color tile
+                "PCOLOR", "SCOLOR" -> {
                     val colorTile = CardView(context).apply {
+                        tag = parameter.name // Assign tag for visibility control
                         radius = 16f
                         setCardBackgroundColor(Color.BLACK)
                         layoutParams = FlexboxLayout.LayoutParams(
                             FlexboxLayout.LayoutParams.WRAP_CONTENT,
                             FlexboxLayout.LayoutParams.WRAP_CONTENT
                         ).apply {
-                            setMargins(tileMargin, tileMargin, tileMargin, tileMargin)
+                            setMargins(16, 16, 16, 16)
                             flexBasisPercent = 0.4f
                         }
-                    }
-                    val tileContent = LinearLayout(context).apply {
-                        orientation = LinearLayout.VERTICAL
-                        gravity = Gravity.CENTER
-                        setPadding(16, 16, 16, 16)
-                    }
 
-                    val bulbImageView = ImageView(context).apply {
-                        setImageResource(R.drawable.bulb)
-                        layoutParams = LinearLayout.LayoutParams(80, 80).apply {
-                            gravity = Gravity.CENTER_HORIZONTAL
+                        // Add click listener for color selection
+                        setOnClickListener {
+                            showPopup(context, parameter, parameter.type) // parameter.type is now String
                         }
                     }
 
-                    val titleTextView = TextView(context).apply {
-                        text = parameter.name
-                        setTextColor(Color.WHITE)
-                        textSize = 18f
-                        gravity = Gravity.CENTER
+                    val colorDropdown = Spinner(context).apply {
+                        // Set adapter for color options
+                        adapter = ArrayAdapter(
+                            context,
+                            android.R.layout.simple_spinner_dropdown_item,
+                            arrayOf("Red", "Green", "Blue") // Example color options
+                        )
+                        onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                                val selectedItem = parent?.getItemAtPosition(position) as? String
+                                Log.d("Dropdown", "Selected item: $selectedItem")
+                                if (selectedItem != null) {
+                                    GlobalBluetoothManager.setLedParameter(ModeManager.currentMode, parameter.name, selectedItem)
+                                }
+                            }
+
+                            override fun onNothingSelected(parent: AdapterView<*>?) {
+                                // Do nothing
+                            }
+                        }
                     }
-
-                    tileContent.addView(bulbImageView)
-                    tileContent.addView(titleTextView)
-                    colorTile.addView(tileContent)
-
-                    colorTile.setOnClickListener {
-                        showPopup(context, parameter, ParameterType.COLOR)
-                    }
-
+                    val initialColorIndex = (colorDropdown.adapter as ArrayAdapter<String>).getPosition(parameter.value.toString())
+                    colorDropdown.setSelection(initialColorIndex)
+                    // Set visibility to VISIBLE
+                    colorTile.visibility = View.VISIBLE
+                    Log.d("MainActivity", "Setting visibility for ${parameter.name}: ${colorTile.visibility}")
+                    colorTile.addView(colorDropdown)
                     colorTile
                 }
 
-                ParameterType.FREQUENCY, ParameterType.SPEED, ParameterType.DIVISION -> {
-                    // Create a slider tile
+                "FREQUENCY", "SPEED", "DIVISION" -> {
                     val sliderTile = CardView(context).apply {
+                        tag = parameter.name // Assign tag for visibility control
                         radius = 16f
                         setCardBackgroundColor(Color.BLACK)
                         layoutParams = FlexboxLayout.LayoutParams(
                             FlexboxLayout.LayoutParams.MATCH_PARENT,
                             FlexboxLayout.LayoutParams.WRAP_CONTENT
                         ).apply {
-                            setMargins(tileMargin, tileMargin, tileMargin, tileMargin)
+                            setMargins(16, 16, 16, 16)
                         }
                     }
 
-                    val titleTextView = TextView(context).apply {
-                        text = parameter.name
-                        textSize = 16f
-                        setTextColor(Color.WHITE)
-                        setPadding(16, 16, 16, 8)
+                    val seekBar = SeekBar(context).apply {
+                        max = 100
+                        progress = parameter.value as Int
+                        setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                                parameter.value = progress
+                                Log.d("MainActivity", "${parameter.name} updated to $progress")
+                                GlobalBluetoothManager.setLedParameter(ModeManager.currentMode, parameter.name, progress.toString())
+                            }
+
+                            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+                        })
                     }
 
-                    val sliderContainer = LinearLayout(context).apply {
-                        orientation = LinearLayout.VERTICAL
-                        setPadding(16, 8, 16, 16)
-                        addView(titleTextView)
-
-                        // Add SeekBar based on the type of parameter
-                        val seekBar = SeekBar(context).apply {
-                            max = 100 // Set the max value, this can vary based on parameter
-                            setProgress(50) // Set a default value
-                        }
-                        addView(seekBar)
-                    }
-                    sliderTile.addView(sliderContainer)
+                    sliderTile.addView(seekBar)
+                    seekBar.progress = (parameter.value as? String)?.toIntOrNull() ?: 0
+                    // Set visibility to VISIBLE
+                    sliderTile.visibility = View.VISIBLE
+                    Log.d("MainActivity", "Setting visibility for ${parameter.name}: ${sliderTile.visibility}")
 
                     sliderTile
                 }
 
-                else -> {
-                    // If the parameter type is unsupported, return an empty view
-                    View(context)
-                }
+                else -> View(context) // Default case, if no match
             }
-            layout.addView(parameterView)
+
+            // Add view to layout
+            flexboxLayout.addView(parameterView)
+
+            // Optionally log the visibility status of the added view
+            Log.d("MainActivity", "Added view for ${parameter.name} with visibility: ${parameterView.visibility}")
         }
 
-        return layout
+// Check the number of visible children in FlexboxLayout
+        val visibleChildrenCount = flexboxLayout.children.count { it.visibility == View.VISIBLE }
+        if (::settingModeDivider.isInitialized) {
+            if (visibleChildrenCount > 0) {
+                settingModeDivider.visibility = View.VISIBLE
+                Log.d("MainActivity", "Setting mode divider visible, subscribed parameters exist")
+            } else {
+                settingModeDivider.visibility = View.GONE
+                Log.d("MainActivity", "Setting mode divider hidden, no subscribed parameters")
+            }
+        } else {
+            Log.e("generateLayout", "settingModeDivider not initialized.")
+        }
+
+        return flexboxLayout
     }
 
-
-    fun showPopup(context: Context, parameter: Parameter, type: ParameterType) {
+    fun showPopup(context: Context, parameter: Parameter, type: String) {
         val popup = Dialog(context).apply {
             setContentView(R.layout.parameter_popup) // Ensure this file exists
             window?.setLayout(
@@ -300,92 +359,46 @@ class MainActivity : AppCompatActivity() {
             setCancelable(true)
         }
 
+        Log.d("MainActivity", "Showing popup for parameter: ${parameter.name} of type: ${type}")
         val titleTextView = popup.findViewById<TextView>(R.id.parameterTitle)
         titleTextView.text = parameter.name
 
         when (type) {
-            ParameterType.COLOR -> {
-                val dropdown = popup.findViewById<Spinner>(R.id.colorDropdown).apply {
-                    visibility = View.VISIBLE
-                    val colorsAdapter = ArrayAdapter(
-                        context,
-                        android.R.layout.simple_spinner_item,
-                        arrayOf("Red", "Blue", "Green", "Yellow", "White") // Example colors
-                    )
-                    adapter = colorsAdapter
-                }
+            "PCOLOR" -> {
             }
-
-            ParameterType.SLIDER -> {
-                val slider = popup.findViewById<SeekBar>(R.id.parameterSlider).apply {
-                    visibility = View.VISIBLE
-                    progress = parameter.value as Int
-                    setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                        override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                            parameter.value = progress
-                        }
-
-                        override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-                        override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-                    })
-                }
+            "SCOLOR" -> {
             }
-
-            ParameterType.FREQUENCY -> {
-
+            "FREQUENCY" -> {
             }
-            ParameterType.SPEED -> {}
-            ParameterType.DIVISION -> {}
+            "SPEED" -> {}
+            "DIVISION" -> {}
         }
 
         popup.show()
     }
 
-
-
-
-    private val colorOptions = arrayOf("Off", "Red", "Orange", "Yellow", "Green", "Blue", "Purple", "White")
-
     class ColorMode {
         val subscribedParameters: List<Parameter> = listOf(
-            Parameter("Primary Color", ParameterType.COLOR, Color.RED),
-            Parameter("Secondary Color", ParameterType.COLOR, Color.BLUE),
-            Parameter("Speed", ParameterType.SPEED, 50)
         )
-                    init {
-                // Subscribe to parameters
-                ParameterList.parameters.filter { it.type == ParameterType.COLOR }.forEach {
-                    // Add parameter to mode's control list
-                }
-            }
     }
 
     data class Parameter(
         val name: String,
-        val type: ParameterType,
+        val type: String,
         var value: Any
     )
 
     enum class ParameterType {
-        COLOR,
+        PCOLOR,
+        SCOLOR,
         FREQUENCY,
         SPEED,
-        DIVISION,
-        SLIDER
-    }
-
-    object ParameterList {
-        val parameters = mutableListOf<Parameter>(
-            Parameter("LED Color", ParameterType.COLOR, Color.RED),
-            Parameter("Frequency", ParameterType.FREQUENCY, 100),
-            Parameter("Speed", ParameterType.SPEED, 50),
-            // ... other parameters
-        )
+        DIVISION
     }
 
     @SuppressLint("ResourceType")
     private fun showModesMenu() {
-        val intent = Intent(this, modesActivity::class.java)
+        val intent = Intent(this, ModesActivity::class.java)
         startActivityForResult(intent, MODES_REQUEST_CODE)
     }
 
@@ -445,16 +458,19 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
 
-        // Find the dynamicLayoutContainer view
-        val dynamicLayoutContainer: View = findViewById(R.id.dynamicLayoutContainer)
-
-        // Set dynamicLayoutContainer visibility to VISIBLE by default
-        dynamicLayoutContainer.visibility = View.VISIBLE
-
         // Update connectState based on GlobalBluetoothManager
         connectState = GlobalBluetoothManager.isConnected
-        Log.d("MainActivity", "Current mode: $currentMode")
-
+        Log.d("MainActivity", "Current mode: ${ModeManager.currentMode}")
+//         Update UI based on modeInfo
+            val selectedMode = currentMode
+            val modeInfo = GlobalBluetoothManager.getModeInfo(selectedMode)
+            if (modeInfo != null) {
+                Log.d("MainActivity", "Mode info found for mode: $selectedMode")
+                GlobalBluetoothManager.requestParameterValues(selectedMode)
+                updateLayoutWithModeInfo(modeInfo)
+            } else {
+                Log.w("MainActivity", "Mode info not found for mode: $selectedMode")
+            }
         // Update UI based on connectState
         updateConnectIcon()
     }
@@ -497,31 +513,9 @@ class MainActivity : AppCompatActivity() {
                 else -> use12HourTimeFormat // Default value
             }
 
-            // Update visibility based on mode selected
-            val dynamicLayoutContainer: View = findViewById(R.id.dynamicLayoutContainer)
-            if (currentMode != null) {
-                dynamicLayoutContainer.visibility = View.VISIBLE
-            }
-
         } else if (requestCode == MODES_REQUEST_CODE && resultCode == RESULT_OK) {
             val selectedMode = currentMode
             Log.d("MainActivity", "Selected mode: $selectedMode")
-
-            // Get mode info from GlobalBluetoothManager
-            val modeInfo = GlobalBluetoothManager.getModeInfo(selectedMode)
-
-            // Update UI based on modeInfo
-            if (modeInfo != null) {
-                Log.d("MainActivity", "Mode info found for mode: $selectedMode")
-                updateLayoutWithModeInfo(modeInfo)
-                GlobalBluetoothManager.requestParameterValues(selectedMode)
-
-                // Ensure dynamicLayoutContainer is made visible when a mode is selected
-                val dynamicLayoutContainer: View = findViewById(R.id.dynamicLayoutContainer)
-                dynamicLayoutContainer.visibility = View.VISIBLE
-            } else {
-                Log.w("MainActivity", "Mode info not found for mode: $selectedMode")
-            }
         }
     }
 
@@ -533,13 +527,15 @@ class MainActivity : AppCompatActivity() {
         return false // Default value
     }
 
-    private fun getParameterType(parameterName: String): ParameterType {
-        // Replace with your logic to determine ParameterType based on parameterName
+    private fun getParameterType(parameterName: String): String {
+        // Replace with your logic to determine parameter type based on parameterName
         return when (parameterName) {
-            "Color" -> ParameterType.COLOR
-            "Speed" -> ParameterType.SPEED
-            // ... other parameter names
-            else -> ParameterType.SLIDER // Default
+            "Color" -> "PCOLOR"
+            "SColor" -> "SCOLOR"
+            "Speed" -> "SPEED"
+            "Frequency" -> "FREQUENCY"
+            "Division" -> "DIVISION"
+            else -> "SLIDER" // or any other default parameter type string
         }
     }
 
@@ -554,34 +550,49 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateLayoutWithModeInfo(modeInfo: GlobalBluetoothManager.ModeInfo) {
-        // Remove existing views from the dynamic layout container
         val container = findViewById<FrameLayout>(R.id.dynamicLayoutContainer)
 
         Log.d("MainActivity", "Updating layout for mode: ${modeInfo.name}, Parameters: ${modeInfo.parameters.joinToString(", ")}")
 
-        container.removeAllViews()
+        flexboxLayout.removeAllViews()
 
-        // Log the parameters that will be used for the layout
-        Log.d("MainActivity", "Mode: ${modeInfo.name}, Parameters: ${modeInfo.parameters.joinToString(", ")}")
-
-        // Convert modeInfo.parameters to List<MainActivity.Parameter>
         val parameters = modeInfo.parameters.map { parameterName ->
-            // Assuming you have a way to get the ParameterType and value for each parameterName
-            val parameterType = getParameterType(parameterName) // Replace with your logic
-            val parameterValue = getParameterValue(parameterName) // Replace with your logic
+            val parameterType = getParameterType(parameterName)
+            val parameterValue = getParameterValue(parameterName)
             Parameter(parameterName, parameterType, parameterValue)
         }
-        // Create the updated layout
-        val updatedLayout = generateLayout(this, parameters)
 
-        // Add the new layout to the container
-        container.addView(updatedLayout)
+        val dynamicLayout = generateLayout(this, parameters, flexboxLayout)
 
-        // Invalidate and refresh the container to ensure UI updates
+        // Check if dynamicLayout already has a parent
+        val parent = dynamicLayout.parent as? ViewGroup
+        if (parent != null) {
+            parent.removeView(dynamicLayout) // Remove it from the previous parent
+        }
+
+        // Now it's safe to add it to the container
+        container.addView(dynamicLayout)
+
+        if (dynamicLayout is ViewGroup) { // Check if the layout is a ViewGroup
+            for (i in 0 until dynamicLayout.childCount) {
+                val child = dynamicLayout.getChildAt(i)
+                Log.d("MainActivity", "Child $i - Tag: ${child.tag}, Visibility: ${child.visibility}")
+                val tag = child.tag
+                if (tag is String && modeInfo.parameters.contains(tag)) {
+                    child.visibility = View.VISIBLE
+                    Log.d("MainActivity", "Setting visibility for parameter ${tag}: ${child.visibility}")
+                }
+            }
+        }
+        Log.d("MainActivity", "Parameters passed to generateLayout: ${parameters.joinToString(", ") { it.name }}")
+
         container.invalidate()
         container.requestLayout()
 
+        for (i in modeInfo.parameters.indices) {
+            Log.d(TAG, "Setting parameter ${modeInfo.parameters[i]} to UI component ${i + 1}")
+        }
+
         Log.d("MainActivity", "Layout updated successfully for mode: ${modeInfo.name}")
     }
-
 }

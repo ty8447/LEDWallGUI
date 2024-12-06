@@ -198,15 +198,23 @@ object GlobalBluetoothManager {
 
                             val modeData = rawData.split(";").filter { it.isNotBlank() }
                             modeData.forEach { mode ->
-                                val modeName = mode.substringBefore(":").trim()
-                                val parametersString = mode.substringAfter(":").trim()
-                                val parameters = parametersString.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                                // Split mode data by ":" to separate name, description, and parameters
+                                val modeParts = mode.split(":")
+                                if (modeParts.size >= 2) {
+                                    val modeName = modeParts[0].trim()
+                                    val parametersString = modeParts[1].trim()
 
-                                val description = parameters.joinToString(", ")
-                                val modeInfo = ModeInfo(modeName, description, parameters)
-                                modeInfoList.add(modeInfo)
+                                    // Extract parameters by splitting by commas
+                                    val parameters = parametersString.split(",").map { it.trim() }.filter { it.isNotBlank() }
 
-                                Log.d(TAG, "Parsed ModeInfo: $modeInfo")
+                                    // Create ModeInfo object and add to list
+                                    val modeInfo = ModeInfo(modeName, parameters)
+                                    modeInfoList.add(modeInfo)
+
+                                    Log.d(TAG, "Parsed ModeInfo: $modeInfo")
+                                } else {
+                                    Log.e(TAG, "Invalid mode format: $mode")
+                                }
                             }
 
                             val modeNames = modeInfoList.map { it.name }
@@ -216,6 +224,7 @@ object GlobalBluetoothManager {
                             Log.w(TAG, "Unhandled characteristic UUID: ${characteristic.uuid}")
                         }
                     }
+
 
                 } catch (e: Exception) {
                     Log.e(TAG, "Error processing characteristic value for: ${characteristic.uuid}", e)
@@ -398,6 +407,7 @@ object GlobalBluetoothManager {
         return params
     }
 
+
     private fun nextCommand() {
         if (commandQueueBusy) {
             Log.d(TAG, "Queue is busy. Waiting for the current command to complete.")
@@ -491,12 +501,13 @@ object GlobalBluetoothManager {
                     )
                 }
 
-                var message = data
+
+                var message = data.toByteArray(Charsets.UTF_8)
                 if (appendNullTerminator) {
-                    message += '\u0000' // Add null terminator if needed
+                    message += 0.toByte()  // Appending null terminator
                 }
 
-                characteristic.setValue(message.toByteArray(Charsets.UTF_8)) // Set the new data
+                characteristic.value = message
                 Log.d(
                     TAG,
                     "sendDataToDevice: After setting value - characteristic value: ${
@@ -525,28 +536,26 @@ object GlobalBluetoothManager {
 
     // Use case 1: Setting LED Mode
     fun setLedMode(modeName: String) {
-        val modeControlUUID = MODE_CONTROL_UUID  // Use the provided MODE_CONTROL_UUID
-        val ledServiceUUID = LED_CONNECTION_SERVICE  // Use the provided LED_CONNECTION_SERVER UUID
+        // Send mode name to MODE_CONTROL_UUID
+        val modeNameData = "Mode: $modeName"
         sendDataToDevice(
-            ledServiceUUID,
-            modeControlUUID,
-            modeName,
+            LED_CONNECTION_SERVICE,
+            MODE_CONTROL_UUID,
+            modeNameData,
             clearBuffer = true,
             appendNullTerminator = false
         )
     }
 
     // Use case 2: Setting LED Parameters
-    fun setLedParameters(primaryColor: String, speed: Int, frequency: Int, div: Int) {
-        val parametersData = "primaryColor:$primaryColor,speed:$speed,frequency:$frequency,div:$div"
-        val modeControlUUID = MODE_CONTROL_UUID  // Use the provided MODE_CONTROL_UUID
-        val ledServiceUUID = LED_CONNECTION_SERVICE  // Use the provided LED_CONNECTION_SERVER UUID
+    fun setLedParameter(modeName: String, parameterName: String, parameterValue: String) {
+        val parametersData = "$modeName:$parameterName:$parameterValue"
         sendDataToDevice(
-            ledServiceUUID,
-            modeControlUUID,
+            LED_CONNECTION_SERVICE,
+            PARAMETER_REQUEST_UUID, // Write to PARAMETER_REQUEST_UUID for parameter updates
             parametersData,
             clearBuffer = true,
-            appendNullTerminator = true
+            appendNullTerminator = false
         )
     }
 
@@ -565,6 +574,18 @@ object GlobalBluetoothManager {
             appendNullTerminator = false
         )
     }
+    // Use case 4: Sending Brightness to Arduino
+    fun setBrightness(brightness: Int) {
+        val brightnessData = "Brightness: $brightness"
+        sendDataToDevice(
+            LED_CONNECTION_SERVICE,     // The UUID for the LED service
+            MODE_CONTROL_UUID,          // The UUID for controlling the mode
+            brightnessData,
+            clearBuffer = true,
+            appendNullTerminator = false
+        )
+    }
+
 
     fun getModeInfo(modeName: String): ModeInfo? {
         return modeInfoList.find { it.name == modeName }
@@ -619,7 +640,6 @@ object GlobalBluetoothManager {
 
     data class ModeInfo(
         val name: String,
-        val description: String,
         val parameters: List<String> // List of parameters as strings
     )
 }

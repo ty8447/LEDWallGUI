@@ -1,3 +1,5 @@
+import org.gradle.internal.impldep.org.junit.experimental.categories.Categories.CategoryFilter.exclude
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,17 +8,18 @@ plugins {
 
 android {
     namespace = "com.example.ledwallgui"
-    compileSdk = 34
+    compileSdk = 35
     defaultConfig {
         applicationId = "com.example.ledwallgui"
-        minSdk = 33
-        targetSdk = 33 // Updated to the latest SDK version
+        minSdk = 34
+        targetSdk = 34 // Updated to the latest SDK version
         versionCode = 1
         versionName = "1.0"
+        vectorDrawables.useSupportLibrary = true
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-    packagingOptions {
+    packaging {
         resources {
             excludes += setOf("META-INF/versions/9/OSGI-INF/MANIFEST.MF")
         }
@@ -44,28 +47,28 @@ android {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.9.0")
-    implementation("androidx.appcompat:appcompat:1.6.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4")
-    implementation("com.google.android.material:material:1.8.0")
-    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
-    implementation("androidx.navigation:navigation-fragment-ktx:2.5.3")
-    implementation("androidx.navigation:navigation-ui-ktx:2.5.3")
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.constraintlayout:constraintlayout:2.2.0")
+    implementation("androidx.navigation:navigation-fragment-ktx:2.8.4")
+    implementation("androidx.navigation:navigation-ui-ktx:2.8.4")
     implementation("androidx.gridlayout:gridlayout:1.0.0")
     implementation("com.google.code.gson:gson:2.10.1") // No change needed
     implementation("jp.wasabeef:recyclerview-animators:4.0.1") // No change needed
-    implementation("com.google.dagger:hilt-android:2.44")
-    implementation("com.google.accompanist:accompanist-permissions:0.28.0")
+    implementation("com.google.dagger:hilt-android:2.48.1")
+    implementation("com.google.accompanist:accompanist-permissions:0.32.0")
     implementation("androidx.compose.ui:ui:1.7.5")
-    implementation("com.android.identity:identity-jvm:202408.1")
+    implementation("com.android.identity:identity-jvm:202411.1")
     implementation("androidx.camera:camera-core:1.4.0")
     implementation("androidx.camera:camera-camera2:1.4.0")
     implementation("androidx.camera:camera-lifecycle:1.4.0")
     implementation("androidx.camera:camera-view:1.4.0")
     implementation("com.google.android.material:material:1.12.0")
     testImplementation("junit:junit:4.13.2") // No change needed
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.78.1") {
         exclude(group = "org.osgi", module = "org.osgi.core") // Exclude the OSGI bundle
     }

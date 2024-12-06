@@ -529,8 +529,8 @@ class ConnectionActivity : AppCompatActivity() {
         inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             private val deviceNameTextView: TextView =
                 itemView.findViewById(R.id.deviceNameTextView)
-            private val connectionStatusTextView: TextView =
-                itemView.findViewById(R.id.connectionStatusTextView)
+//            private val connectionStatusTextView: TextView =
+//                itemView.findViewById(R.id.connectionStatusTextView)
 //            private val deviceLayout: View = itemView.findViewById(R.id.deviceLayout)
 
             fun bind(device: BluetoothDevice) {
@@ -543,11 +543,11 @@ class ConnectionActivity : AppCompatActivity() {
                     }
 
                 // Update connection status text and color
-                val isConnected = deviceConnectionStatus[device.address] ?: false
-                connectionStatusTextView.text = if (isConnected) "Connected" else "Disconnected"
-                connectionStatusTextView.setTextColor(
-                    if (isConnected) Color.parseColor("#00FFFF") else Color.parseColor("#000000") // Aqua color for connected
-                )
+//                val isConnected = deviceConnectionStatus[device.address] ?: false
+//                connectionStatusTextView.text = if (isConnected) "Connected" else "Disconnected"
+//                connectionStatusTextView.setTextColor(
+//                    if (isConnected) Color.parseColor("#00FFFF") else Color.parseColor("#000000") // Aqua color for connected
+//                )
             }
 
             init {
