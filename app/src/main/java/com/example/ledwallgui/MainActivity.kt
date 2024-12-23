@@ -32,6 +32,7 @@ import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
+import android.widget.Toast
 import com.google.android.material.snackbar.Snackbar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
@@ -46,6 +47,10 @@ import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 import com.example.ledwallgui.ui.settings.ConnectionActivity
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager.sendPowerStateToArduino
 import com.example.ledwallgui.ui.settings.settingsActivity
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.ActivityResult
+
 
 
 class MainActivity : AppCompatActivity() {
@@ -59,6 +64,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var settingModeDivider: View // Declare without initialization
     private lateinit var flexboxLayout: FlexboxLayout
     private lateinit var textView: TextView
+    private lateinit var modesActivityResultLauncher: ActivityResultLauncher<Intent>
+    private lateinit var settingsActivityResultLauncher: ActivityResultLauncher<Intent>
 
     companion object {
         private const val SETTINGS_REQUEST_CODE = 100
@@ -67,15 +74,37 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         requestWindowFeature(Window.FEATURE_NO_TITLE) // Hide the title bar
+        setContentView(R.layout.activity_main)
+
+        modesActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
+            if (result.resultCode == RESULT_OK) {
+                // Handle the result here
+                Toast.makeText(this, "Mode selected", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        settingsActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
+            if (result.resultCode == RESULT_OK) {
+                // Handle the result here
+                val data = result.data
+                use12HourTimeFormat = data?.getBooleanExtra("use12HourTimeFormat", true) ?: true
+                timeFormatOption = data?.getIntExtra("timeFormatOption", 0) ?: 0
+
+                // Log the updated settings for debugging
+                Log.d("Settings", "use12HourTimeFormat: $use12HourTimeFormat, timeFormatOption: $timeFormatOption")
+
+                // Optionally update UI or preferences based on the returned data
+            }
+        }
+
+
         window.setFlags(
             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
         )
-        setContentView(R.layout.activity_main)
-        hideSystemUI()
 
+        hideSystemUI()
         val sliderBackground = findViewById<View>(R.id.sliderBackground)
         val sliderThumb = findViewById<View>(R.id.sliderThumb)
         dynamicLayoutContainer = findViewById(R.id.dynamicLayoutContainer)
@@ -269,7 +298,7 @@ class MainActivity : AppCompatActivity() {
                             FlexboxLayout.LayoutParams.WRAP_CONTENT, // Change to WRAP_CONTENT
                             FlexboxLayout.LayoutParams.WRAP_CONTENT
                         ).apply {
-                            setMargins(16, 16, 16, 16)
+                            setMargins(5, 16, 3, 8)
                         }
 
                         // Create a TextView to show the parameter type and its value
@@ -277,6 +306,7 @@ class MainActivity : AppCompatActivity() {
                             val colorName = getColorName(colorValue)
                             text = "${parameter.name}: $colorName"
                             setTextColor(Color.WHITE)  // Text color is white
+                            setBackgroundColor(Color.TRANSPARENT)
                             textSize = 16f
                             setPadding(16, 16, 16, 16)  // Add padding inside the box
                         }
@@ -287,7 +317,7 @@ class MainActivity : AppCompatActivity() {
                                 50.dpToPx(context), // Adjust size as needed, e.g., 50dp for the preview
                                 50.dpToPx(context)  // Same for height
                             ).apply {
-                                setMargins(16, 16, 16, 16)
+                                setMargins(8, 16, 16, 16)
                             }
                             setBackgroundColor(colorValue)
                         }
@@ -327,15 +357,16 @@ class MainActivity : AppCompatActivity() {
                             FlexboxLayout.LayoutParams.WRAP_CONTENT,  // Set width to wrap content
                             FlexboxLayout.LayoutParams.WRAP_CONTENT
                         ).apply {
-                            setMargins(16, 16, 16, 16)
+                            setMargins(5, 16, 3, 8)
                         }
 
                         // Create a TextView to show the parameter type and its value
                         val textView = TextView(context).apply {
                             text = "${parameter.name}: ${parameter.value}"
                             setTextColor(Color.WHITE)  // Text color is white
+                            setBackgroundColor(Color.TRANSPARENT)
                             textSize = 16f
-                            setPadding(16, 16, 16, 16)  // Add padding inside the box
+                            setPadding(30, 30, 30, 30)  // Add padding inside the box
                         }
 
                         // Create a dummy colorPreview view as a placeholder
@@ -526,7 +557,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("ResourceType")
     private fun showModesMenu() {
         val intent = Intent(this, ModesActivity::class.java)
-        startActivityForResult(intent, MODES_REQUEST_CODE)
+        modesActivityResultLauncher.launch(intent)
     }
 
     override fun onStop() {
@@ -612,10 +643,11 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("ResourceType")
     private fun showSettingsMenu() {
-        val intents = Intent(this, settingsActivity::class.java)
-        intents.putExtra("use12HourTimeFormat", use12HourTimeFormat)
-        intents.putExtra("timeFormatOption", timeFormatOption)
-        startActivityForResult(intents, SETTINGS_REQUEST_CODE) // Start settings activity for result
+        val intent = Intent(this, settingsActivity::class.java)
+        intent.putExtra("use12HourTimeFormat", use12HourTimeFormat)
+        intent.putExtra("timeFormatOption", timeFormatOption)
+
+        settingsActivityResultLauncher.launch(intent)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -632,7 +664,7 @@ class MainActivity : AppCompatActivity() {
                     // Logic to determine the device's time format
                     val is12Hour = isDeviceTimeIn12HourFormat()
                     if (is12Hour) {
-                        ("Device time format: 12-hour")
+//                        ("Device time format: 12-hour")
                     } else {
                         println("Device time format: 24-hour")
                     }
