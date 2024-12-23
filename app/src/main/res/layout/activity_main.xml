@@ -161,7 +161,7 @@
                     android:id="@+id/sliderThumb"
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
-                    android:layout_margin="5dp"
+                    android:layout_margin="10dp"
                     android:layout_marginBottom="0dp"
                     android:layout_gravity="bottom"
                     android:background="@drawable/slider_thumb" />
@@ -172,6 +172,24 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:background="@drawable/black_border_drawable" />
+
+                <FrameLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginBottom="10dp"
+                    android:background="@drawable/transparent_background">
+
+                </FrameLayout>
+
+                <ImageView
+                    android:id="@+id/sunIcon"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="center"
+                    android:background="@drawable/transparent_background"
+                    android:contentDescription="@drawable/sun_svg"
+                    app:srcCompat="@drawable/sun_svg" />
             </FrameLayout>
         </LinearLayout>
     </LinearLayout>
