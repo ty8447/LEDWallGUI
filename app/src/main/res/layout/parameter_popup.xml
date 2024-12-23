@@ -6,6 +6,7 @@
     android:padding="16dp"
     android:background="@drawable/rounded_background">
 
+    <!-- Title of the parameter -->
     <TextView
         android:id="@+id/parameterTitle"
         android:layout_width="wrap_content"
@@ -15,15 +16,29 @@
         android:textColor="@color/white"
         android:layout_gravity="center_horizontal" />
 
+    <!-- Spinner for selecting color options -->
     <Spinner
         android:id="@+id/colorDropdown"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:visibility="gone" />
 
+    <!-- SeekBar for adjusting parameter value -->
     <SeekBar
         android:id="@+id/parameterSlider"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:max="100"
+        android:visibility="gone" />
+
+    <!-- Text to show the current value of the SeekBar -->
+    <TextView
+        android:id="@+id/parameterValue"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Value: 0"
+        android:textSize="16sp"
+        android:textColor="@color/white"
+        android:layout_gravity="center_horizontal"
         android:visibility="gone" />
 </LinearLayout>

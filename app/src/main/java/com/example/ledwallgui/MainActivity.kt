@@ -20,11 +20,15 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.app.Dialog
 import android.content.ContentValues.TAG
+import android.os.Build
 import android.view.MotionEvent
 import android.view.ViewGroup
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.widget.AdapterView
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
@@ -54,6 +58,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var dynamicLayoutContainer: FrameLayout // Declare without initialization
     private lateinit var settingModeDivider: View // Declare without initialization
     private lateinit var flexboxLayout: FlexboxLayout
+    private lateinit var textView: TextView
 
     companion object {
         private const val SETTINGS_REQUEST_CODE = 100
@@ -76,9 +81,7 @@ class MainActivity : AppCompatActivity() {
         dynamicLayoutContainer = findViewById(R.id.dynamicLayoutContainer)
 
         settingModeDivider = findViewById(R.id.settingModeDivider)
-        if (settingModeDivider == null) {
-            Log.e("MainActivity", "Failed to find settingModeDivider. Check layout.")
-        }
+        textView = findViewById(R.id.textView5)
 
         flexboxLayout = FlexboxLayout(this).apply {
             flexWrap = FlexWrap.WRAP
@@ -188,7 +191,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateThumbPosition(sliderBackground: View, sliderThumb: View, touchY: Float) {
         val sliderHeight = sliderBackground.height
-        val minHeight = 20 // Minimum height for the thumb in pixels
+        val minHeight = 5 // Minimum height for the thumb in pixels
         val adjustedY = touchY.coerceIn(0f, sliderHeight.toFloat()) // Keep touch within bounds
         val percentage = ((sliderHeight - adjustedY) / sliderHeight * 100).toInt()
 
@@ -230,98 +233,145 @@ class MainActivity : AppCompatActivity() {
         snackbar.show()
     }
 
-    fun generateLayout(context: Context, parameters: List<Parameter>, flexboxLayout: FlexboxLayout): View {
+    fun getColorName(colorValue: Int): String {
+        return when (colorValue) {
+            Color.RED -> "Red"
+            Color.GREEN -> "Green"
+            Color.BLUE -> "Blue"
+            Color.BLACK -> "Black"
+            Color.WHITE -> "White"
+            Color.YELLOW -> "Yellow"
+            Color.CYAN -> "Cyan"
+            Color.MAGENTA -> "Magenta"
+            // Add more common colors or return the hex value as a fallback
+            else -> "#${Integer.toHexString(colorValue)}"  // Return hex code for unknown colors
+        }
+    }
 
+    fun Int.dpToPx(context: Context): Int {
+        return (this * context.resources.displayMetrics.density).toInt()
+    }
+
+
+    fun generateLayout(context: Context, parameters: List<Parameter>, flexboxLayout: FlexboxLayout): View {
         parameters.forEach { parameter ->
             Log.d("MainActivity", "Creating view for parameter: ${parameter.name} of type ${parameter.type}")
+
             val parameterView = when (parameter.type) {
                 "PCOLOR", "SCOLOR" -> {
-                    val colorTile = CardView(context).apply {
+                    val colorBox = CardView(context).apply {
                         tag = parameter.name // Assign tag for visibility control
                         radius = 16f
-                        setCardBackgroundColor(Color.BLACK)
+                        val colorValue = parameter.value as? Int ?: Color.GRAY // Default to gray if no color value is set
+                        setCardBackgroundColor(colorValue)  // Set initial color
+
                         layoutParams = FlexboxLayout.LayoutParams(
-                            FlexboxLayout.LayoutParams.WRAP_CONTENT,
+                            FlexboxLayout.LayoutParams.WRAP_CONTENT, // Change to WRAP_CONTENT
                             FlexboxLayout.LayoutParams.WRAP_CONTENT
                         ).apply {
                             setMargins(16, 16, 16, 16)
-                            flexBasisPercent = 0.4f
                         }
 
-                        // Add click listener for color selection
+                        // Create a TextView to show the parameter type and its value
+                        val textView = TextView(context).apply {
+                            val colorName = getColorName(colorValue)
+                            text = "${parameter.name}: $colorName"
+                            setTextColor(Color.WHITE)  // Text color is white
+                            textSize = 16f
+                            setPadding(16, 16, 16, 16)  // Add padding inside the box
+                        }
+
+                        // Create a View to show the color preview
+                        val colorPreview = View(context).apply {
+                            layoutParams = LinearLayout.LayoutParams(
+                                50.dpToPx(context), // Adjust size as needed, e.g., 50dp for the preview
+                                50.dpToPx(context)  // Same for height
+                            ).apply {
+                                setMargins(16, 16, 16, 16)
+                            }
+                            setBackgroundColor(colorValue)
+                        }
+
+                        // Add TextView and color preview to the CardView
+                        val container = LinearLayout(context).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            layoutParams = LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.WRAP_CONTENT,  // Use WRAP_CONTENT instead of MATCH_PARENT
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            ).apply {
+                                setMargins(16, 16, 16, 16)
+                            }
+                            addView(textView)
+                            addView(colorPreview)  // Add color preview to the right
+                        }
+
+                        // Add container (which holds both text and color preview) to the CardView
+                        addView(container)
+
+                        // Set click listener to show the popup with the slider
                         setOnClickListener {
-                            showPopup(context, parameter, parameter.type) // parameter.type is now String
+                            showPopup(context, parameter, parameter.type, textView, this, colorPreview)  // Pass colorPreview as well
                         }
                     }
 
-                    val colorDropdown = Spinner(context).apply {
-                        // Set adapter for color options
-                        adapter = ArrayAdapter(
-                            context,
-                            android.R.layout.simple_spinner_dropdown_item,
-                            arrayOf("Red", "Green", "Blue") // Example color options
-                        )
-                        onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                                val selectedItem = parent?.getItemAtPosition(position) as? String
-                                Log.d("Dropdown", "Selected item: $selectedItem")
-                                if (selectedItem != null) {
-                                    GlobalBluetoothManager.setLedParameter(ModeManager.currentMode, parameter.name, selectedItem)
-                                }
-                            }
-
-                            override fun onNothingSelected(parent: AdapterView<*>?) {
-                                // Do nothing
-                            }
-                        }
-                    }
-                    val initialColorIndex = (colorDropdown.adapter as ArrayAdapter<String>).getPosition(parameter.value.toString())
-                    colorDropdown.setSelection(initialColorIndex)
-                    // Set visibility to VISIBLE
-                    colorTile.visibility = View.VISIBLE
-                    Log.d("MainActivity", "Setting visibility for ${parameter.name}: ${colorTile.visibility}")
-                    colorTile.addView(colorDropdown)
-                    colorTile
+                    colorBox
                 }
 
+                // Similar changes for other parameter types like "FREQUENCY", "SPEED", etc.
                 "FREQUENCY", "SPEED", "DIVISION" -> {
-                    val sliderTile = CardView(context).apply {
+                    val parameterBox = CardView(context).apply {
                         tag = parameter.name // Assign tag for visibility control
                         radius = 16f
-                        setCardBackgroundColor(Color.BLACK)
+                        setCardBackgroundColor(Color.GRAY) // Gray background for the box
                         layoutParams = FlexboxLayout.LayoutParams(
-                            FlexboxLayout.LayoutParams.MATCH_PARENT,
+                            FlexboxLayout.LayoutParams.WRAP_CONTENT,  // Set width to wrap content
+                            FlexboxLayout.LayoutParams.WRAP_CONTENT
+                        ).apply {
+                            setMargins(16, 16, 16, 16)
+                        }
+
+                        // Create a TextView to show the parameter type and its value
+                        val textView = TextView(context).apply {
+                            text = "${parameter.name}: ${parameter.value}"
+                            setTextColor(Color.WHITE)  // Text color is white
+                            textSize = 16f
+                            setPadding(16, 16, 16, 16)  // Add padding inside the box
+                        }
+
+                        // Create a dummy colorPreview view as a placeholder
+                        val colorPreview = View(context) // Dummy View since no color is involved for this type
+
+                        // Add TextView to the CardView
+                        addView(textView)
+
+                        // Set click listener to show the popup with the slider
+                        setOnClickListener {
+                            showPopup(context, parameter, parameter.type, textView, this, colorPreview)  // Pass dummy colorPreview
+                        }
+                    }
+
+                    parameterBox
+                }
+
+                "TEXT" -> {  // If parameter is of type TEXT
+                    val textView = TextView(context).apply {
+                        text = parameter.value.toString()  // Set the text
+                        setTextColor(Color.WHITE)  // Set text color
+                        textSize = 16f  // Set text size
+                        layoutParams = FlexboxLayout.LayoutParams(
+                            FlexboxLayout.LayoutParams.WRAP_CONTENT,  // Set width to wrap content
                             FlexboxLayout.LayoutParams.WRAP_CONTENT
                         ).apply {
                             setMargins(16, 16, 16, 16)
                         }
                     }
 
-                    val seekBar = SeekBar(context).apply {
-                        max = 100
-                        progress = parameter.value as Int
-                        setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                                parameter.value = progress
-                                Log.d("MainActivity", "${parameter.name} updated to $progress")
-                                GlobalBluetoothManager.setLedParameter(ModeManager.currentMode, parameter.name, progress.toString())
-                            }
-
-                            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-                            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-                        })
-                    }
-
-                    sliderTile.addView(seekBar)
-                    seekBar.progress = (parameter.value as? String)?.toIntOrNull() ?: 0
-                    // Set visibility to VISIBLE
-                    sliderTile.visibility = View.VISIBLE
-                    Log.d("MainActivity", "Setting visibility for ${parameter.name}: ${sliderTile.visibility}")
-
-                    sliderTile
+                    textView.visibility = View.VISIBLE
+                    Log.d("MainActivity", "TextView created and visibility set to ${textView.visibility}")
+                    textView
                 }
 
-                else -> View(context) // Default case, if no match
+                else -> View(context)  // Default case, if no match
             }
 
             // Add view to layout
@@ -331,26 +381,12 @@ class MainActivity : AppCompatActivity() {
             Log.d("MainActivity", "Added view for ${parameter.name} with visibility: ${parameterView.visibility}")
         }
 
-// Check the number of visible children in FlexboxLayout
-        val visibleChildrenCount = flexboxLayout.children.count { it.visibility == View.VISIBLE }
-        if (::settingModeDivider.isInitialized) {
-            if (visibleChildrenCount > 0) {
-                settingModeDivider.visibility = View.VISIBLE
-                Log.d("MainActivity", "Setting mode divider visible, subscribed parameters exist")
-            } else {
-                settingModeDivider.visibility = View.GONE
-                Log.d("MainActivity", "Setting mode divider hidden, no subscribed parameters")
-            }
-        } else {
-            Log.e("generateLayout", "settingModeDivider not initialized.")
-        }
-
         return flexboxLayout
     }
 
-    fun showPopup(context: Context, parameter: Parameter, type: String) {
+    fun showPopup(context: Context, parameter: Parameter, type: String, textView: TextView, cardView: CardView, colorPreview: View) {
         val popup = Dialog(context).apply {
-            setContentView(R.layout.parameter_popup) // Ensure this file exists
+            setContentView(R.layout.parameter_popup) // The updated layout with a SeekBar and Spinner
             window?.setLayout(
                 (context.resources.displayMetrics.widthPixels * 0.8).toInt(),
                 (context.resources.displayMetrics.heightPixels * 0.25).toInt()
@@ -361,17 +397,108 @@ class MainActivity : AppCompatActivity() {
 
         Log.d("MainActivity", "Showing popup for parameter: ${parameter.name} of type: ${type}")
         val titleTextView = popup.findViewById<TextView>(R.id.parameterTitle)
-        titleTextView.text = parameter.name
+        titleTextView.text = "${parameter.name}"
 
         when (type) {
-            "PCOLOR" -> {
+            "PCOLOR", "SCOLOR" -> {
+                val colorDropdown = popup.findViewById<Spinner>(R.id.colorDropdown)
+                colorDropdown.visibility = View.VISIBLE
+
+                val colorMap = mapOf(
+                    "Red" to Color.RED,
+                    "Orange" to Color.parseColor("#FFA500"),
+                    "Yellow" to Color.YELLOW,
+                    "Green" to Color.GREEN,
+                    "Blue" to Color.BLUE,
+                    "Indigo" to Color.parseColor("#4B0082"),
+                    "Violet" to Color.parseColor("#EE82EE")
+                )
+
+                colorDropdown.adapter = ArrayAdapter(
+                    context,
+                    android.R.layout.simple_spinner_dropdown_item,
+                    colorMap.keys.toList()
+                )
+
+                val currentColorName = colorMap.entries.find { it.value == parameter.value as? Int }?.key
+                if (currentColorName != null) {
+                    val initialColorIndex = (colorDropdown.adapter as ArrayAdapter<String>).getPosition(currentColorName)
+                    colorDropdown.setSelection(initialColorIndex)
+                }
+
+                colorDropdown.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                    override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                        val selectedColorName = parent?.getItemAtPosition(position) as? String
+                        val selectedColor = colorMap[selectedColorName]
+
+                        if (selectedColor != null) {
+                            val red = Color.red(selectedColor)
+                            val green = Color.green(selectedColor)
+                            val blue = Color.blue(selectedColor)
+
+                            GlobalBluetoothManager.setLedParameter(
+                                ModeManager.currentMode,
+                                "Color",
+                                "$red,$green,$blue"
+                            )
+
+                            // Update the TextView with the color name
+                            textView.text = "${parameter.name}: $selectedColorName"
+                            // Update the CardView background color
+                            cardView.setCardBackgroundColor(selectedColor)
+                            // Update the color preview
+                            colorPreview.setBackgroundColor(selectedColor)
+
+                            // Update the parameter value
+                            parameter.value = selectedColor
+                        }
+                    }
+
+                    override fun onNothingSelected(parent: AdapterView<*>?) {}
+                }
             }
-            "SCOLOR" -> {
+
+            "FREQUENCY", "SPEED", "DIVISION" -> {
+                val seekBar = popup.findViewById<SeekBar>(R.id.parameterSlider)  // Fixed ID here
+                val valueTextView = popup.findViewById<TextView>(R.id.parameterValue)  // Fixed ID here
+
+                seekBar.visibility = View.VISIBLE
+                valueTextView.visibility = View.VISIBLE
+
+                // Set initial progress based on the parameter value (assuming it's an Int or Float)
+                val initialProgress = parameter.value as? Int ?: 0
+                seekBar.progress = initialProgress
+
+                // Update value text initially
+                valueTextView.text = "${parameter.name}: $initialProgress"
+
+                // Listen for SeekBar changes
+                seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                        valueTextView.text = "${parameter.name}: $progress"
+
+                        // Update the parameter value
+                        parameter.value = progress
+
+                        // Update the Bluetooth parameter if needed
+                        GlobalBluetoothManager.setLedParameter(
+                            ModeManager.currentMode,
+                            parameter.name,
+                            progress.toString()
+                        )
+
+                        // Also update the main TextView to reflect the change
+                        textView.text = "${parameter.name}: $progress"  // Update the main textView here
+                    }
+
+                    override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                    override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+                })
             }
-            "FREQUENCY" -> {
+
+            else -> {
+                // Handle other types if necessary
             }
-            "SPEED" -> {}
-            "DIVISION" -> {}
         }
 
         popup.show()
@@ -426,15 +553,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun hideSystemUI() {
-        // Enables regular immersive mode.
-        // For "lean back" mode, remove SYSTEM_UI_FLAG_IMMERSIVE.
-        // Or for "sticky immersive," replace it with SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-        window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE
-                or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                or View.SYSTEM_UI_FLAG_FULLSCREEN)
+        // Use WindowInsetsController for Android 11+
+        window.insetsController?.let { controller ->
+            controller.hide(WindowInsets.Type.systemBars()) // Hides status and navigation bars
+            controller.systemBarsBehavior =
+                WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE // Allows bars to reappear with a swipe
+        }
     }
 
     private fun updatePowerButtonImage() {
@@ -457,6 +581,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+
+        val currentMode = ModeManager.currentMode
+        // Update the textView5 with the current mode name
+        textView.text = "$currentMode Parameters"
 
         // Update connectState based on GlobalBluetoothManager
         connectState = GlobalBluetoothManager.isConnected

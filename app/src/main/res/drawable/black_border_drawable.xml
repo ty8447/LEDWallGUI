@@ -1,0 +1,7 @@
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@android:color/transparent" /> <!-- Transparent center -->
+    <stroke
+        android:width="12dp"
+        android:color="#000000" /> <!-- Black border -->
+    <corners android:radius="10dp" /> <!-- Match the corner radius -->
+</shape>

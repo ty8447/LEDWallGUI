@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -13,12 +15,12 @@
             android:id="@+id/imageButton1"
             android:layout_width="75dp"
             android:layout_height="75dp"
-            android:layout_marginLeft="7dp"
+            android:layout_marginStart="7dp"
             android:layout_marginTop="3dp"
-            android:layout_marginRight="0dp"
+            android:layout_marginEnd="0dp"
             android:layout_weight="1"
             android:background="@drawable/transparent_background"
-            android:contentDescription="@string/button"
+            android:contentDescription="@string/powerbutton"
             android:scaleType="centerInside"
             android:src="@drawable/power_button_off_selector" />
 
@@ -26,12 +28,12 @@
             android:id="@+id/modesbutton"
             android:layout_width="75dp"
             android:layout_height="75dp"
-            android:layout_marginLeft="35dp"
-            android:layout_marginTop="10dp"
-            android:layout_marginRight="25dp"
+            android:layout_marginStart="35dp"
+            android:layout_marginTop="3dp"
+            android:layout_marginEnd="25dp"
             android:layout_weight="1"
             android:background="@drawable/transparent_background"
-            android:contentDescription="Button"
+            android:contentDescription="@string/modesbutton"
             android:scaleType="centerInside"
             android:src="@drawable/modes_button_selector" />
 
@@ -44,9 +46,10 @@
             android:layout_marginRight="50dp"
             android:layout_weight="1"
             android:gravity="center_horizontal"
-            android:text="LED Controller"
+            android:text="@string/led_controller"
             android:textAlignment="center"
             android:textSize="34sp"
+            android:textColor="@color/white"
             android:textStyle="bold" />
 
         <ImageView
@@ -58,7 +61,7 @@
             android:layout_marginRight="0dp"
             android:layout_weight="1"
             android:background="@drawable/transparent_background"
-            android:contentDescription="Connection"
+            android:contentDescription="@string/connection"
             android:scaleType="centerInside"
             app:srcCompat="@drawable/stat_dis_button" />
 
@@ -71,7 +74,7 @@
             android:layout_marginRight="0dp"
             android:layout_weight="1"
             android:background="@drawable/transparent_background"
-            android:contentDescription="@string/button"
+            android:contentDescription="@string/alarmbutton"
             android:scaleType="centerInside"
             android:src="@drawable/alarm_button_selector" />
 
@@ -81,7 +84,7 @@
             android:layout_height="75dp"
             android:layout_marginLeft="0dp"
             android:layout_marginTop="3dp"
-            android:layout_marginRight="0dp"
+            android:layout_marginRight="2dp"
             android:layout_weight="1"
             android:background="@drawable/transparent_background"
             android:contentDescription="@string/button"
@@ -100,9 +103,10 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:baselineAligned="false"
-        android:orientation="horizontal">
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="20dp">
 
         <!-- Container for dynamic layout (SeekBars) -->
         <FrameLayout
@@ -111,27 +115,43 @@
             android:layout_height="match_parent"
             android:layout_marginStart="10dp"
             android:layout_marginTop="20dp"
-            android:layout_marginEnd="5dp"
             android:layout_weight="10"
-            android:background="@color/red" />
+            android:background="@color/red" >
+
+            <TextView
+                android:id="@+id/textView5"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="5dp"
+                android:background="@drawable/transparent_background"
+                android:gravity="center_horizontal"
+                android:text="@string/mode"
+                android:textAlignment="center"
+                android:textColor="@color/white"
+                android:textSize="34sp"
+                android:textStyle="bold" />
+        </FrameLayout>
 
         <!-- Slider Section -->
-        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_weight="1"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="30dp"
+            android:layout_marginBottom="10dp"
             android:layout_height="match_parent"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:gravity="center">
             <FrameLayout
                 android:id="@+id/sliderContainer"
-                android:layout_width="50dp"
-                android:layout_height="match_parent"
-                android:layout_margin="10dp">
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent">
 
                 <!-- Slider Background -->
                 <View
                     android:id="@+id/sliderBackground"
                     android:layout_width="match_parent"
+                    android:layout_marginTop="5dp"
+                    android:layout_marginBottom="5dp"
                     android:layout_height="match_parent"
                     android:background="@drawable/slider_background" />
 
@@ -140,8 +160,17 @@
                     android:id="@+id/sliderThumb"
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
+                    android:layout_margin="5dp"
+                    android:layout_marginBottom="0dp"
                     android:layout_gravity="bottom"
                     android:background="@drawable/slider_thumb" />
+
+                <!-- Black Border -->
+                <View
+                    android:id="@+id/blackBorder"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/black_border_drawable" />
             </FrameLayout>
         </LinearLayout>
     </LinearLayout>
