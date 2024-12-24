@@ -21,6 +21,8 @@ import android.widget.FrameLayout
 import android.app.Dialog
 import android.content.ContentValues.TAG
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.view.MotionEvent
 import android.view.ViewGroup
 import android.view.WindowInsets
@@ -66,6 +68,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textView: TextView
     private lateinit var modesActivityResultLauncher: ActivityResultLauncher<Intent>
     private lateinit var settingsActivityResultLauncher: ActivityResultLauncher<Intent>
+    private val connectionCheckHandler = Handler(Looper.getMainLooper())
+    private val connectionCheckInterval = 5000L // Check every 5 seconds
 
     companion object {
         private const val SETTINGS_REQUEST_CODE = 100
@@ -202,7 +206,7 @@ class MainActivity : AppCompatActivity() {
         imageButton3.setOnClickListener { showSettingsMenu() }
 
         updatePowerButtonImage()
-        updateConnectIcon()
+        startConnectionCheck()
 
         // Handle motion detection service
         if (motionDetectionEnabled) {
@@ -216,6 +220,19 @@ class MainActivity : AppCompatActivity() {
             stopService(intent)
             Log.d("Motion Detection", "Not Detecting Motion")
         }
+    }
+
+    private fun startConnectionCheck() {
+        connectionCheckHandler.post(object : Runnable {
+            override fun run() {
+                    updateConnectIcon()
+                connectionCheckHandler.postDelayed(this, connectionCheckInterval)
+            }
+        })
+    }
+
+    private fun stopConnectionCheck() {
+        connectionCheckHandler.removeCallbacksAndMessages(null)
     }
 
     private fun updateThumbPosition(sliderBackground: View, sliderThumb: View, touchY: Float) {
@@ -614,6 +631,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateConnectIcon() {
         val connectButton: ImageView = findViewById(R.id.imageView)
+        Log.d("MainActivity", "Updating connect icon: $connectState")
         if (GlobalBluetoothManager.isConnected) { // Use GlobalBluetoothManager.isConnected
             connectButton.setImageResource(R.drawable.stat_con_button)
         } else {
@@ -641,8 +659,19 @@ class MainActivity : AppCompatActivity() {
             } else {
                 Log.w("MainActivity", "Mode info not found for mode: $selectedMode")
             }
-        // Update UI based on connectState
-        updateConnectIcon()
+        GlobalBluetoothManager.startConnectionCheck(this)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Log.d("MainActivity", "onPause called")
+        GlobalBluetoothManager.stopConnectionCheck()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.d("MainActivity", "onDestroy called")
+        GlobalBluetoothManager.stopConnectionCheck()
     }
 
     @SuppressLint("ResourceType")

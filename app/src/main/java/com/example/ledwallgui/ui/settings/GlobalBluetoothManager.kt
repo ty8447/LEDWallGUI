@@ -1,11 +1,13 @@
 package com.example.ledwallgui.ui.settings
 
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothSocket
 import android.content.Context
@@ -69,11 +71,17 @@ object GlobalBluetoothManager {
         get() = _deviceName
 
     // Method to update the connection state
-    fun setConnectionState(isConnected: Boolean, deviceAddress: String?, deviceName: String?) {
+    fun setConnectionState(isConnected: Boolean, deviceAddress: String?, deviceName: String?, context: Context) {
         Log.d(
-            "GlobalBluetoothManager",
+            TAG,
             "setConnectionState called with isConnected = $isConnected, deviceAddress = $deviceAddress, deviceName = $deviceName"
         )
+
+        // Check if the connection state changed from true to false and attempt reconnection
+        if (_isConnected && !isConnected) {
+            Log.d(TAG, "Connection lost. Attempting reconnection...")
+            attemptReconnect(context) // Pass the context here
+        }
 
         _isConnected = isConnected
         _deviceAddress = deviceAddress
@@ -81,9 +89,78 @@ object GlobalBluetoothManager {
 
         // Log the updated state
         Log.d(
-            "GlobalBluetoothManager",
+            TAG,
             "Connection state updated: isConnected = $_isConnected, deviceAddress = $_deviceAddress, deviceName = $_deviceName"
         )
+    }
+
+
+    private fun attemptReconnect(context: Context) {
+        if (isRetrying || nrTries >= MAX_TRIES) {
+            Log.w(TAG, "Max reconnection attempts reached.")
+            return
+        }
+
+        nrTries++
+        isRetrying = true
+        Log.d(TAG, "Reconnection attempt $nrTries/$MAX_TRIES")
+
+        // Assuming you have access to the device to reconnect
+        _deviceAddress?.let { address ->
+            val device = getDeviceFromAddress(address) // Implement this method to fetch the device using its address
+            device?.let { connectToDevice(context, it, handler) { success ->
+                if (success) {
+                    Log.d(TAG, "Reconnected successfully")
+                } else {
+                    Log.e(TAG, "Reconnection failed")
+                    attemptReconnect(context) // Retry reconnection if it fails
+                }
+            }}
+        }
+    }
+
+
+    private fun getDeviceFromAddress(address: String): BluetoothDevice? {
+        // Retrieve the BluetoothDevice object using the address (implementation depends on your app structure)
+        // You can use BluetoothAdapter to get the device from address
+        val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+        return bluetoothAdapter?.getRemoteDevice(address)
+    }
+
+
+    // Method to synchronize the connection state
+    @SuppressLint("MissingPermission")
+    fun synchronizeConnectionState(context: Context) {
+        // Get a list of connected devices
+        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        val connectedDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
+
+        // Check if the device is still connected
+        val isCurrentlyConnected = connectedDevices.any { it.address == _deviceAddress }
+        // Update the connection state
+        if (_isConnected != isCurrentlyConnected) {
+            _isConnected = isCurrentlyConnected
+            Log.d(TAG, "Synchronized connection state: $_isConnected")
+        }
+    }
+
+    // Periodic connection state check
+    fun startConnectionCheck(context: Context) {
+        handler = Handler(Looper.getMainLooper())
+        val connectionCheckRunnable = object : Runnable {
+            override fun run() {
+                synchronizeConnectionState(context)
+                handler.postDelayed(this, 5000) // Check every 5 seconds
+            }
+        }
+        handler.post(connectionCheckRunnable)
+    }
+
+    // Stop the periodic connection check
+    fun stopConnectionCheck() {
+        if (::handler.isInitialized) {
+            handler.removeCallbacksAndMessages(null)
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -106,19 +183,19 @@ object GlobalBluetoothManager {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     Log.i(TAG, "Connected to GATT server.")
                     modeInfoList.clear()
-                    setConnectionState(true, device.address, device.name)
+                    setConnectionState(true, device.address, device.name, context)
                     Log.d(TAG, "Discovering services...")
                     gatt?.discoverServices() ?: run {
                         Log.e(TAG, "Failed to call discoverServices. GATT is null.")
                         callback(false) // Notify failure if gatt is null
                     }
-
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     Log.i(TAG, "Disconnected from GATT server.")
-                    setConnectionState(false, null, null)
+                    setConnectionState(false, null, null, context) // Will trigger reconnection attempt if necessary
                     callback(false) // Notify disconnection
                 }
             }
+
 
             override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
                 if (status == BluetoothGatt.GATT_SUCCESS) {
