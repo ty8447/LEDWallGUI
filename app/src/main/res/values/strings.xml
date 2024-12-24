@@ -54,4 +54,6 @@
     <string name="modesbutton">modesButton</string>
     <string name="powerbutton">PowerButton</string>
     <string name="alarmbutton">AlarmButton</string>
+    <string name="parameter_title">Parameter Title</string>
+    <string name="_0">0</string>
 </resources>

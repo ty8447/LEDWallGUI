@@ -1,9 +1,8 @@
-<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp"
+    android:padding="5dp"
     android:background="@drawable/rounded_background">
 
     <!-- Title of the parameter -->
@@ -11,8 +10,9 @@
         android:id="@+id/parameterTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Parameter Title"
-        android:textSize="18sp"
+        android:text="@string/parameter_title"
+        android:background="@drawable/transparent_background"
+        android:textSize="30sp"
         android:textColor="@color/white"
         android:layout_gravity="center_horizontal" />
 
@@ -23,22 +23,39 @@
         android:layout_height="wrap_content"
         android:visibility="gone" />
 
-    <!-- SeekBar for adjusting parameter value -->
-    <SeekBar
-        android:id="@+id/parameterSlider"
+    <!-- Custom SeekBar -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:max="100"
-        android:visibility="gone" />
+        android:layout_marginVertical="15dp"
+        android:background="@drawable/transparent_background">
 
-    <!-- Text to show the current value of the SeekBar -->
-    <TextView
-        android:id="@+id/parameterValue"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Value: 0"
-        android:textSize="16sp"
-        android:textColor="@color/white"
-        android:layout_gravity="center_horizontal"
-        android:visibility="gone" />
+
+        <!-- SeekBar for adjusting parameter value -->
+        <SeekBar
+            android:id="@+id/parameterSlider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/transparent_background"
+            android:fadingEdge="horizontal"
+            android:thumbOffset="15dp"
+            android:max="100"
+            android:progressDrawable="@drawable/parameter_seekbar"
+            android:splitTrack="false"
+            android:thumb="@drawable/parameter_thumb"
+            android:visibility="gone"/>
+
+        <!-- Text to show the current value inside the SeekBar thumb -->
+        <TextView
+            android:id="@+id/parameterValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/_0"
+            android:textSize="18sp"
+            android:background="@drawable/transparent_background"
+            android:textColor="@color/black"
+            android:layout_gravity="center"
+            android:textAlignment="center"
+            android:visibility="gone" />
+    </FrameLayout>
 </LinearLayout>

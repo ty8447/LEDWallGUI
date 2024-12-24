@@ -365,8 +365,8 @@ class MainActivity : AppCompatActivity() {
                             text = "${parameter.name}: ${parameter.value}"
                             setTextColor(Color.WHITE)  // Text color is white
                             setBackgroundColor(Color.TRANSPARENT)
-                            textSize = 16f
-                            setPadding(30, 30, 30, 30)  // Add padding inside the box
+                            textSize = 18f
+                            setPadding(60, 60, 60, 60)  // Add padding inside the box
                         }
 
                         // Create a dummy colorPreview view as a placeholder
@@ -422,7 +422,14 @@ class MainActivity : AppCompatActivity() {
                 (context.resources.displayMetrics.widthPixels * 0.8).toInt(),
                 (context.resources.displayMetrics.heightPixels * 0.25).toInt()
             )
-            window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT)) // Transparent background for sleek look
+            window?.apply {
+                setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT)) // Keep dialog background transparent
+                addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND) // Add dim effect behind the popup
+                attributes = attributes?.apply {
+                    dimAmount = 0.5f // Dim level (0.0 to 1.0)
+                    flags = flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+                }
+            }
             setCancelable(true)
         }
 
@@ -473,14 +480,9 @@ class MainActivity : AppCompatActivity() {
                                 "$red,$green,$blue"
                             )
 
-                            // Update the TextView with the color name
                             textView.text = "${parameter.name}: $selectedColorName"
-                            // Update the CardView background color
                             cardView.setCardBackgroundColor(selectedColor)
-                            // Update the color preview
                             colorPreview.setBackgroundColor(selectedColor)
-
-                            // Update the parameter value
                             parameter.value = selectedColor
                         }
                     }
@@ -490,36 +492,45 @@ class MainActivity : AppCompatActivity() {
             }
 
             "FREQUENCY", "SPEED", "DIVISION" -> {
-                val seekBar = popup.findViewById<SeekBar>(R.id.parameterSlider)  // Fixed ID here
-                val valueTextView = popup.findViewById<TextView>(R.id.parameterValue)  // Fixed ID here
+                val seekBar = popup.findViewById<SeekBar>(R.id.parameterSlider)
+                val valueTextView = popup.findViewById<TextView>(R.id.parameterValue)
 
                 seekBar.visibility = View.VISIBLE
                 valueTextView.visibility = View.VISIBLE
 
-                // Set initial progress based on the parameter value (assuming it's an Int or Float)
+                // Set initial progress based on the parameter value
                 val initialProgress = parameter.value as? Int ?: 0
                 seekBar.progress = initialProgress
 
-                // Update value text initially
-                valueTextView.text = "${parameter.name}: $initialProgress"
+                // Set initial position and text
+                valueTextView.text = initialProgress.toString()
+
+                seekBar.post {
+                    val thumbOffset = seekBar.thumb.bounds.left + (seekBar.thumb.bounds.width() / 2)
+                    valueTextView.x = seekBar.left + thumbOffset.toFloat() - (valueTextView.width / 2)
+                }
 
                 // Listen for SeekBar changes
                 seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                    override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                        valueTextView.text = "${parameter.name}: $progress"
+                    override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                        valueTextView.text = progress.toString()
+
+                        // Update the position of the value text
+                        val thumbOffset = seekBar.thumb.bounds.left + (seekBar.thumb.bounds.width() / 2)
+                        valueTextView.x = seekBar.left + thumbOffset.toFloat() - (valueTextView.width / 2)
 
                         // Update the parameter value
                         parameter.value = progress
 
-                        // Update the Bluetooth parameter if needed
+                        // Update the Bluetooth parameter
                         GlobalBluetoothManager.setLedParameter(
                             ModeManager.currentMode,
                             parameter.name,
                             progress.toString()
                         )
 
-                        // Also update the main TextView to reflect the change
-                        textView.text = "${parameter.name}: $progress"  // Update the main textView here
+                        // Update the main TextView
+                        textView.text = "${parameter.name}: $progress"
                     }
 
                     override fun onStartTrackingTouch(seekBar: SeekBar?) {}
