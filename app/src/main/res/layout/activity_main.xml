@@ -193,4 +193,20 @@
             </FrameLayout>
         </LinearLayout>
     </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/rgbColorWheelContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="20dp"
+        android:gravity="center">
+
+        <com.example.ledwallgui.ui.settings.ColorWheel
+            android:id="@+id/rgbColorWheel"
+            android:layout_width="300dp"
+            android:layout_height="300dp"
+            android:layout_gravity="center"
+            android:background="@android:color/holo_blue_light" />
+    </FrameLayout>
+
 </LinearLayout>

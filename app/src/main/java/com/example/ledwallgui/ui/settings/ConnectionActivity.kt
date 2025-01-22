@@ -278,7 +278,7 @@ class ConnectionActivity : AppCompatActivity() {
         Toast.makeText(this, "Disconnecting from Device...", Toast.LENGTH_SHORT).show()
 
         // Call the GlobalBluetoothManager to disconnect
-        GlobalBluetoothManager.disconnect()
+        GlobalBluetoothManager.disconnect(this)  // Pass context here
 
         // Update UI to reflect disconnection
         updateConnectionStatus("", false)  // Assume updateConnectionStatus can handle this
@@ -286,6 +286,7 @@ class ConnectionActivity : AppCompatActivity() {
         // Optionally, show a toast or update the UI
         Toast.makeText(this, "Disconnected", Toast.LENGTH_SHORT).show()
     }
+
 
     @SuppressLint("MissingPermission")
     private fun connectAndValidateDevice(device: BluetoothDevice) {

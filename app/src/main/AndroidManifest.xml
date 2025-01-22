@@ -21,8 +21,8 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -65,7 +65,7 @@
             android:label="@string/title_activity_modes"
             android:theme="@style/Theme.LEDWallGUI" />
         <activity
-            android:name="com.example.ledwallgui.ui.alarm.alarmEditorActivity"
+            android:name="com.example.ledwallgui.ui.alarm.AlarmEditorActivity"
             android:exported="false" />
         <activity
             android:name="com.example.ledwallgui.ui.settings.ConnectionActivity"
@@ -85,10 +85,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <service
-            android:name="com.example.ledwallgui.TimeMonitoringService"
-            android:exported="false" />
         <service android:name=".ui.MotionDetectionService" />
+        <service
+            android:name=".services.BluetoothReconnectionService"
+            android:foregroundServiceType="connectedDevice"
+            android:exported="true" />
+        <service
+            android:name=".TimeMonitoringService"
+            android:foregroundServiceType="connectedDevice" />
+
     </application>
 
 </manifest>

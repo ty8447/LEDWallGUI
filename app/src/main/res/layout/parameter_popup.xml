@@ -23,13 +23,21 @@
         android:layout_height="wrap_content"
         android:visibility="gone" />
 
+    <!-- RGB Color Wheel (set to match_parent in both width and height) -->
+    <com.example.ledwallgui.ui.settings.ColorWheel
+        android:id="@+id/rgbColorWheel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/transparent_background"
+        android:visibility="gone"
+        android:layout_marginTop="20dp"/>
+
     <!-- Custom SeekBar -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginVertical="15dp"
         android:background="@drawable/transparent_background">
-
 
         <!-- SeekBar for adjusting parameter value -->
         <SeekBar

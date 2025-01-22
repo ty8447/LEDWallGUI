@@ -14,6 +14,18 @@ class PreferenceUtils(private val context: Context) {
     private val sharedPreferences: SharedPreferences
         get() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    // Save device address to SharedPreferences
+    fun saveDeviceAddress(address: String) {
+        val editor = sharedPreferences.edit()
+        editor.putString("device_address", address)
+        editor.apply()  // Use apply() for asynchronous saving
+    }
+
+    // Fetch device address from SharedPreferences
+    fun fetchDeviceAddress(): String? {
+        return sharedPreferences.getString("device_address", null)  // Return null if no address is saved
+    }
+
     fun savePowerState(powerState: Boolean) {
         val editor = sharedPreferences.edit()
         editor.putBoolean("powerState", powerState)

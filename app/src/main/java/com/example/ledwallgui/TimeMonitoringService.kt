@@ -10,7 +10,6 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.*
 import java.time.Clock
@@ -29,24 +28,24 @@ class TimeMonitoringService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "TimeMonitoringService onCreate")
+        createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Check if the device is running Android Q or higher
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val hasForegroundServicePermission = checkForegroundServicePermission()
 
             if (!hasForegroundServicePermission) {
-                // Request the FOREGROUND_SERVICE permission
                 requestForegroundServicePermission()
-                // Return START_NOT_STICKY or other appropriate value
                 return START_NOT_STICKY
             }
         }
 
-        createNotificationChannel() // Create notification channel
+        // Start the service in the foreground with a notification
         val notification = createNotification()
         startForeground(NOTIFICATION_ID, notification)
+
+        // Begin monitoring time changes
         startMonitoringTimeChanges()
         return START_STICKY
     }
@@ -76,7 +75,6 @@ class TimeMonitoringService : Service() {
                 val currentInstant = clock.instant()
                 if (currentInstant != previousInstant) {
                     updateUI()
-                    // Update previousInstant
                     previousInstant = currentInstant
                 }
                 delay(5000) // Adjust the delay as needed
@@ -85,22 +83,18 @@ class TimeMonitoringService : Service() {
     }
 
     private fun updateUI() {
-        // Update UI logic here, e.g., send a broadcast or update a LiveData value
-        // You can use LocalBroadcastManager or ViewModel for UI updates
         Log.d(TAG, "TimeMonitoringService updateUI")
         val intent = Intent(ACTION_TIME_CHANGED)
         sendBroadcast(intent)
     }
 
     private fun createNotification(): Notification {
-        // Create and return a foreground notification
-        // Customize the notification content based on your requirements
-        // Make sure to set a valid notification channel for Android 8.0+
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("Foreground Service")
             .setContentText("Monitoring Time Changes")
             .setSmallIcon(R.drawable.icon) // Replace with your notification icon
-            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE) // Add visibility setting
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .build()
     }
 

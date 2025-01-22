@@ -2,7 +2,6 @@ package com.example.ledwallgui.ui.alarm
 
 import android.os.Parcel
 import android.os.Parcelable
-import android.widget.TextView
 import java.util.*
 
 data class Alarm(
@@ -13,8 +12,8 @@ data class Alarm(
     var showCheckbox: Boolean = false,
     var isSelected: Boolean = false,
     var rampBright: Boolean = false,
-    var daysOfWeek: BooleanArray,
-    var selectedDays: BooleanArray,
+    var daysOfWeek: BooleanArray = BooleanArray(7) { false },
+    var selectedDays: BooleanArray = BooleanArray(7) { false },
     var isAlarmGoingOff: Boolean = false,
     var id: Int = generateUniqueId()
 ) : Parcelable {
@@ -35,8 +34,9 @@ data class Alarm(
         parcel.readByte() != 0.toByte(),
         parcel.readByte() != 0.toByte(),
         parcel.createBooleanArray() ?: BooleanArray(7) { false },
-        parcel.createBooleanArray() ?: BooleanArray(7) { true },
-
+        parcel.createBooleanArray() ?: BooleanArray(7) { false },
+        parcel.readByte() != 0.toByte(),
+        parcel.readInt()
     )
 
     override fun writeToParcel(parcel: Parcel, flags: Int) {
@@ -49,27 +49,19 @@ data class Alarm(
         parcel.writeByte(if (rampBright) 1 else 0)
         parcel.writeBooleanArray(daysOfWeek)
         parcel.writeBooleanArray(selectedDays)
+        parcel.writeByte(if (isAlarmGoingOff) 1 else 0)
+        parcel.writeInt(id)
     }
 
-
-    override fun describeContents(): Int {
-        return 0
-    }
+    override fun describeContents(): Int = 0
 
     companion object CREATOR : Parcelable.Creator<Alarm> {
-        override fun createFromParcel(parcel: Parcel): Alarm {
-            return Alarm(parcel)
-        }
+        override fun createFromParcel(parcel: Parcel): Alarm = Alarm(parcel)
+        override fun newArray(size: Int): Array<Alarm?> = arrayOfNulls(size)
 
-        override fun newArray(size: Int): Array<Alarm?> {
-            return arrayOfNulls(size)
-        }
+        private var nextAlarmId = 0
 
-        private var nextAlarmId = 0 // Counter for generating unique IDs
-
-        private fun generateUniqueId(): Int {
-            return nextAlarmId++
-        }
+        private fun generateUniqueId(): Int = nextAlarmId++
     }
 
     fun startGoingOff() {

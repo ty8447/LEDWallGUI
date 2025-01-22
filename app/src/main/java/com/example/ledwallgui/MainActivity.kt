@@ -1,5 +1,6 @@
 package com.example.ledwallgui
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
@@ -20,6 +21,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.app.Dialog
 import android.content.ContentValues.TAG
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -52,7 +54,10 @@ import com.example.ledwallgui.ui.settings.settingsActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.ActivityResult
-
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat.startActivity
+import androidx.core.graphics.drawable.toBitmap
+import com.example.ledwallgui.ui.settings.ColorWheel
 
 
 class MainActivity : AppCompatActivity() {
@@ -72,6 +77,7 @@ class MainActivity : AppCompatActivity() {
     private val connectionCheckInterval = 5000L // Check every 5 seconds
 
     companion object {
+        private const val BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE = 102
         private const val SETTINGS_REQUEST_CODE = 100
         private const val MODES_REQUEST_CODE = 101 // Add this line
     }
@@ -80,6 +86,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         requestWindowFeature(Window.FEATURE_NO_TITLE) // Hide the title bar
         setContentView(R.layout.activity_main)
+
+        if (!checkBluetoothPermission()) {
+            requestBluetoothPermission()
+        }
 
         modesActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
             if (result.resultCode == RESULT_OK) {
@@ -289,8 +299,14 @@ class MainActivity : AppCompatActivity() {
             Color.YELLOW -> "Yellow"
             Color.CYAN -> "Cyan"
             Color.MAGENTA -> "Magenta"
-            // Add more common colors or return the hex value as a fallback
-            else -> "#${Integer.toHexString(colorValue)}"  // Return hex code for unknown colors
+            else -> {
+                // To provide a more consistent fallback, you can map any unknown colors to their hex values:
+                if (colorValue in 0xFF000000..0xFFFFFFFF) {
+                    String.format("#%06X", (0xFFFFFF and colorValue)) // Return hex without alpha
+                } else {
+                    "Unknown Color"
+                }
+            }
         }
     }
 
@@ -458,6 +474,8 @@ class MainActivity : AppCompatActivity() {
             "PCOLOR", "SCOLOR" -> {
                 val colorDropdown = popup.findViewById<Spinner>(R.id.colorDropdown)
                 colorDropdown.visibility = View.VISIBLE
+                val rgbColorWheel = popup.findViewById<ColorWheel>(R.id.rgbColorWheel) // Cast to ColorWheel
+                rgbColorWheel.visibility = View.GONE // Hide by default
 
                 val colorMap = mapOf(
                     "Red" to Color.RED,
@@ -466,7 +484,8 @@ class MainActivity : AppCompatActivity() {
                     "Green" to Color.GREEN,
                     "Blue" to Color.BLUE,
                     "Indigo" to Color.parseColor("#4B0082"),
-                    "Violet" to Color.parseColor("#EE82EE")
+                    "Violet" to Color.parseColor("#EE82EE"),
+                    "Custom" to null
                 )
 
                 colorDropdown.adapter = ArrayAdapter(
@@ -474,33 +493,100 @@ class MainActivity : AppCompatActivity() {
                     android.R.layout.simple_spinner_dropdown_item,
                     colorMap.keys.toList()
                 )
-
-                val currentColorName = colorMap.entries.find { it.value == parameter.value as? Int }?.key
-                if (currentColorName != null) {
-                    val initialColorIndex = (colorDropdown.adapter as ArrayAdapter<String>).getPosition(currentColorName)
-                    colorDropdown.setSelection(initialColorIndex)
+                val currentColorName = when (val currentColor = parameter.value) {
+                    is Int -> {
+                        // Check if the current color is a custom RGB value, which doesn't match predefined colors
+                        val matchedColor = colorMap.entries.find { it.value == currentColor }
+                        matchedColor?.key ?: "Custom" // If no match, set as "Custom"
+                    }
+                    else -> "Custom" // Default to custom if the value is not a recognized color
                 }
+
+                Log.d("MainActivity", "Current color name: $currentColorName")
+
+                val initialColorIndex = (colorDropdown.adapter as ArrayAdapter<String>).getPosition(currentColorName)
+                colorDropdown.setSelection(initialColorIndex)
+
+                // Set the preview color based on the current value
+                if (currentColorName == "Custom" && parameter.value is Int) {
+                    val customColor = parameter.value as Int
+                    colorPreview.setBackgroundColor(customColor)
+//
+                } else {
+                    // Use standard color from the color map
+                    colorPreview.setBackgroundColor(colorMap[currentColorName] ?: Color.GREEN)
+                }
+
+                // Set the listener for the color wheel to notify when a new color is selected
+                rgbColorWheel.setOnColorSelectedListener(object : ColorWheel.OnColorSelectedListener {
+                    override fun onColorSelected(color: Int) {
+                        colorPreview.setBackgroundColor(color) // Update the preview color
+                        parameter.value = color // Update the parameter value
+                        textView.text = "${parameter.name}: #${Integer.toHexString(color)}" // Update the textView
+                        cardView.setCardBackgroundColor(color) // Update the card view background color
+                        // Send the new color to the Bluetooth manager
+                        val red = Color.red(color)
+                        val green = Color.green(color)
+                        val blue = Color.blue(color)
+                        GlobalBluetoothManager.setLedParameter(
+                            ModeManager.currentMode,
+                            "Color",
+                            "$red,$green,$blue"
+                        )
+                    }
+                })
 
                 colorDropdown.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                     override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                         val selectedColorName = parent?.getItemAtPosition(position) as? String
                         val selectedColor = colorMap[selectedColorName]
 
-                        if (selectedColor != null) {
-                            val red = Color.red(selectedColor)
-                            val green = Color.green(selectedColor)
-                            val blue = Color.blue(selectedColor)
+                        if (selectedColorName == "Custom") {
+                            // Show the RGB color wheel and hide the dropdown
+                            rgbColorWheel.visibility = View.VISIBLE
 
-                            GlobalBluetoothManager.setLedParameter(
-                                ModeManager.currentMode,
-                                "Color",
-                                "$red,$green,$blue"
+                            // Update the preview with the current custom color if available
+                            if (parameter.value is Int) {
+                                val customColor = parameter.value as Int
+                                colorPreview.setBackgroundColor(customColor)
+                            }
+
+                            // Calculate the popup dimensions with 20% margin on each side
+                            val screenWidth = context.resources.displayMetrics.widthPixels
+                            val screenHeight = context.resources.displayMetrics.heightPixels
+                            val popupWidth = (screenWidth * 0.8).toInt() // 80% of screen width
+                            val popupHeight = (screenHeight * 0.8).toInt() // 80% of screen height
+
+                            popup.window?.setLayout(
+                                popupWidth,
+                                popupHeight
                             )
+                        } else {
+                            if (selectedColor != null) {
+                                rgbColorWheel.visibility = View.GONE // Hide RGB wheel
+                                Log.d("MainActivity", "Selected color: $selectedColorName");
+                                val red = Color.red(selectedColor)
+                                val green = Color.green(selectedColor)
+                                val blue = Color.blue(selectedColor)
 
-                            textView.text = "${parameter.name}: $selectedColorName"
-                            cardView.setCardBackgroundColor(selectedColor)
-                            colorPreview.setBackgroundColor(selectedColor)
-                            parameter.value = selectedColor
+                                popup.window?.setLayout(
+                                    (context.resources.displayMetrics.widthPixels * 0.8).toInt(),
+                                    (context.resources.displayMetrics.heightPixels * 0.25).toInt()
+                                )
+
+                                // Update the parameter value and preview for non-custom colors
+                                parameter.value = selectedColor
+                                textView.text = "${parameter.name}: $selectedColorName"
+                                cardView.setCardBackgroundColor(selectedColor)
+                                colorPreview.setBackgroundColor(selectedColor)
+
+                                // Send the color to Bluetooth manager
+                                GlobalBluetoothManager.setLedParameter(
+                                    ModeManager.currentMode,
+                                    "Color",
+                                    "$red,$green,$blue"
+                                )
+                            }
                         }
                     }
 
@@ -611,6 +697,59 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun checkBluetoothPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+
+    private fun requestBluetoothPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
+                BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE
+            )
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Log.d("MainActivity", "Bluetooth connect permission granted")
+            } else {
+                Toast.makeText(this, "Bluetooth permission is required for app functionality", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun initUI() {
+        dynamicLayoutContainer = findViewById(R.id.dynamicLayoutContainer)
+        settingModeDivider = findViewById(R.id.settingModeDivider)
+        textView = findViewById(R.id.textView5)
+        flexboxLayout = FlexboxLayout(this).apply {
+            flexWrap = FlexWrap.WRAP
+            justifyContent = JustifyContent.SPACE_AROUND
+            setBackgroundColor(Color.TRANSPARENT)
+            id = View.generateViewId()
+        }
+        hideSystemUI()
+    }
+
+    private fun initBluetooth() {
+        val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
+        if (bluetoothAdapter == null) {
+            Log.e("MainActivity", "Bluetooth is not supported on this device.")
+        } else if (!bluetoothAdapter.isEnabled) {
+            Log.w("MainActivity", "Bluetooth is currently disabled.")
+        } else {
+            Log.d("MainActivity", "Bluetooth is supported and enabled.")
+        }
+    }
+
     private fun hideSystemUI() {
         // Use WindowInsetsController for Android 11+
         window.insetsController?.let { controller ->
@@ -641,6 +780,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (checkBluetoothPermission()) {
+            Log.d("MainActivity", "Bluetooth permission is already granted")
+        }
 
         val currentMode = ModeManager.currentMode
         // Update the textView5 with the current mode name
@@ -676,9 +818,13 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("ResourceType")
     private fun showAlarmMenu() {
-        val intenta = Intent(this, AlarmActivity::class.java)
-        intenta.putExtra("use12HourTimeFormat", use12HourTimeFormat)
-        startActivity(intenta)
+        // Create an intent for starting the AlarmActivity
+        val intent = Intent(this, AlarmActivity::class.java).apply {
+            putExtra("use12HourTimeFormat", use12HourTimeFormat) // Pass the time format preference
+        }
+
+        // Launch the AlarmActivity
+        startActivity(intent)
     }
 
     @SuppressLint("ResourceType")

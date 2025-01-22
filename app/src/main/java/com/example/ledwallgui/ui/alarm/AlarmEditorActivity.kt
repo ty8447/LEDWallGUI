@@ -15,14 +15,13 @@ import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.ui.semantics.text
 import com.example.ledwallgui.R
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
 
-class alarmEditorActivity : AppCompatActivity() {
+class AlarmEditorActivity : AppCompatActivity() {
     private var updatedTime: String? = null
     private var alarms: MutableList<Alarm> = mutableListOf()
     private var use12HourTimeFormat = false // Initialize with default value

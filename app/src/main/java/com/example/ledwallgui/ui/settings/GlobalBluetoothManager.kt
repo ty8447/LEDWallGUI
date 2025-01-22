@@ -11,9 +11,12 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothSocket
 import android.content.Context
+import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.example.ledwallgui.PreferenceUtils
+import com.example.ledwallgui.services.BluetoothReconnectionService
 import java.io.IOException
 import java.util.LinkedList
 import java.util.Queue
@@ -72,61 +75,51 @@ object GlobalBluetoothManager {
 
     // Method to update the connection state
     fun setConnectionState(isConnected: Boolean, deviceAddress: String?, deviceName: String?, context: Context) {
-        Log.d(
-            TAG,
-            "setConnectionState called with isConnected = $isConnected, deviceAddress = $deviceAddress, deviceName = $deviceName"
-        )
+        Log.d(TAG, "setConnectionState called with isConnected = $isConnected, deviceAddress = $deviceAddress, deviceName = $deviceName")
 
-        // Check if the connection state changed from true to false and attempt reconnection
         if (_isConnected && !isConnected) {
-            Log.d(TAG, "Connection lost. Attempting reconnection...")
-            attemptReconnect(context) // Pass the context here
+            Log.d(TAG, "Connection lost. Starting reconnection service...")
+            val serviceIntent = Intent(context, BluetoothReconnectionService::class.java)
+            context.startForegroundService(serviceIntent) // Start the service
         }
 
         _isConnected = isConnected
         _deviceAddress = deviceAddress
-        _deviceName = deviceName // Update device name
+        _deviceName = deviceName
 
-        // Log the updated state
-        Log.d(
-            TAG,
-            "Connection state updated: isConnected = $_isConnected, deviceAddress = $_deviceAddress, deviceName = $_deviceName"
-        )
+        Log.d(TAG, "Connection state updated: isConnected = $_isConnected, deviceAddress = $_deviceAddress, deviceName = $_deviceName")
     }
 
+//    private fun attemptReconnect(context: Context) {
+//        if (isRetrying || nrTries >= MAX_TRIES) {
+//            Log.w(TAG, "Max reconnection attempts reached.")
+//            return
+//        }
+//
+//        nrTries++
+//        isRetrying = true
+//        Log.d(TAG, "Reconnection attempt $nrTries/$MAX_TRIES")
+//
+//        // Assuming you have access to the device to reconnect
+//        _deviceAddress?.let { address ->
+//            val device = getDeviceFromAddress(address) // Implement this method to fetch the device using its address
+//            device?.let { connectToDevice(context, it, handler) { success ->
+//                if (success) {
+//                    Log.d(TAG, "Reconnected successfully")
+//                } else {
+//                    Log.e(TAG, "Reconnection failed")
+//                    attemptReconnect(context) // Retry reconnection if it fails
+//                }
+//            }}
+//        }
+//    }
 
-    private fun attemptReconnect(context: Context) {
-        if (isRetrying || nrTries >= MAX_TRIES) {
-            Log.w(TAG, "Max reconnection attempts reached.")
-            return
-        }
-
-        nrTries++
-        isRetrying = true
-        Log.d(TAG, "Reconnection attempt $nrTries/$MAX_TRIES")
-
-        // Assuming you have access to the device to reconnect
-        _deviceAddress?.let { address ->
-            val device = getDeviceFromAddress(address) // Implement this method to fetch the device using its address
-            device?.let { connectToDevice(context, it, handler) { success ->
-                if (success) {
-                    Log.d(TAG, "Reconnected successfully")
-                } else {
-                    Log.e(TAG, "Reconnection failed")
-                    attemptReconnect(context) // Retry reconnection if it fails
-                }
-            }}
-        }
-    }
-
-
-    private fun getDeviceFromAddress(address: String): BluetoothDevice? {
+    fun getDeviceFromAddress(address: String): BluetoothDevice? {
         // Retrieve the BluetoothDevice object using the address (implementation depends on your app structure)
         // You can use BluetoothAdapter to get the device from address
         val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
         return bluetoothAdapter?.getRemoteDevice(address)
     }
-
 
     // Method to synchronize the connection state
     @SuppressLint("MissingPermission")
@@ -184,6 +177,10 @@ object GlobalBluetoothManager {
                     Log.i(TAG, "Connected to GATT server.")
                     modeInfoList.clear()
                     setConnectionState(true, device.address, device.name, context)
+
+                    val preferenceUtils = PreferenceUtils(context)
+                    preferenceUtils.saveDeviceAddress(device.address)
+
                     Log.d(TAG, "Discovering services...")
                     gatt?.discoverServices() ?: run {
                         Log.e(TAG, "Failed to call discoverServices. GATT is null.")
@@ -695,7 +692,7 @@ object GlobalBluetoothManager {
     }
 
     // Method to disconnect from a device
-    fun disconnect() {
+    fun disconnect(context: Context) {
         Log.d(TAG, "disconnect called")
         try {
             bluetoothSocket?.close()
@@ -706,6 +703,10 @@ object GlobalBluetoothManager {
             _deviceName = null
             _isConnected = false
             modeInfoList.clear()
+
+            // Clear the device address in SharedPreferences when disconnected
+            val preferenceUtils = PreferenceUtils(context)
+            preferenceUtils.saveDeviceAddress("")
         } catch (e: IOException) {
             Log.e(TAG, "Error during disconnect", e)
         } finally {
@@ -713,6 +714,7 @@ object GlobalBluetoothManager {
             Log.d(TAG, "Disconnected and resources cleared")
         }
     }
+
 
 
     data class ModeInfo(
