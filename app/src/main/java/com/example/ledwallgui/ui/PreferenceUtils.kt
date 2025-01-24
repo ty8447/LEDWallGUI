@@ -4,8 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import com.example.ledwallgui.ui.alarm.Alarm
 
 
 class PreferenceUtils(private val context: Context) {
@@ -62,22 +60,28 @@ class PreferenceUtils(private val context: Context) {
         return sharedPreferences.getBoolean("is_12_hour_time", true)  // Default to true if not set
     }
 
-
-    fun saveAlarms(alarms: List<Alarm>) {
-        val alarmsJson = gson.toJson(alarms)
-        val editor = sharedPreferences.edit()
-        editor.putString("alarmsJson", alarmsJson)
-        editor.apply()
+    // For saving the PIN dynamically based on actionType
+    fun setString(context: Context, actionType: String, value: String) {
+        val prefs = context.getSharedPreferences("settings_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("${actionType}_pin", value).apply()
     }
 
-    fun getAlarms(): List<Alarm> {
-        val alarmsJson = sharedPreferences.getString("alarmsJson", null)
-        return if (alarmsJson != null) {
-            val alarmType = object : TypeToken<List<Alarm>>() {}.type
-            gson.fromJson(alarmsJson, alarmType)
-        } else {
-            emptyList()
-        }
+    // For retrieving the PIN dynamically based on actionType
+    fun getString(context: Context, actionType: String, defaultValue: String): String {
+        val prefs = context.getSharedPreferences("settings_prefs", Context.MODE_PRIVATE)
+        return prefs.getString("${actionType}_pin", defaultValue) ?: defaultValue
+    }
+
+    // For saving the lock state dynamically based on actionType
+    fun setBoolean(context: Context, actionType: String, value: Boolean) {
+        val prefs = context.getSharedPreferences("settings_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("${actionType}_locked", value).apply()
+    }
+
+    // For retrieving the lock state dynamically based on actionType
+    fun getBoolean(context: Context, actionType: String, defaultValue: Boolean): Boolean {
+        val prefs = context.getSharedPreferences("settings_prefs", Context.MODE_PRIVATE)
+        return prefs.getBoolean("${actionType}_locked", defaultValue)
     }
 
     companion object {

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="@drawable/popup_background"
+    android:gravity="center">
+
+<Button
+android:id="@+id/lockUnlockLEDConfigButton"
+android:layout_width="match_parent"
+android:layout_height="wrap_content"
+android:text="Lock/Unlock LED Config"
+android:textSize="18sp"
+android:padding="16dp"
+android:layout_marginBottom="8dp" />
+
+<Button
+android:id="@+id/lockUnlockSettingsMenuButton"
+android:layout_width="match_parent"
+android:layout_height="wrap_content"
+android:text="Lock/Unlock Settings Menu"
+android:textSize="18sp"
+android:padding="16dp"
+android:layout_marginBottom="8dp" />
+
+<Button
+android:id="@+id/lockUnlockAlarmsButton"
+android:layout_width="match_parent"
+android:layout_height="wrap_content"
+android:text="Lock/Unlock Alarms"
+android:textSize="18sp"
+android:padding="16dp" />
+    </LinearLayout>

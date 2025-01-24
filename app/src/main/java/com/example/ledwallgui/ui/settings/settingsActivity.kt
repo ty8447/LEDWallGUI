@@ -2,6 +2,7 @@ package com.example.ledwallgui.ui.settings
 
 import android.app.Activity
 import android.Manifest
+import android.app.Dialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.DialogInterface
@@ -21,6 +22,7 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.Toast
 import android.widget.TextView
@@ -294,6 +296,152 @@ class settingsActivity : AppCompatActivity() {
             builder.show()
         }
 
+        lockConfigButton.setOnClickListener {
+            // Create a dialog for the popup
+            val popupDialog = Dialog(this)
+            popupDialog.setContentView(R.layout.popup_lock_config) // Use a custom layout
+            popupDialog.setCancelable(true) // Allow dismissing by clicking outside
+
+            // Access the buttons from the dialog layout
+            val lockUnlockLEDConfigButton = popupDialog.findViewById<Button>(R.id.lockUnlockLEDConfigButton)
+            val lockUnlockSettingsMenuButton = popupDialog.findViewById<Button>(R.id.lockUnlockSettingsMenuButton)
+            val lockUnlockAlarmsButton = popupDialog.findViewById<Button>(R.id.lockUnlockAlarmsButton)
+
+            // Function to update the button text based on the state
+            fun updateButtonText() {
+                val preferenceUtils = PreferenceUtils(this)
+                val isLEDConfigLocked = preferenceUtils.getBoolean(this, "led_config_locked", false)
+                val isSettingsMenuLocked = preferenceUtils.getBoolean(this, "settings_menu_locked", false)
+                val isAlarmsLocked = preferenceUtils.getBoolean(this, "alarms_locked", false)
+
+                lockUnlockLEDConfigButton.text = if (isLEDConfigLocked) "Unlock LED Config" else "Lock LED Config"
+                lockUnlockSettingsMenuButton.text = if (isSettingsMenuLocked) "Unlock Settings Menu" else "Lock Settings Menu"
+                lockUnlockAlarmsButton.text = if (isAlarmsLocked) "Unlock Alarms" else "Lock Alarms"
+            }
+
+            // Initially update button text
+            updateButtonText()
+
+            // Function to show PIN dialog
+            fun showPinDialog(isLockAction: Boolean, actionType: String) {
+                val pinDialog = Dialog(this)
+                val preferenceUtils = PreferenceUtils(this)
+                pinDialog.setContentView(R.layout.popup_pin_entry)
+                pinDialog.window?.setLayout(
+                    (resources.displayMetrics.widthPixels * 0.8).toInt(),  // 80% of the screen width
+                    (resources.displayMetrics.heightPixels * 0.8).toInt()  // 25% of the screen height
+                )
+                pinDialog.setCancelable(true)
+
+                val enteredPin = StringBuilder() // To store the entered PIN
+
+                // Access the pinDisplayText TextView to display the PIN
+                val pinDisplayText = pinDialog.findViewById<TextView>(R.id.pinDisplayText)
+
+                // Set up the keypad buttons
+                val numButtons = arrayOf(
+                    pinDialog.findViewById<Button>(R.id.num1),
+                    pinDialog.findViewById<Button>(R.id.num2),
+                    pinDialog.findViewById<Button>(R.id.num3),
+                    pinDialog.findViewById<Button>(R.id.num4),
+                    pinDialog.findViewById<Button>(R.id.num5),
+                    pinDialog.findViewById<Button>(R.id.num6),
+                    pinDialog.findViewById<Button>(R.id.num7),
+                    pinDialog.findViewById<Button>(R.id.num8),
+                    pinDialog.findViewById<Button>(R.id.num9),
+                    pinDialog.findViewById<Button>(R.id.num0)
+                )
+
+                // Add listeners for each button
+                numButtons.forEach { button ->
+                    button.setOnClickListener {
+                        if (enteredPin.length < 4) { // Limit to 4 digits
+                            enteredPin.append(button.text)
+                            pinDisplayText.text = enteredPin.toString() // Update the TextView with the entered PIN
+                        }
+                    }
+                }
+
+                // Clear button functionality
+                pinDialog.findViewById<Button>(R.id.clearButton).setOnClickListener {
+                    enteredPin.clear() // Reset the PIN input
+                    pinDisplayText.text = "" // Clear the displayed PIN
+                }
+
+                // Submit button functionality
+                pinDialog.findViewById<Button>(R.id.pinSubmitButton).setOnClickListener {
+                    // Check if the PIN is saved for the given option
+                    val savedPin = preferenceUtils.getString(this, "${actionType}_pin", "")
+                    if (savedPin.isEmpty()) {
+                        // If no PIN is saved for the option, ask the user to set one
+                        Toast.makeText(this, "No PIN saved for this option. Please set a PIN first.", Toast.LENGTH_SHORT).show()
+                        pinDialog.dismiss()
+                        showPinDialog(isLockAction = true, actionType = actionType)  // Call again to set PIN
+                        return@setOnClickListener
+                    }
+
+                    // Verify the entered PIN using actionType
+                    if (enteredPin.toString() == savedPin) {
+                        // If the PIN matches, toggle the lock state
+                        val newState = !preferenceUtils.getBoolean(this, "${actionType}_locked", false)
+                        preferenceUtils.setBoolean(this, "${actionType}_locked", newState)
+
+                        // Update the button text immediately
+                        updateButtonText()
+
+                        // Force UI refresh
+                        lockUnlockLEDConfigButton.invalidate()  // Refresh button view
+                        Log.d("SettingsActivity", "$actionType Lock state changed to: $newState")
+                        pinDialog.dismiss()
+                    } else {
+                        // If the PIN does not match, show an error
+                        Toast.makeText(this, "Incorrect PIN. Please try again.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                pinDialog.show()
+            }
+
+            // Set up button click listeners to toggle states and update preferences
+            lockUnlockLEDConfigButton.setOnClickListener {
+                val preferenceUtils = PreferenceUtils(this)
+                val isLEDConfigLocked = preferenceUtils.getBoolean(this, "led_config_locked", false)
+                if (isLEDConfigLocked) {
+                    // If locked, show PIN entry to unlock
+                    showPinDialog(isLockAction = false, actionType = "led_config")
+                } else {
+                    // If unlocked, show PIN entry to lock
+                    showPinDialog(isLockAction = true, actionType = "led_config")
+                }
+            }
+
+            lockUnlockSettingsMenuButton.setOnClickListener {
+                val preferenceUtils = PreferenceUtils(this)
+                val isSettingsMenuLocked = preferenceUtils.getBoolean(this, "settings_menu_locked", false)
+                if (isSettingsMenuLocked) {
+                    // If locked, show PIN entry to unlock
+                    showPinDialog(isLockAction = false, actionType = "settings_menu")
+                } else {
+                    // If unlocked, show PIN entry to lock
+                    showPinDialog(isLockAction = true, actionType = "settings_menu")
+                }
+            }
+
+            lockUnlockAlarmsButton.setOnClickListener {
+                val preferenceUtils = PreferenceUtils(this)
+                val isAlarmsLocked = preferenceUtils.getBoolean(this, "alarms_locked", false)
+                if (isAlarmsLocked) {
+                    // If locked, show PIN entry to unlock
+                    showPinDialog(isLockAction = false, actionType = "alarms")
+                } else {
+                    // If unlocked, show PIN entry to lock
+                    showPinDialog(isLockAction = true, actionType = "alarms")
+                }
+            }
+
+            // Show the dialog
+            popupDialog.show()
+        }
 
         if (!checkMicrophonePermission()) {
             micButton.text = "Mic\n\nRequest Permission"
@@ -314,12 +462,6 @@ class settingsActivity : AppCompatActivity() {
             val editor = prefs.edit()
             editor.putBoolean("mic_enabled", micEnabled)
             editor.apply()
-        }
-
-        lockConfigButton.text = if (lockConfigEnabled) {
-            "Lock Config\n\nOn"
-        } else {
-            "Lock Config\n\nOff"
         }
 
         connectButton.setOnClickListener{
@@ -362,24 +504,24 @@ class settingsActivity : AppCompatActivity() {
             )
         }
 
-        lockConfigButton.setOnClickListener {
-            lockConfigEnabled = !lockConfigEnabled
-            lockConfigButton.text = if (lockConfigEnabled) {
-                "Lock Config\n\nOn"
-            } else {
-                "Lock Config\n\nOff"
-            }
-            lockConfigButton.setBackgroundResource(
-            if (lockConfigEnabled){
-                R.drawable.settings_button_background_enabled
-            } else {
-                R.drawable.settings_button_background
-            }
-            )
-            val editor = prefs.edit()
-            editor.putBoolean("lock_config_enabled", lockConfigEnabled)
-            editor.apply()
-        }
+//        lockConfigButton.setOnClickListener {
+//            lockConfigEnabled = !lockConfigEnabled
+//            lockConfigButton.text = if (lockConfigEnabled) {
+//                "Lock Config\n\nOn"
+//            } else {
+//                "Lock Config\n\nOff"
+//            }
+//            lockConfigButton.setBackgroundResource(
+//            if (lockConfigEnabled){
+//                R.drawable.settings_button_background_enabled
+//            } else {
+//                R.drawable.settings_button_background
+//            }
+//            )
+//            val editor = prefs.edit()
+//            editor.putBoolean("lock_config_enabled", lockConfigEnabled)
+//            editor.apply()
+//        }
 
         if (!checkCameraPermission()) {
             motionButton.text = "Motion Detection\n\nRequest Permission"

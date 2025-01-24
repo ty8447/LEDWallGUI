@@ -119,7 +119,7 @@
                 android:layout_weight="1"
                 android:textSize="20dp"
                 android:background="@drawable/settings_button_background"
-                android:text="Lock Config" />
+                android:text="Lock Function" />
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/motionButton"
