@@ -1,106 +1,244 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.cardview.widget.CardView
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:card_view="http://schemas.android.com/apk/res-auto"
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
+    xmlns:card_view="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginVertical="8dp"
     android:layout_marginHorizontal="16dp"
-    card_view:cardElevation="4dp"
+    android:layout_marginVertical="8dp"
+    card_view:cardBackgroundColor="@color/lighter_background"
     card_view:cardCornerRadius="12dp"
-    card_view:cardBackgroundColor="@color/lighter_background">
+    card_view:cardElevation="4dp">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
-        <RelativeLayout
-            android:id="@+id/alarmItemLayout"
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/mainContentLayout"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:padding="16dp"
+            android:paddingStart="32dp"
+            android:paddingEnd="32dp"
             android:background="@color/lighter_background"
-            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/deleteButtonContainer">
+            app:layout_constraintEnd_toStartOf="@id/deleteButtonContainer"
+            app:layout_constraintBottom_toBottomOf="parent">
 
-        <!-- Alarm Name -->
-        <TextView
-            android:id="@+id/alarmNameTextView"
+        <RelativeLayout
+            android:id="@+id/alarmItemLayout"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Morning Alarm"
-            android:textSize="18sp"
-            android:textColor="@color/white"
-            android:textStyle="bold"
-            android:background="@drawable/transparent_background"/>
+            android:background="@drawable/transparent_background"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            android:paddingEnd="10dp">
 
-        <!-- Alarm Time -->
-        <TextView
-            android:id="@+id/alarmTimeTextView"
+            <!-- Alarm Name -->
+            <TextView
+                android:id="@+id/alarmNameTextView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/transparent_background"
+                android:text="Morning Alarm"
+                android:textColor="@color/white"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <!-- Alarm Time -->
+            <TextView
+                android:id="@+id/alarmTimeTextView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/alarmNameTextView"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/transparent_background"
+                android:text="08:00 AM"
+                android:textColor="@color/white"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+            <!-- Repeating Days -->
+            <TextView
+                android:id="@+id/repeatDaysTextView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/alarmTimeTextView"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/transparent_background"
+                android:text="Repeat Days"
+                android:textColor="@color/white"
+                android:textSize="14sp" />
+
+        </RelativeLayout>
+
+        <!-- Vertical Divider -->
+        <View
+            android:id="@+id/verticalDivider"
+            android:layout_width="1dp"
+            android:layout_height="0dp"
+            android:background="@color/white"
+            app:layout_constraintStart_toEndOf="@id/alarmItemLayout"
+            app:layout_constraintEnd_toStartOf="@id/alarmParametersContainer"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            android:layout_marginTop="30dp"
+            android:layout_marginBottom="30dp"/>
+
+        <!-- Alarm LED Parameters Box -->
+        <RelativeLayout
+            android:id="@+id/alarmParametersContainer"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:background="@drawable/transparent_background"
+            android:padding="8dp"
+            app:layout_constraintStart_toEndOf="@id/alarmItemLayout"
+            app:layout_constraintEnd_toStartOf="@id/alarmToggleContainer"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent">
+
+            <GridLayout
+                android:id="@+id/parametersGridLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:columnCount="6"
+                android:rowCount="8"
+                android:alignmentMode="alignMargins"
+                android:useDefaultMargins="true">
+
+                <!-- LED Parameters Title -->
+                <TextView
+                    android:id="@+id/ledParametersTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnSpan="6"
+                    android:layout_gravity="fill"
+                    android:gravity="center"
+                    android:text="LED Parameters"
+                    android:textColor="@color/white"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <!-- Brightness -->
+                <TextView
+                    android:id="@+id/brightnessTextView"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:text="Brightness:"
+                    android:textColor="@color/white"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/brightnessValueTextView"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:gravity="end"
+                    android:text="75"
+                    android:textColor="@color/white"
+                    android:textSize="14sp" />
+
+                <!-- Ramp Brightness -->
+                <TextView
+                    android:id="@+id/rampBrightnessTextView"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:text="Ramp Brightness:"
+                    android:textColor="@color/white"
+                    android:textSize="14sp" />
+
+                <!-- Mode -->
+                <TextView
+                    android:id="@+id/alarmModeTextView"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:text="Mode:"
+                    android:textColor="@color/white"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/alarmModeValueTextView"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:gravity="end"
+                    android:text="Fade"
+                    android:textColor="@color/white"
+                    android:textSize="14sp" />
+
+                <!-- Speed -->
+                <TextView
+                    android:id="@+id/speedTextView"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:text="Speed:"
+                    android:textColor="@color/white"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/speedValueTextView"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_columnWeight="1"
+                    android:gravity="end"
+                    android:text="5"
+                    android:textColor="@color/white"
+                    android:textSize="14sp" />
+            </GridLayout>
+
+        </RelativeLayout>
+
+        <RelativeLayout
+            android:id="@+id/alarmToggleContainer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_below="@id/alarmNameTextView"
-            android:layout_marginTop="4dp"
-            android:text="08:00 AM"
-            android:textSize="24sp"
-            android:textColor="@color/white"
-            android:textStyle="bold"
-            android:background="@drawable/transparent_background"/>
+            android:padding="16dp"
+            android:background="@drawable/transparent_background"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent">
 
-        <!-- Repeating Days -->
-        <TextView
-            android:id="@+id/repeatDaysTextView"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/alarmTimeTextView"
-            android:layout_marginTop="4dp"
-            android:text="Mon Tue Wed Thu Fri Sat Sun"
-            android:textSize="14sp"
-            android:textColor="@color/white"
-            android:background="@drawable/transparent_background"/>
-
-        <!-- Enable/Disable Toggle -->
-        <Switch
-            android:id="@+id/alarmSwitch"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignParentEnd="true"
-            android:layout_centerVertical="true"
-            android:checked="true"
-            android:textOff=""
-            android:textOn=""
-            android:thumbTint="@color/white"
-            android:trackTint="@color/green"
-            android:background="?android:attr/selectableItemBackground"/>
-
-    </RelativeLayout>
-
-    <!-- Red Box for Delete Button -->
+            <!-- Enable/Disable Toggle -->
+            <Switch
+                android:id="@+id/alarmSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:background="?android:attr/selectableItemBackground"
+                android:checked="true"
+                android:textOff=""
+                android:textOn=""
+                android:thumbTint="@color/white"
+                android:trackTint="@color/green" />
+        </RelativeLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+        <!-- Red Box for Delete Button -->
         <FrameLayout
             android:id="@+id/deleteButtonContainer"
             android:layout_width="75dp"
             android:layout_height="0dp"
             android:background="@color/red"
             android:visibility="gone"
-            app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
 
             <!-- Trashcan (Delete) ImageButton -->
             <ImageButton
                 android:id="@+id/deleteButton"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:src="@drawable/delete_icon"
-                android:background="?android:attr/selectableItemBackground"
                 android:layout_gravity="center"
-                android:scaleType="fitCenter" />
+                android:background="?android:attr/selectableItemBackground"
+                android:scaleType="fitCenter"
+                android:src="@drawable/delete_icon" />
 
         </FrameLayout>
-
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.cardview.widget.CardView>

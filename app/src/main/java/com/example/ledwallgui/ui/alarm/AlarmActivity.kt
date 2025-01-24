@@ -316,6 +316,8 @@ class AlarmAdapter(
         private val alarmName: TextView = itemView.findViewById(R.id.alarmNameTextView)
         private val deleteButton: ImageButton = itemView.findViewById(R.id.deleteButton)
         private val deleteButtonContainer: FrameLayout = itemView.findViewById(R.id.deleteButtonContainer)
+        private val alarmParametersContainer: ViewGroup = itemView.findViewById(R.id.alarmParametersContainer)
+        private val alarmToggleContainer: ViewGroup = itemView.findViewById(R.id.alarmToggleContainer)
         private val repeatDaysTextView: TextView = itemView.findViewById(R.id.repeatDaysTextView)
         private val alarmSwitch: Switch = itemView.findViewById(R.id.alarmSwitch)
 
@@ -332,6 +334,19 @@ class AlarmAdapter(
             alarmName.text = alarm.alarmName
 
             deleteButtonContainer.visibility = if (isDeleteMode) View.VISIBLE else View.GONE
+
+            // Dynamically hide alarm parameters if space is insufficient
+            itemView.post {
+                val layoutWidth = itemView.measuredWidth
+                val containerWidth = alarmParametersContainer.measuredWidth
+                val toggleWidth = alarmToggleContainer.measuredWidth
+
+                if (layoutWidth < containerWidth + toggleWidth) {
+                    alarmParametersContainer.visibility = View.GONE
+                } else {
+                    alarmParametersContainer.visibility = View.VISIBLE
+                }
+            }
 
             // Convert selectedDays to a list and set selected days
             val daysOfWeek = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
