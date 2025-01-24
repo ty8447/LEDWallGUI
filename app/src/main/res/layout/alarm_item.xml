@@ -2,6 +2,8 @@
 <androidx.cardview.widget.CardView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:card_view="http://schemas.android.com/apk/res-auto"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginVertical="8dp"
@@ -10,11 +12,20 @@
     card_view:cardCornerRadius="12dp"
     card_view:cardBackgroundColor="@color/lighter_background">
 
-    <RelativeLayout
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:padding="16dp"
-        android:background="@color/lighter_background">
+        android:layout_height="wrap_content">
+
+        <RelativeLayout
+            android:id="@+id/alarmItemLayout"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:padding="16dp"
+            android:background="@color/lighter_background"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/deleteButtonContainer">
 
         <!-- Alarm Name -->
         <TextView
@@ -59,9 +70,37 @@
             android:layout_height="wrap_content"
             android:layout_alignParentEnd="true"
             android:layout_centerVertical="true"
+            android:checked="true"
             android:textOff=""
             android:textOn=""
             android:thumbTint="@color/white"
-            android:trackTint="@color/light_blue" />
+            android:trackTint="@color/green"
+            android:background="?android:attr/selectableItemBackground"/>
+
     </RelativeLayout>
+
+    <!-- Red Box for Delete Button -->
+        <FrameLayout
+            android:id="@+id/deleteButtonContainer"
+            android:layout_width="75dp"
+            android:layout_height="0dp"
+            android:background="@color/red"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <!-- Trashcan (Delete) ImageButton -->
+            <ImageButton
+                android:id="@+id/deleteButton"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/delete_icon"
+                android:background="?android:attr/selectableItemBackground"
+                android:layout_gravity="center"
+                android:scaleType="fitCenter" />
+
+        </FrameLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.cardview.widget.CardView>

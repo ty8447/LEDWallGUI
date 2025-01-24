@@ -1,5 +1,6 @@
 package com.example.ledwallgui.ui.alarm
 
+import android.animation.ObjectAnimator
 import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -7,7 +8,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -17,11 +17,12 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.ui.semantics.text
+import android.widget.Switch
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -48,6 +49,7 @@ class AlarmActivity : AppCompatActivity() {
     private lateinit var alarmsRecyclerView: RecyclerView
     private lateinit var timeTillNext: TextView
     private lateinit var currentTime: TextView
+    private lateinit var doneButton: Button
 
     private lateinit var preferenceUtils: PreferenceUtils // Declare preferenceUtils
 
@@ -55,12 +57,10 @@ class AlarmActivity : AppCompatActivity() {
     private val alarmsKey = "alarms_list"
     private lateinit var gson: Gson
 
-    private val selectedAlarmIndices = mutableListOf<Int>()
     private val alarms = mutableListOf<Alarm>()
+    private var isDeleteMode = false // Track delete mode
 
     private var use12HourTimeFormat: Boolean = false
-    private val updateIntervalMillis: Long = 30000 // Update every 30 seconds
-    private val handler = Handler()
 
     companion object {
         const val REQUEST_CODE_ADD_ALARM = 101
@@ -120,26 +120,47 @@ class AlarmActivity : AppCompatActivity() {
         deleteButton = findViewById(R.id.deleteButton)
         emptyTextView = findViewById(R.id.emptyTextView)
         addAlarmButton = findViewById(R.id.addAlarmButton)
+        doneButton = findViewById(R.id.doneButton)
         val backButton: ImageButton = findViewById(R.id.aBackButton) // Find the button
 
         hideSystemUI()
         updateCurrentTime()
 
-        alarmAdapter = AlarmAdapter(alarms, { clickedAlarm ->
-            viewAlarmDetails(clickedAlarm)
-        }, use12HourTimeFormat) // Pass the time format flag here
+        // Slide in animation
+        val slideIn = ObjectAnimator.ofFloat(doneButton, "translationY", 1000f, 0f)
+        slideIn.duration = 500 // Duration of animation (in milliseconds)
+        slideIn.start()
+
+        alarmAdapter = AlarmAdapter(
+            alarms,
+            { clickedAlarm -> viewAlarmDetails(clickedAlarm) },
+            use12HourTimeFormat,
+            { saveAlarms() },
+            isDeleteMode,
+            { updateEmptyState() }, // Pass the updateEmptyState method
+            { saveAlarms() } // Pass the saveAlarms method
+        )
 
         alarmsRecyclerView.adapter = alarmAdapter
         alarmsRecyclerView.layoutManager = LinearLayoutManager(this)
 
         cancelButton.setOnClickListener { onCancel() }
         offButton.setOnClickListener { onTurnOff() }
-        deleteButton.setOnClickListener { onDelete() }
+        alarmAdapter.setOnItemLongClickListener { position ->
+            enableDeleteMode(position)
+        }
         addAlarmButton.setOnClickListener { addNewAlarm() }
 
         // Set the back button click listener
         backButton.setOnClickListener {
             finish() // End the activity and go back
+        }
+
+        doneButton.setOnClickListener {
+            isDeleteMode = false
+            alarmAdapter.isDeleteMode = isDeleteMode // Update delete mode in the adapter
+            alarmAdapter.notifyDataSetChanged() // Refresh the RecyclerView
+            doneButton.visibility = View.GONE // Hide Done button after exiting delete mode
         }
     }
 
@@ -260,12 +281,11 @@ class AlarmActivity : AppCompatActivity() {
         // Your logic here
     }
 
-    private fun onDelete() {
-        val selectedAlarms = alarms.filter { it.isSelected }
-        alarms.removeAll(selectedAlarms)
+    private fun enableDeleteMode(position: Int) {
+        isDeleteMode = true
+        alarmAdapter.isDeleteMode = isDeleteMode  // Update delete mode in adapter
         alarmAdapter.notifyDataSetChanged()
-        updateEmptyState()
-        saveAlarms() // Save after deletion
+        doneButton.visibility = View.VISIBLE
     }
 
     private fun updateEmptyState() {
@@ -275,14 +295,29 @@ class AlarmActivity : AppCompatActivity() {
 }
 
 class AlarmAdapter(
-    private val alarms: List<Alarm>,
+    private val alarms: MutableList<Alarm>,  // Use MutableList for modification
     private val onAlarmClick: (Alarm) -> Unit,
-    var use12HourTimeFormat: Boolean // Pass the time format preference
+    var use12HourTimeFormat: Boolean,
+    private val onAlarmStateChanged: () -> Unit,
+    var isDeleteMode: Boolean = false,  // Accept isDeleteMode as a parameter
+    private val updateEmptyState: () -> Unit,  // Reference to updateEmptyState()
+    private val saveAlarms: () -> Unit  // Reference to saveAlarms()
 ) : RecyclerView.Adapter<AlarmAdapter.AlarmViewHolder>() {
+
+    private var onItemLongClickListener: ((Int) -> Unit)? = null
+
+    // Set long press listener
+    fun setOnItemLongClickListener(listener: (Int) -> Unit) {
+        onItemLongClickListener = listener
+    }
 
     inner class AlarmViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val alarmTime: TextView = itemView.findViewById(R.id.alarmTimeTextView)
         private val alarmName: TextView = itemView.findViewById(R.id.alarmNameTextView)
+        private val deleteButton: ImageButton = itemView.findViewById(R.id.deleteButton)
+        private val deleteButtonContainer: FrameLayout = itemView.findViewById(R.id.deleteButtonContainer)
+        private val repeatDaysTextView: TextView = itemView.findViewById(R.id.repeatDaysTextView)
+        private val alarmSwitch: Switch = itemView.findViewById(R.id.alarmSwitch)
 
         fun bind(alarm: Alarm) {
             // Format time based on the 12-hour or 24-hour preference
@@ -291,11 +326,60 @@ class AlarmAdapter(
                 set(Calendar.MINUTE, alarm.minutes)
             }
             val timeFormat = if (use12HourTimeFormat) "hh:mm aaa" else "HH:mm"
-            Log.d("AlarmAdapter", "time formatal: $timeFormat")
             val formattedTime = SimpleDateFormat(timeFormat, Locale.getDefault()).format(calendar.time)
 
             alarmTime.text = formattedTime
             alarmName.text = alarm.alarmName
+
+            deleteButtonContainer.visibility = if (isDeleteMode) View.VISIBLE else View.GONE
+
+            // Convert selectedDays to a list and set selected days
+            val daysOfWeek = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+            val selectedDaysList = alarm.selectedDays.toList() // Convert BooleanArray to List<Boolean>
+
+            val selectedDaysText = if (selectedDaysList.all { it }) {
+                // If all days are selected, show "Everyday"
+                "Everyday"
+            } else {
+                // Otherwise, show selected days
+                selectedDaysList
+                    .mapIndexedNotNull { index, isSelected -> if (isSelected) daysOfWeek[index] else null }
+                    .joinToString(" ")
+            }
+
+            if (selectedDaysText.isNotEmpty()) {
+                repeatDaysTextView.text = selectedDaysText
+                repeatDaysTextView.visibility = View.VISIBLE
+            } else {
+                repeatDaysTextView.visibility = View.GONE
+            }
+
+            // Set the switch state based on alarm.isEnabled
+            alarmSwitch.isChecked = alarm.isEnabled
+
+            // Listen for toggle changes to update the alarm's enabled state
+            alarmSwitch.setOnCheckedChangeListener { _, isChecked ->
+                alarm.isEnabled = isChecked
+                // You may want to save the alarms after toggling
+                onAlarmStateChanged()
+            }
+
+            // Show delete button only in delete mode
+            deleteButton.visibility = if (isDeleteMode) View.VISIBLE else View.GONE
+
+            // Don't shrink item in delete mode, only show delete button
+            itemView.layoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+
+            // Handle delete button click
+            deleteButton.setOnClickListener {
+                onDeleteClicked(adapterPosition)
+            }
+
+            // Handle long click to enable delete mode
+            itemView.setOnLongClickListener {
+                onItemLongClickListener?.invoke(adapterPosition)
+                true
+            }
 
             // Handle click
             itemView.setOnClickListener { onAlarmClick(alarm) }
@@ -312,4 +396,12 @@ class AlarmAdapter(
     }
 
     override fun getItemCount(): Int = alarms.size
+
+    // Handle delete button click
+    private fun onDeleteClicked(position: Int) {
+        alarms.removeAt(position) // Remove alarm from the list
+        notifyItemRemoved(position) // Notify adapter
+        updateEmptyState() // Check if the list is empty
+        saveAlarms() // Save the updated alarms list to SharedPreferences
+    }
 }
