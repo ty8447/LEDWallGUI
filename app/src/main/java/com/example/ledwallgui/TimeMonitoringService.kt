@@ -83,7 +83,7 @@ class TimeMonitoringService : Service() {
     }
 
     private fun updateUI() {
-        Log.d(TAG, "TimeMonitoringService updateUI")
+//        Log.d(TAG, "TimeMonitoringService updateUI")
         val intent = Intent(ACTION_TIME_CHANGED)
         sendBroadcast(intent)
     }

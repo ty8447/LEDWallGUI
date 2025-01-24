@@ -1,6 +1,67 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.cardview.widget.CardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:card_view="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="wrap_content"
+    android:layout_marginVertical="8dp"
+    android:layout_marginHorizontal="16dp"
+    card_view:cardElevation="4dp"
+    card_view:cardCornerRadius="12dp"
+    card_view:cardBackgroundColor="@color/lighter_background">
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp"
+        android:background="@color/lighter_background">
+
+        <!-- Alarm Name -->
+        <TextView
+            android:id="@+id/alarmNameTextView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Morning Alarm"
+            android:textSize="18sp"
+            android:textColor="@color/white"
+            android:textStyle="bold"
+            android:background="@drawable/transparent_background"/>
+
+        <!-- Alarm Time -->
+        <TextView
+            android:id="@+id/alarmTimeTextView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/alarmNameTextView"
+            android:layout_marginTop="4dp"
+            android:text="08:00 AM"
+            android:textSize="24sp"
+            android:textColor="@color/white"
+            android:textStyle="bold"
+            android:background="@drawable/transparent_background"/>
+
+        <!-- Repeating Days -->
+        <TextView
+            android:id="@+id/repeatDaysTextView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/alarmTimeTextView"
+            android:layout_marginTop="4dp"
+            android:text="Mon Tue Wed Thu Fri Sat Sun"
+            android:textSize="14sp"
+            android:textColor="@color/white"
+            android:background="@drawable/transparent_background"/>
+
+        <!-- Enable/Disable Toggle -->
+        <Switch
+            android:id="@+id/alarmSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:textOff=""
+            android:textOn=""
+            android:thumbTint="@color/white"
+            android:trackTint="@color/light_blue" />
+    </RelativeLayout>
+</androidx.cardview.widget.CardView>

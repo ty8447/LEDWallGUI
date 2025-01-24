@@ -102,16 +102,25 @@ class MainActivity : AppCompatActivity() {
             if (result.resultCode == RESULT_OK) {
                 // Handle the result here
                 val data = result.data
-                use12HourTimeFormat = data?.getBooleanExtra("use12HourTimeFormat", true) ?: true
-                timeFormatOption = data?.getIntExtra("timeFormatOption", 0) ?: 0
+
+                // Retrieve the stored boolean from shared preferences for 12-hour time format
+                val prefs = getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+                val use12HourTimeFormat = prefs.getBoolean("is_12_hour_time", true) // Default to true if not set
+
+                // Retrieve the time format option (defaults to 0)
+                val timeFormatOption = data?.getIntExtra("timeFormatOption", 0) ?: 0
 
                 // Log the updated settings for debugging
                 Log.d("Settings", "use12HourTimeFormat: $use12HourTimeFormat, timeFormatOption: $timeFormatOption")
 
                 // Optionally update UI or preferences based on the returned data
+                // Save the updated boolean and time format option to SharedPreferences
+                val editor = prefs.edit()
+                editor.putBoolean("is_12_hour_time", use12HourTimeFormat)
+                editor.putInt("timeFormatOption", timeFormatOption)
+                editor.apply()
             }
         }
-
 
         window.setFlags(
             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
@@ -770,7 +779,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateConnectIcon() {
         val connectButton: ImageView = findViewById(R.id.imageView)
-        Log.d("MainActivity", "Updating connect icon: $connectState")
+//        Log.d("MainActivity", "Updating connect icon: $connectState")
         if (GlobalBluetoothManager.isConnected) { // Use GlobalBluetoothManager.isConnected
             connectButton.setImageResource(R.drawable.stat_con_button)
         } else {
@@ -820,6 +829,7 @@ class MainActivity : AppCompatActivity() {
     private fun showAlarmMenu() {
         // Create an intent for starting the AlarmActivity
         val intent = Intent(this, AlarmActivity::class.java).apply {
+            val use12HourTimeFormat = getUse12HourTimeFormat() // Retrieve the preference
             putExtra("use12HourTimeFormat", use12HourTimeFormat) // Pass the time format preference
         }
 
@@ -830,8 +840,8 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("ResourceType")
     private fun showSettingsMenu() {
         val intent = Intent(this, settingsActivity::class.java)
+        val use12HourTimeFormat = getUse12HourTimeFormat() // Retrieve the preference
         intent.putExtra("use12HourTimeFormat", use12HourTimeFormat)
-        intent.putExtra("timeFormatOption", timeFormatOption)
 
         settingsActivityResultLauncher.launch(intent)
     }
@@ -839,32 +849,15 @@ class MainActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == SETTINGS_REQUEST_CODE && resultCode == RESULT_OK) {
-            // Get the selected time format option from settings activity
-            timeFormatOption = data?.getIntExtra("timeFormatOption", 0) ?: 0
-
-            // Update use12HourTimeFormat based on the timeFormatOption
-            use12HourTimeFormat = when (timeFormatOption) {
-                1 -> true
-                2 -> false
-                0 -> {
-                    // Logic to determine the device's time format
-                    val is12Hour = isDeviceTimeIn12HourFormat()
-                    if (is12Hour) {
-//                        ("Device time format: 12-hour")
-                    } else {
-                        println("Device time format: 24-hour")
-                    }
-                    is12Hour
-                }
-                else -> use12HourTimeFormat // Default value
-            }
-
-        } else if (requestCode == MODES_REQUEST_CODE && resultCode == RESULT_OK) {
-            val selectedMode = currentMode
-            Log.d("MainActivity", "Selected mode: $selectedMode")
+            // You no longer need to update use12HourTimeFormat directly here
+            // The SettingsActivity will update the preference on its own
         }
     }
 
+    private fun getUse12HourTimeFormat(): Boolean {
+        val prefs = getSharedPreferences("settings_prefs", Context.MODE_PRIVATE)
+        return prefs.getBoolean("is_12_hour_time", true) // Retrieve the saved time format
+    }
 
     private fun isDeviceTimeIn12HourFormat(): Boolean {
         // Implement the logic to determine if the device's time format is 12-hour

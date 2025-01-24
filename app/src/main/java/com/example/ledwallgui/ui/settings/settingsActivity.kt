@@ -328,15 +328,37 @@ class settingsActivity : AppCompatActivity() {
         }
 
         timeButton.setOnClickListener {
+            // Log the current time format before changing
+            Log.d(
+                "Settings Activity",
+                "Current time format option before change: $timeFormatOption"
+            )
+
+            // Switch the time format option
             timeFormatOption = (timeFormatOption + 1) % timeFormatOptions.size
+
+            // Log the new time format after change
+            Log.d("Settings Activity", "New time format option after change: $timeFormatOption")
+
+            // Update the button text
             updateTimeButtonState()
+            updateTimeFormatSetting()
+
+            // Pass the new option to the parent activity
             val intent = Intent()
             intent.putExtra("timeFormatOption", timeFormatOption)
             setResult(Activity.RESULT_OK, intent)
 
+            // Save the new time format setting in SharedPreferences
             val editor = prefs.edit()
             editor.putInt("time_format_option", timeFormatOption)
             editor.apply()
+
+            // Log the SharedPreferences update
+            Log.d(
+                "Settings Activity",
+                "Time format option saved to SharedPreferences: $timeFormatOption"
+            )
         }
 
         lockConfigButton.setOnClickListener {
@@ -447,6 +469,27 @@ class settingsActivity : AppCompatActivity() {
         val timeButton: Button = findViewById(R.id.timebutton)
         timeButton.text = "Time Format\n\n" + timeFormatOptions[timeFormatOption]
     }
+
+    private fun updateTimeFormatSetting() {
+        val prefs = getSharedPreferences()
+        val editor = prefs.edit()
+
+        // If timeFormatOption is 0 (match device), we don't need to change the boolean
+        val is12HourTime = when (timeFormatOption) {
+            1 -> true // 12 hour time format
+            2 -> false // 24 hour time format
+            else -> prefs.getBoolean("is_12_hour_time", true) // Default to true if it's 0 (match device)
+        }
+
+        // Save the boolean to SharedPreferences
+        editor.putBoolean("is_12_hour_time", is12HourTime)
+        editor.apply()
+
+        // Log for debugging
+        Log.d("Settings Activity", "Time format option saved as 12-hour: $is12HourTime")
+    }
+
+
 
     companion object {
         // ... (other constants) ...

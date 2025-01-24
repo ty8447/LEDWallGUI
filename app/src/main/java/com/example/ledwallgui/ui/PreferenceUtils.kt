@@ -2,6 +2,7 @@ package com.example.ledwallgui
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.example.ledwallgui.ui.alarm.Alarm
@@ -52,7 +53,14 @@ class PreferenceUtils(private val context: Context) {
     fun saveUse12HourTimeFormat(use12HourTimeFormat: Boolean) {
         val editor = sharedPreferences.edit()
         editor.putBoolean("use12HourTimeFormat", use12HourTimeFormat)
+        Log.d("PreferenceUtils", "saveUse12HourTimeFormat: $use12HourTimeFormat")
         editor.apply()
+    }
+
+    // Retrieve the 12-hour time format setting (default to true if not set)
+    fun getUse12HourTimeFormat(): Boolean {
+        Log.d("PreferenceUtils", "getUse12HourTimeFormat called: ${sharedPreferences.getBoolean("use12HourTimeFormat", false)}")
+        return sharedPreferences.getBoolean("use12HourTimeFormat", false) // Default to true
     }
 
     fun saveAlarms(alarms: List<Alarm>) {
