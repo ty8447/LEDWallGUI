@@ -21,6 +21,7 @@ import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.ui.semantics.text
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -48,6 +49,8 @@ class AlarmActivity : AppCompatActivity() {
     private lateinit var timeTillNext: TextView
     private lateinit var currentTime: TextView
 
+    private lateinit var preferenceUtils: PreferenceUtils // Declare preferenceUtils
+
     private val sharedPreferencesName = "alarm_prefs"
     private val alarmsKey = "alarms_list"
     private lateinit var gson: Gson
@@ -67,6 +70,8 @@ class AlarmActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         gson = Gson() // Initialize Gson
+        preferenceUtils = PreferenceUtils(this) // Initialize preferenceUtils here
+        use12HourTimeFormat = preferenceUtils.getIs12HourTimeFormat() // Load preference
         setupUI()
         configureSharedPreferences()
 
@@ -83,7 +88,10 @@ class AlarmActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        use12HourTimeFormat = preferenceUtils.getIs12HourTimeFormat() // Reload preference
+        alarmAdapter.use12HourTimeFormat = use12HourTimeFormat // Update adapter
         refreshAlarms()
+        updateCurrentTime()
         updateEmptyState()
     }
 
@@ -117,9 +125,10 @@ class AlarmActivity : AppCompatActivity() {
         hideSystemUI()
         updateCurrentTime()
 
-        alarmAdapter = AlarmAdapter(alarms) { clickedAlarm ->
+        alarmAdapter = AlarmAdapter(alarms, { clickedAlarm ->
             viewAlarmDetails(clickedAlarm)
-        }
+        }, use12HourTimeFormat) // Pass the time format flag here
+
         alarmsRecyclerView.adapter = alarmAdapter
         alarmsRecyclerView.layoutManager = LinearLayoutManager(this)
 
@@ -136,7 +145,7 @@ class AlarmActivity : AppCompatActivity() {
 
     private fun configureSharedPreferences() {
         val preferenceUtils = PreferenceUtils(this)
-        use12HourTimeFormat = preferenceUtils.getUse12HourTimeFormat() // Retrieve time format preference
+        use12HourTimeFormat = preferenceUtils.getIs12HourTimeFormat() // Retrieve time format preference
         Log.d("AlarmActivity", "time format1: $use12HourTimeFormat")
     }
 
@@ -193,13 +202,13 @@ class AlarmActivity : AppCompatActivity() {
 
     private fun updateCurrentTime() {
         val calendar = Calendar.getInstance()
-        val formattedTime = if (use12HourTimeFormat) {
-            SimpleDateFormat("hh:mm a", Locale.US).format(calendar.time)
-        } else {
-            SimpleDateFormat("HH:mm", Locale.US).format(calendar.time)
-        }
+        Log.d("AlarmActivity", "time format2: $use12HourTimeFormat")
+        val timeFormat = if (use12HourTimeFormat) "hh:mm aaa" else "HH:mm" // Change "KK" to "hh"
+        Log.d("AlarmActivity", "time formatct: $timeFormat")
+        val formattedTime = SimpleDateFormat(timeFormat, Locale.getDefault()).format(calendar.time)
         currentTime.text = formattedTime
     }
+
 
     private fun viewAlarmDetails(clickedAlarm: Alarm) {
         val alarmIndex = alarms.indexOf(clickedAlarm)
@@ -222,6 +231,7 @@ class AlarmActivity : AppCompatActivity() {
         val intent = Intent(this, AlarmEditorActivity::class.java).apply {
             putExtra("isEditMode", false)
             putParcelableArrayListExtra("alarmsList", ArrayList(alarms))
+            putExtra("use12HourTimeFormat", use12HourTimeFormat)
         }
         startActivityForResult(intent, REQUEST_CODE_ADD_ALARM)
         updateEmptyState()
@@ -266,30 +276,29 @@ class AlarmActivity : AppCompatActivity() {
 
 class AlarmAdapter(
     private val alarms: List<Alarm>,
-    private val onAlarmClick: (Alarm) -> Unit
+    private val onAlarmClick: (Alarm) -> Unit,
+    var use12HourTimeFormat: Boolean // Pass the time format preference
 ) : RecyclerView.Adapter<AlarmAdapter.AlarmViewHolder>() {
 
     inner class AlarmViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val alarmTime: TextView = itemView.findViewById(R.id.alarmTimeTextView)
         private val alarmName: TextView = itemView.findViewById(R.id.alarmNameTextView)
-//        private val alarmSwitch: Switch = itemView.findViewById(R.id.alarmSwitch)
 
         fun bind(alarm: Alarm) {
-            // Set time and name
-            val time = String.format("%02d:%02d", alarm.hours, alarm.minutes)
-            alarmTime.text = time
-            alarmName.text = alarm.alarmName
+            // Format time based on the 12-hour or 24-hour preference
+            val calendar = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, alarm.hours)
+                set(Calendar.MINUTE, alarm.minutes)
+            }
+            val timeFormat = if (use12HourTimeFormat) "hh:mm aaa" else "HH:mm"
+            Log.d("AlarmAdapter", "time formatal: $timeFormat")
+            val formattedTime = SimpleDateFormat(timeFormat, Locale.getDefault()).format(calendar.time)
 
-            // Set enabled state
-//            alarmSwitch.isChecked = alarm.isEnabled
+            alarmTime.text = formattedTime
+            alarmName.text = alarm.alarmName
 
             // Handle click
             itemView.setOnClickListener { onAlarmClick(alarm) }
-
-            // Handle switch toggle
-//            alarmSwitch.setOnCheckedChangeListener { _, isChecked ->
-//                alarm.isEnabled = isChecked
-//            }
         }
     }
 
@@ -304,5 +313,3 @@ class AlarmAdapter(
 
     override fun getItemCount(): Int = alarms.size
 }
-
-

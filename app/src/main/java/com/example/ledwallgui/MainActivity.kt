@@ -692,8 +692,8 @@ class MainActivity : AppCompatActivity() {
         Log.d("PowerState", "Saving power state: $powerState")
         preferenceUtils.savePowerState(powerState)
         preferenceUtils.saveConnectState(connectState)
-        preferenceUtils.saveTimeFormatOption(timeFormatOption)
-        preferenceUtils.saveUse12HourTimeFormat(use12HourTimeFormat)
+//        preferenceUtils.saveTimeFormatOption(timeFormatOption)
+//        preferenceUtils.saveIs12HourTimeFormat(use12HourTimeFormat)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

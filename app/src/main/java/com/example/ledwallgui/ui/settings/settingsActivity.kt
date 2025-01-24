@@ -31,6 +31,7 @@ import androidx.core.content.ContextCompat
 import com.example.ledwallgui.R
 import androidx.appcompat.app.AlertDialog
 import androidx.camera.core.CameraSelector
+import com.example.ledwallgui.PreferenceUtils
 import com.example.ledwallgui.TimeMonitoringService
 import com.example.ledwallgui.ui.MotionDetectionService
 import com.google.android.material.snackbar.Snackbar
@@ -471,25 +472,27 @@ class settingsActivity : AppCompatActivity() {
     }
 
     private fun updateTimeFormatSetting() {
-        val prefs = getSharedPreferences()
-        val editor = prefs.edit()
+        val preferenceUtils = PreferenceUtils(this)
 
-        // If timeFormatOption is 0 (match device), we don't need to change the boolean
+        // Determine the 12-hour time format based on timeFormatOption
         val is12HourTime = when (timeFormatOption) {
-            1 -> true // 12 hour time format
-            2 -> false // 24 hour time format
-            else -> prefs.getBoolean("is_12_hour_time", true) // Default to true if it's 0 (match device)
+            1 -> true // 12-hour time format
+            2 -> false // 24-hour time format
+            0 -> isDeviceTimeIn12HourFormat() // Fetch the device's time format
+            else -> preferenceUtils.getIs12HourTimeFormat() // Default to stored value
         }
 
-        // Save the boolean to SharedPreferences
-        editor.putBoolean("is_12_hour_time", is12HourTime)
-        editor.apply()
+        // Save the 12-hour time format preference using PreferenceUtils
+        preferenceUtils.saveIs12HourTimeFormat(is12HourTime)
 
         // Log for debugging
         Log.d("Settings Activity", "Time format option saved as 12-hour: $is12HourTime")
     }
 
-
+    private fun isDeviceTimeIn12HourFormat(): Boolean {
+        val timeFormat = android.text.format.DateFormat.is24HourFormat(this)
+        return !timeFormat // Returns true if 12-hour format, false if 24-hour format
+    }
 
     companion object {
         // ... (other constants) ...

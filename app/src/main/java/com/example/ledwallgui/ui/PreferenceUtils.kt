@@ -50,18 +50,18 @@ class PreferenceUtils(private val context: Context) {
         editor.apply()
     }
 
-    fun saveUse12HourTimeFormat(use12HourTimeFormat: Boolean) {
+    fun saveIs12HourTimeFormat(is12HourTimeFormat: Boolean) {
         val editor = sharedPreferences.edit()
-        editor.putBoolean("use12HourTimeFormat", use12HourTimeFormat)
-        Log.d("PreferenceUtils", "saveUse12HourTimeFormat: $use12HourTimeFormat")
+        editor.putBoolean("is_12_hour_time", is12HourTimeFormat)  // Use the same key as in SettingsActivity
+        Log.d("PreferenceUtils", "saveIs12HourTimeFormat: $is12HourTimeFormat")
         editor.apply()
     }
 
-    // Retrieve the 12-hour time format setting (default to true if not set)
-    fun getUse12HourTimeFormat(): Boolean {
-        Log.d("PreferenceUtils", "getUse12HourTimeFormat called: ${sharedPreferences.getBoolean("use12HourTimeFormat", false)}")
-        return sharedPreferences.getBoolean("use12HourTimeFormat", false) // Default to true
+    fun getIs12HourTimeFormat(): Boolean {
+        Log.d("PreferenceUtils", "getIs12HourTimeFormat called: ${sharedPreferences.getBoolean("is_12_hour_time", true)}")
+        return sharedPreferences.getBoolean("is_12_hour_time", true)  // Default to true if not set
     }
+
 
     fun saveAlarms(alarms: List<Alarm>) {
         val alarmsJson = gson.toJson(alarms)

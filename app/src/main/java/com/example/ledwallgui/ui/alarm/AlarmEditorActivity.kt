@@ -44,6 +44,12 @@ class AlarmEditorActivity : AppCompatActivity() {
         handleTimePicker()
     }
 
+    override fun onResume() {
+        super.onResume()
+        handleTimePicker() // Call handleTimePicker() here
+    }
+
+
     private fun initializeViews() {
         dayButtons = listOf(
             R.id.day1, R.id.day2, R.id.day3, R.id.day4,
@@ -73,6 +79,8 @@ class AlarmEditorActivity : AppCompatActivity() {
 
         use12HourTimeFormat = intent.getBooleanExtra("use12HourTimeFormat", false)
         Log.d("AlarmEditorActivity", "handleIntentExtras: use12HourTimeFormat = $use12HourTimeFormat")
+
+        handleTimePicker() // Call handleTimePicker() here as well
     }
 
     private fun populateAlarmDetails(clickedAlarmIndex: Int) {
@@ -146,9 +154,11 @@ class AlarmEditorActivity : AppCompatActivity() {
 
     private fun handleTimePicker() {
         val timePicker = findViewById<TimePicker>(R.id.timePicker)
+        Log.d("AlarmEditorActivity", "handleTimePicker: use12HourTimeFormat = $use12HourTimeFormat") // Log before setting format
         if (use12HourTimeFormat) {
             // Set TimePicker to 12-hour format
             timePicker.setIs24HourView(false)
+            Log.d("AlarmEditorActivity", "handleTimePicker: Setting TimePicker to 12-hour format") // Log after setting format
             // If the alarm has an existing time, adjust it for 12-hour format
             alarmToEdit?.let {
                 val hourIn12Hr = if (it.hours % 12 == 0) 12 else it.hours % 12
@@ -158,6 +168,7 @@ class AlarmEditorActivity : AppCompatActivity() {
         } else {
             // Set TimePicker to 24-hour format
             timePicker.setIs24HourView(true)
+            Log.d("AlarmEditorActivity", "handleTimePicker: Setting TimePicker to 24-hour format") // Log after setting format
             // If the alarm has an existing time, set it for 24-hour format
             alarmToEdit?.let {
                 timePicker.hour = it.hours
