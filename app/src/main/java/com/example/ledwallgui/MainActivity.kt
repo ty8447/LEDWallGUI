@@ -293,14 +293,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         val snackbarView = snackbar.view
+
+        // Use Material Components R for snackbars
         val textView = snackbarView.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)
         textView.setTextColor(Color.WHITE)
 
+        // Use your app's R for color references
         val actionButton = snackbarView.findViewById<Button>(com.google.android.material.R.id.snackbar_action)
         actionButton.setTextColor(ContextCompat.getColor(this, R.color.light_blue))
 
         snackbar.show()
     }
+
 
     fun getColorName(colorValue: Int): String {
         return when (colorValue) {

@@ -3,12 +3,17 @@ package com.example.ledwallgui.ui.alarm
 import android.Manifest
 import android.animation.ObjectAnimator
 import android.app.Activity
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -215,7 +220,8 @@ class AlarmActivity : AppCompatActivity() {
             isDeleteMode,
             { updateEmptyState() }, // Pass the updateEmptyState method
             { saveAlarms() }, // Pass the saveAlarms method
-            { updateTimeTillNextAlarm()} //Pass the updateTimeTillNextAlarm method
+            { updateTimeTillNextAlarm()}, //Pass the updateTimeTillNextAlarm method
+            { alarm, context -> scheduleAlarm(alarm, context) }
         )
 
         alarmsRecyclerView.adapter = alarmAdapter
@@ -404,8 +410,74 @@ class AlarmActivity : AppCompatActivity() {
                     alarms.addAll(updatedList) // Add the updated list
                     alarmAdapter.notifyDataSetChanged() // Refresh the RecyclerView
                     saveAlarms() // Save the updated alarms to SharedPreferences
+
+                    // Schedule alarms only if enabled
+                    for (alarm in alarms) {
+                        if (alarm.isEnabled) {  // Check if the alarm is enabled
+                            scheduleAlarm(alarm, this) // Call scheduleAlarm here
+                        } else {
+                            Log.d("AlarmActivity", "Alarm is disabled, not scheduling: ${alarm.alarmName}")
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    private fun scheduleAlarm(alarm: Alarm, context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        Log.d("AlarmAdapter1", "Attempting to schedule alarm: ${alarm.alarmName} at ${alarm.hours}:${alarm.minutes}")
+
+        // Check if exact alarm permission is required (Android 12+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (!alarmManager.canScheduleExactAlarms()) {
+                Log.w("AlarmAdapter1", "Exact alarm permission is missing! Requesting permission.")
+                requestExactAlarmPermission(context)
+                return
+            } else {
+                Log.d("AlarmAdapter1", "Exact alarm permission is granted.")
+            }
+        }
+
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            putExtra("alarmTime", "${alarm.hours}:${alarm.minutes}")
+            putExtra("alarmName", alarm.alarmName)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context, alarm.id, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, alarm.hours)
+            set(Calendar.MINUTE, alarm.minutes)
+            set(Calendar.SECOND, 0)
+        }
+
+        if (calendar.timeInMillis < System.currentTimeMillis()) {
+            Log.d("AlarmAdapter1", "Alarm time has already passed today. Scheduling for the next day.")
+            calendar.add(Calendar.DAY_OF_YEAR, 1)
+        }
+
+        Log.d("AlarmAdapter1", "Final scheduled time: ${calendar.time}")
+
+        try {
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)
+            Log.d("AlarmAdapter1", "Alarm successfully scheduled.")
+        } catch (e: SecurityException) {
+            Log.e("AlarmAdapter1", "Failed to schedule exact alarm due to missing permission: ${e.message}")
+            Toast.makeText(context, "Permission required to schedule exact alarms.", Toast.LENGTH_LONG).show()
+            requestExactAlarmPermission(context)
+        }
+    }
+
+    private fun requestExactAlarmPermission(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Log.w("AlarmAdapter2", "Redirecting user to grant exact alarm permission.")
+            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                data = Uri.parse("package:${context.packageName}")
+            }
+            context.startActivity(intent)
         }
     }
 
@@ -438,7 +510,8 @@ class AlarmAdapter(
     var isDeleteMode: Boolean = false,  // Accept isDeleteMode as a parameter
     private val updateEmptyState: () -> Unit,  // Reference to updateEmptyState()
     private val saveAlarms: () -> Unit,  // Reference to saveAlarms()
-    private val updateTimeTillNextAlarm: () -> Unit // Add the updateTimeTillNextAlarm function as a parameter
+    private val updateTimeTillNextAlarm: () -> Unit, // Add the updateTimeTillNextAlarm function as a parameter
+    private val scheduleAlarm: (Alarm, Context) -> Unit
 ) : RecyclerView.Adapter<AlarmAdapter.AlarmViewHolder>() {
 
     private var onItemLongClickListener: ((Int) -> Unit)? = null
@@ -512,10 +585,15 @@ class AlarmAdapter(
             // Listen for toggle changes to update the alarm's enabled state
             alarmSwitch.setOnCheckedChangeListener { _, isChecked ->
                 alarm.isEnabled = isChecked
+                if (isChecked) {
+                    scheduleAlarm(alarm, itemView.context)
+                } else {
+                    cancelAlarm(alarm, itemView.context)
+                }
                 updateTimeTillNextAlarm()
-                // You may want to save the alarms after toggling
                 onAlarmStateChanged()
             }
+
 
             // Show delete button only in delete mode
             deleteButton.visibility = if (isDeleteMode) View.VISIBLE else View.GONE
@@ -543,6 +621,15 @@ class AlarmAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AlarmViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.alarm_item, parent, false)
         return AlarmViewHolder(view)
+    }
+
+    private fun cancelAlarm(alarm: Alarm, context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, AlarmReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            context, alarm.id, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pendingIntent)
     }
 
     override fun onBindViewHolder(holder: AlarmViewHolder, position: Int) {
