@@ -21,6 +21,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.app.Dialog
 import android.content.ContentValues.TAG
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
@@ -54,6 +55,7 @@ import com.example.ledwallgui.ui.settings.settingsActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.ActivityResult
+import com.example.ledwallgui.R
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat.startActivity
 import androidx.core.graphics.drawable.toBitmap
@@ -81,7 +83,7 @@ class MainActivity : AppCompatActivity() {
         private const val SETTINGS_REQUEST_CODE = 100
         private const val MODES_REQUEST_CODE = 101 // Add this line
     }
-
+    private lateinit var serviceIntent: Intent
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestWindowFeature(Window.FEATURE_NO_TITLE) // Hide the title bar
@@ -141,7 +143,7 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(Color.TRANSPARENT)
             id = View.generateViewId()
         }
-
+        preferenceUtils = PreferenceUtils(this)
         val layout = generateLayout(this, mode.subscribedParameters, flexboxLayout)
 
         dynamicLayoutContainer.removeAllViews()
@@ -239,6 +241,8 @@ class MainActivity : AppCompatActivity() {
             stopService(intent)
             Log.d("Motion Detection", "Not Detecting Motion")
         }
+        serviceIntent = Intent(this, TimeMonitoringService::class.java)
+        startService(serviceIntent)
     }
 
     private fun startConnectionCheck() {
@@ -325,6 +329,9 @@ class MainActivity : AppCompatActivity() {
 
 
     fun generateLayout(context: Context, parameters: List<Parameter>, flexboxLayout: FlexboxLayout): View {
+
+        val configLocked = preferenceUtils.getBoolean(context, "led_config_locked", false)
+
         parameters.forEach { parameter ->
             Log.d("MainActivity", "Creating view for parameter: ${parameter.name} of type ${parameter.type}")
 
@@ -382,7 +389,19 @@ class MainActivity : AppCompatActivity() {
 
                         // Set click listener to show the popup with the slider
                         setOnClickListener {
-                            showPopup(context, parameter, parameter.type, textView, this, colorPreview)  // Pass colorPreview as well
+                            if (configLocked){
+                                Toast.makeText(context, "LED Config is Locked. Please unlock to change modes.", Toast.LENGTH_SHORT).show()
+                            }
+                            else {
+                                showPopup(
+                                    context,
+                                    parameter,
+                                    parameter.type,
+                                    textView,
+                                    this,
+                                    colorPreview
+                                )  // Pass colorPreview as well
+                            }
                         }
                     }
 
@@ -419,7 +438,19 @@ class MainActivity : AppCompatActivity() {
 
                         // Set click listener to show the popup with the slider
                         setOnClickListener {
-                            showPopup(context, parameter, parameter.type, textView, this, colorPreview)  // Pass dummy colorPreview
+                            if (configLocked){
+                                Toast.makeText(context, "LED Config is Locked. Please unlock to change modes.", Toast.LENGTH_SHORT).show()
+                            }
+                            else {
+                                showPopup(
+                                    context,
+                                    parameter,
+                                    parameter.type,
+                                    textView,
+                                    this,
+                                    colorPreview
+                                )  // Pass dummy colorPreview
+                            }
                         }
                     }
 
@@ -679,8 +710,14 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("ResourceType")
     private fun showModesMenu() {
-        val intent = Intent(this, ModesActivity::class.java)
-        modesActivityResultLauncher.launch(intent)
+        val configLocked = preferenceUtils.getBoolean(this, "led_config_locked", false)
+        if (configLocked) {
+            Toast.makeText(this, "LED Config is Locked. Please unlock to change modes.", Toast.LENGTH_SHORT).show()
+            return
+        } else {
+            val intent = Intent(this, ModesActivity::class.java)
+            modesActivityResultLauncher.launch(intent)
+        }
     }
 
     override fun onStop() {
@@ -827,14 +864,25 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("ResourceType")
     private fun showAlarmMenu() {
-        // Create an intent for starting the AlarmActivity
-        val intent = Intent(this, AlarmActivity::class.java).apply {
-            val use12HourTimeFormat = getUse12HourTimeFormat() // Retrieve the preference
-            putExtra("use12HourTimeFormat", use12HourTimeFormat) // Pass the time format preference
-        }
+        // Check if alarms are locked
+        val alarmsLocked = preferenceUtils.getBoolean(this, "alarms_locked", false)
 
-        // Launch the AlarmActivity
-        startActivity(intent)
+        if (alarmsLocked) {
+            // Show a toast to inform the user that the alarms menu is locked
+            Toast.makeText(this, "Alarms menu is locked. Please unlock to proceed.", Toast.LENGTH_SHORT).show()
+            return // Prevent the activity from launching
+        } else {
+            // Create an intent for starting the AlarmActivity
+            val intent = Intent(this, AlarmActivity::class.java).apply {
+                val use12HourTimeFormat = getUse12HourTimeFormat() // Retrieve the preference
+                putExtra(
+                    "use12HourTimeFormat",
+                    use12HourTimeFormat
+                ) // Pass the time format preference
+            }
+            // Launch the AlarmActivity
+            startActivity(intent)
+        }
     }
 
     @SuppressLint("ResourceType")

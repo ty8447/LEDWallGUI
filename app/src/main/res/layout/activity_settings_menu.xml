@@ -68,7 +68,7 @@
                 android:text="Mic" />
 
             <androidx.appcompat.widget.AppCompatButton
-                android:id="@+id/timebutton"
+                android:id="@+id/timeButton"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_marginLeft="5dp"

@@ -78,6 +78,13 @@ class PreferenceUtils(private val context: Context) {
         prefs.edit().putBoolean("${actionType}_locked", value).apply()
     }
 
+    // Method to remove a specific preference by key
+    fun remove(context: Context, actionType: String) {
+        val prefs = context.getSharedPreferences("settings_prefs", Context.MODE_PRIVATE)
+        prefs.edit().remove("${actionType}_pin").apply()
+        Log.d("PreferenceUtils", "${actionType}_pin removed successfully.")
+    }
+
     // For retrieving the lock state dynamically based on actionType
     fun getBoolean(context: Context, actionType: String, defaultValue: Boolean): Boolean {
         val prefs = context.getSharedPreferences("settings_prefs", Context.MODE_PRIVATE)

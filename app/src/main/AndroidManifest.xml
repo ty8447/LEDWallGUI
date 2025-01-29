@@ -26,8 +26,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-
-
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:allowBackup="true"
@@ -86,13 +85,15 @@
             </intent-filter>
         </activity>
         <service android:name=".ui.MotionDetectionService" />
+
         <service
             android:name=".services.BluetoothReconnectionService"
             android:foregroundServiceType="connectedDevice"
             android:exported="true" />
+
         <service
             android:name=".TimeMonitoringService"
-            android:foregroundServiceType="connectedDevice" />
+            android:exported="false" />
 
     </application>
 

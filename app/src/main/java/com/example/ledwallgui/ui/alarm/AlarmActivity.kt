@@ -1,12 +1,13 @@
 package com.example.ledwallgui.ui.alarm
 
+import android.Manifest
 import android.animation.ObjectAnimator
 import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.Build
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -23,7 +24,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import android.widget.Switch
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.ledwallgui.PreferenceUtils
@@ -67,13 +71,31 @@ class AlarmActivity : AppCompatActivity() {
         const val EDIT_ALARM_REQUEST_CODE = 1001
     }
 
+    // Broadcast receiver to receive time updates
+    private val timeUpdateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            Log.d("AlarmActivity", "onReceive called via LocalBroadcastManager")
+            if (intent?.action == "com.example.ledwallgui.TIME_UPDATE") {
+                val currentTimeMillis = intent.getLongExtra("current_time", 0L)
+                Log.d("AlarmActivity", "Received time update: $currentTimeMillis")
+                runOnUiThread {
+                    updateCurrentTime()
+                }
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d("AlarmActivity", "onCreate called")
         gson = Gson() // Initialize Gson
         preferenceUtils = PreferenceUtils(this) // Initialize preferenceUtils here
         use12HourTimeFormat = preferenceUtils.getIs12HourTimeFormat() // Load preference
         setupUI()
         configureSharedPreferences()
+
+        // Check and request permission for foreground service data sync
+        checkAndRequestPermission()
 
         // Load alarms on activity start
         val loadedAlarms = loadAlarms()
@@ -81,18 +103,72 @@ class AlarmActivity : AppCompatActivity() {
         alarms.addAll(loadedAlarms) // Add loaded alarms
         alarmAdapter.notifyDataSetChanged() // Notify the adapter that the data has changed
         Log.d("AlarmActivity", "time format: $use12HourTimeFormat")
-        registerTimeChangeReceiver()
-        startService()
         updateEmptyState()
+        val filter = IntentFilter("com.example.ledwallgui.TIME_UPDATE")
+        LocalBroadcastManager.getInstance(this).registerReceiver(timeUpdateReceiver, filter)
+    }
+
+    private fun checkAndRequestPermission() {
+        Log.d("AlarmActivity", "Checking permissions...")
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.FOREGROUND_SERVICE_DATA_SYNC
+            ) == PackageManager.PERMISSION_GRANTED) {
+            Log.d("AlarmActivity", "Permission granted.")
+        } else {
+            // Permission is not granted, so request it
+            Log.d("AlarmActivity", "Permission not granted. Requesting...")
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.FOREGROUND_SERVICE_DATA_SYNC),
+                PERMISSIONREQUESTCODE
+            )
+        }
+    }
+
+    private val PERMISSIONREQUESTCODE = 1001
+
+    // Handle permission request result
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        when (requestCode) {
+            PERMISSIONREQUESTCODE -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // Permission granted
+                    Log.d("AlarmActivity", "Permission granted for foreground service data sync.")
+                } else {
+                    // Permission denied
+                    Log.d("AlarmActivity", "Permission denied for foreground service data sync.")
+                }
+            }
+        }
     }
 
     override fun onResume() {
         super.onResume()
+        Log.d("AlarmActivity", "onResume called")
+        Log.d("AlarmActivity", "Registering receiver")
+        val filter = IntentFilter("com.example.ledwallgui.TIME_UPDATE")
+        LocalBroadcastManager.getInstance(this).registerReceiver(timeUpdateReceiver, filter)
+        Log.d("AlarmActivity", "Receiver registered")
         use12HourTimeFormat = preferenceUtils.getIs12HourTimeFormat() // Reload preference
         alarmAdapter.use12HourTimeFormat = use12HourTimeFormat // Update adapter
+        // Check and request permission for foreground service data sync
+        checkAndRequestPermission()
         refreshAlarms()
         updateCurrentTime()
         updateEmptyState()
+        updateTimeTillNextAlarm()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Log.d("AlarmActivity", "onPause called")
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(timeUpdateReceiver)
     }
 
     private fun refreshAlarms() {
@@ -138,7 +214,8 @@ class AlarmActivity : AppCompatActivity() {
             { saveAlarms() },
             isDeleteMode,
             { updateEmptyState() }, // Pass the updateEmptyState method
-            { saveAlarms() } // Pass the saveAlarms method
+            { saveAlarms() }, // Pass the saveAlarms method
+            { updateTimeTillNextAlarm()} //Pass the updateTimeTillNextAlarm method
         )
 
         alarmsRecyclerView.adapter = alarmAdapter
@@ -161,6 +238,86 @@ class AlarmActivity : AppCompatActivity() {
             alarmAdapter.isDeleteMode = isDeleteMode // Update delete mode in the adapter
             alarmAdapter.notifyDataSetChanged() // Refresh the RecyclerView
             doneButton.visibility = View.GONE // Hide Done button after exiting delete mode
+        }
+    }
+
+    private fun updateTimeTillNextAlarm() {
+        val currentTime = Calendar.getInstance()
+        Log.d("AlarmDebug", "Current time: ${currentTime.time}")
+
+        // Sort alarms to find the next one based on current time
+        val nextAlarm = alarms
+            .filter {
+                Log.d("AlarmDebug", "Checking alarm: $it")
+                it.isEnabled
+            } // Only consider enabled alarms
+            .mapNotNull { alarm ->
+                val alarmTime = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, alarm.hours)
+                    set(Calendar.MINUTE, alarm.minutes)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+
+                Log.d("AlarmDebug", "Initial alarm time for ${alarm.alarmName}: ${alarmTime.time}")
+
+                val currentDayIndex = currentTime.get(Calendar.DAY_OF_WEEK) - 1
+                Log.d("AlarmDebug", "Current day index: $currentDayIndex")
+                val selectedDays = alarm.selectedDays
+                Log.d("AlarmDebug", "Selected days for ${alarm.alarmName}: ${selectedDays.joinToString()}")
+
+                if (!selectedDays.contains(true)) {
+                    // Handle the case where no repeating days are selected
+                    if (alarmTime.before(currentTime)) {
+                        Log.d("AlarmDebug", "Skipping ${alarm.alarmName}, time has passed")
+                        alarmTime.add(Calendar.DAY_OF_YEAR, 1) // Set for the next day
+                    }
+                    Log.d("AlarmDebug", "Skipping ${alarm.alarmName}, no days selected")
+                    return@mapNotNull alarmTime
+                }
+
+                // Adjust the alarm to the next available day based on selectedDays
+                var daysToAdd = 0
+                while (!selectedDays[(currentDayIndex + daysToAdd) % 7]) {
+                    Log.d("AlarmDebug", "Incrementing daysToAdd for ${alarm.alarmName}: $daysToAdd")
+                    daysToAdd++
+                    if (daysToAdd > 7) {
+                        Log.d("AlarmDebug", "No valid day found for ${alarm.alarmName}, skipping")
+                        return@mapNotNull null
+                    } // Prevent infinite loop
+                }
+
+                if (daysToAdd == 0 && alarmTime.before(currentTime)) {
+                    Log.d("AlarmDebug", "${alarm.alarmName} is for today, but the time has passed")
+                    daysToAdd = 1
+                    while (!selectedDays[(currentDayIndex + daysToAdd) % 7]) {
+                        daysToAdd++
+                        Log.d("AlarmDebug", "Incrementing daysToAdd for passed time on ${alarm.alarmName}: $daysToAdd")
+                        if (daysToAdd > 7) {
+                            Log.d("AlarmDebug", "No valid future day found for ${alarm.alarmName}, skipping")
+                            return@mapNotNull null
+                        } // Prevent infinite loop
+                    }
+                }
+                Log.d("AlarmDebug", "Final daysToAdd for ${alarm.alarmName}: $daysToAdd")
+                alarmTime.add(Calendar.DAY_OF_YEAR, daysToAdd)
+                Log.d("AlarmDebug", "Adjusted alarm time for ${alarm.alarmName}: ${alarmTime.time}")
+                alarmTime
+            }
+            .minByOrNull { it.timeInMillis } // Find the earliest alarm
+
+        // Update the TextView with the time difference
+        if (nextAlarm != null) {
+            var timeDifference = nextAlarm.timeInMillis - currentTime.timeInMillis
+            timeDifference += 59_000
+            val hours = timeDifference / (1000 * 60 * 60)
+            val minutes = (timeDifference / (1000 * 60)) % 60
+            Log.d("AlarmDebug", "Next alarm time: ${nextAlarm.time}")
+            Log.d("AlarmDebug", "Time difference: $hours hours and $minutes minutes")
+            timeTillNext.text = getString(R.string.time_till_next_alarm, hours, minutes)
+        } else {
+            Log.d("AlarmDebug", "No upcoming alarms found")
+            timeTillNext.text = getString(R.string.no_upcoming_alarms)
         }
     }
 
@@ -193,27 +350,6 @@ class AlarmActivity : AppCompatActivity() {
         editor.apply() // Save the JSON to SharedPreferences
     }
 
-    private fun registerTimeChangeReceiver() {
-        val timeChangeReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                updateCurrentTime()
-            }
-        }
-        val filter = IntentFilter(TimeMonitoringService.ACTION_TIME_CHANGED)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(timeChangeReceiver, filter, RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(timeChangeReceiver, filter)
-        }
-    }
-
-
-    private fun startService() {
-        val serviceIntent = Intent(this, TimeMonitoringService::class.java)
-        startService(serviceIntent)
-    }
-
     private fun hideSystemUI() {
         window.insetsController?.let {
             it.hide(WindowInsets.Type.systemBars())
@@ -221,15 +357,15 @@ class AlarmActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateCurrentTime() {
+    fun updateCurrentTime() {
         val calendar = Calendar.getInstance()
-        Log.d("AlarmActivity", "time format2: $use12HourTimeFormat")
+        Log.d("AlarmActivity", "Updating time... format: $use12HourTimeFormat")
         val timeFormat = if (use12HourTimeFormat) "hh:mm aaa" else "HH:mm" // Change "KK" to "hh"
-        Log.d("AlarmActivity", "time formatct: $timeFormat")
+        Log.d("AlarmActivity", "Time format: $timeFormat")
         val formattedTime = SimpleDateFormat(timeFormat, Locale.getDefault()).format(calendar.time)
         currentTime.text = formattedTime
+        updateTimeTillNextAlarm()
     }
-
 
     private fun viewAlarmDetails(clickedAlarm: Alarm) {
         val alarmIndex = alarms.indexOf(clickedAlarm)
@@ -301,7 +437,8 @@ class AlarmAdapter(
     private val onAlarmStateChanged: () -> Unit,
     var isDeleteMode: Boolean = false,  // Accept isDeleteMode as a parameter
     private val updateEmptyState: () -> Unit,  // Reference to updateEmptyState()
-    private val saveAlarms: () -> Unit  // Reference to saveAlarms()
+    private val saveAlarms: () -> Unit,  // Reference to saveAlarms()
+    private val updateTimeTillNextAlarm: () -> Unit // Add the updateTimeTillNextAlarm function as a parameter
 ) : RecyclerView.Adapter<AlarmAdapter.AlarmViewHolder>() {
 
     private var onItemLongClickListener: ((Int) -> Unit)? = null
@@ -375,6 +512,7 @@ class AlarmAdapter(
             // Listen for toggle changes to update the alarm's enabled state
             alarmSwitch.setOnCheckedChangeListener { _, isChecked ->
                 alarm.isEnabled = isChecked
+                updateTimeTillNextAlarm()
                 // You may want to save the alarms after toggling
                 onAlarmStateChanged()
             }
@@ -388,6 +526,7 @@ class AlarmAdapter(
             // Handle delete button click
             deleteButton.setOnClickListener {
                 onDeleteClicked(adapterPosition)
+                updateTimeTillNextAlarm()
             }
 
             // Handle long click to enable delete mode
@@ -418,5 +557,6 @@ class AlarmAdapter(
         notifyItemRemoved(position) // Notify adapter
         updateEmptyState() // Check if the list is empty
         saveAlarms() // Save the updated alarms list to SharedPreferences
+//        updateTimeTillNextAlarm() // Update the time till next alarm
     }
 }
