@@ -155,24 +155,14 @@ class AlarmEditorActivity : AppCompatActivity() {
     private fun handleTimePicker() {
         val timePicker = findViewById<TimePicker>(R.id.timePicker)
         Log.d("AlarmEditorActivity", "handleTimePicker: use12HourTimeFormat = $use12HourTimeFormat") // Log before setting format
-        if (use12HourTimeFormat) {
-            // Set TimePicker to 12-hour format
-            timePicker.setIs24HourView(false)
-            Log.d("AlarmEditorActivity", "handleTimePicker: Setting TimePicker to 12-hour format") // Log after setting format
-            // If the alarm has an existing time, adjust it for 12-hour format
-            alarmToEdit?.let {
-                val hourIn12Hr = if (it.hours % 12 == 0) 12 else it.hours % 12
-                timePicker.hour = hourIn12Hr
-                timePicker.minute = it.minutes
-            }
-        } else {
-            // Set TimePicker to 24-hour format
-            timePicker.setIs24HourView(true)
-            Log.d("AlarmEditorActivity", "handleTimePicker: Setting TimePicker to 24-hour format") // Log after setting format
-            // If the alarm has an existing time, set it for 24-hour format
-            alarmToEdit?.let {
-                timePicker.hour = it.hours
-                timePicker.minute = it.minutes
+
+        alarmToEdit?.let {
+            timePicker.hour = it.hours
+            timePicker.minute = it.minutes
+            if (use12HourTimeFormat) {
+                timePicker.setIs24HourView(false)
+            } else {
+                timePicker.setIs24HourView(true)
             }
         }
     }
@@ -197,8 +187,9 @@ class AlarmEditorActivity : AppCompatActivity() {
         val timePicker = findViewById<TimePicker>(R.id.timePicker)
         val alarmNameText = findViewById<TextView>(R.id.alarmName).text.toString()
 
+        val hours = timePicker.hour
         val newAlarm = Alarm(
-            timePicker.hour,
+            hours,
             timePicker.minute,
             alarmNameText,
             true, // isEnabled

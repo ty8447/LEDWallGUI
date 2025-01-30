@@ -73,7 +73,7 @@
                         android:layout_marginLeft="12dp"
                         android:layout_marginRight="4dp"
                         android:background="@drawable/dow_button_shape_off"
-                        android:text="M"
+                        android:text="S"
                         android:textColor="@color/black" />
 
                     <Space
@@ -88,7 +88,7 @@
                         android:layout_marginLeft="4dp"
                         android:layout_marginRight="4dp"
                         android:background="@drawable/dow_button_shape_off"
-                        android:text="T"
+                        android:text="M"
                         android:textColor="@color/black" />
 
                     <Space
@@ -103,7 +103,7 @@
                         android:layout_marginLeft="4dp"
                         android:layout_marginRight="4dp"
                         android:background="@drawable/dow_button_shape_off"
-                        android:text="W"
+                        android:text="T"
                         android:textColor="@color/black" />
 
                     <Space
@@ -118,7 +118,7 @@
                         android:layout_marginLeft="4dp"
                         android:layout_marginRight="4dp"
                         android:background="@drawable/dow_button_shape_off"
-                        android:text="T"
+                        android:text="W"
                         android:textColor="@color/black" />
 
                     <Space
@@ -133,7 +133,7 @@
                         android:layout_marginLeft="4dp"
                         android:layout_marginRight="4dp"
                         android:background="@drawable/dow_button_shape_off"
-                        android:text="F"
+                        android:text="T"
                         android:textColor="@color/black" />
 
                     <Space
@@ -148,7 +148,7 @@
                         android:layout_marginLeft="4dp"
                         android:layout_marginRight="4dp"
                         android:background="@drawable/dow_button_shape_off"
-                        android:text="S"
+                        android:text="F"
                         android:textColor="@color/black" />
 
                     <Space

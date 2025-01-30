@@ -2,6 +2,7 @@ package com.example.ledwallgui
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.ActivityManager
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.Intent
@@ -852,6 +853,26 @@ class MainActivity : AppCompatActivity() {
                 Log.w("MainActivity", "Mode info not found for mode: $selectedMode")
             }
         GlobalBluetoothManager.startConnectionCheck(this)
+
+        // Check if the service is running and start it if not
+        if (!isServiceRunning(TimeMonitoringService::class.java)) {
+            Log.d("MainActivity", "TimeMonitoringService is not running, starting it now.")
+            serviceIntent = Intent(this, TimeMonitoringService::class.java)
+            startService(serviceIntent)
+        } else {
+            Log.d("MainActivity", "TimeMonitoringService is already running.")
+        }
+
+    }
+
+    private fun isServiceRunning(serviceClass: Class<*>): Boolean {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        for (service in activityManager.getRunningServices(Int.MAX_VALUE)) {
+            if (serviceClass.name == service.service.className) {
+                return true
+            }
+        }
+        return false
     }
 
     override fun onPause() {

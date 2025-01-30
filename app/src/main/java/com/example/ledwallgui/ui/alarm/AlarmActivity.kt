@@ -423,49 +423,83 @@ class AlarmActivity : AppCompatActivity() {
             }
         }
     }
-
     private fun scheduleAlarm(alarm: Alarm, context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
         Log.d("AlarmAdapter1", "Attempting to schedule alarm: ${alarm.alarmName} at ${alarm.hours}:${alarm.minutes}")
 
-        // Check if exact alarm permission is required (Android 12+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (!alarmManager.canScheduleExactAlarms()) {
-                Log.w("AlarmAdapter1", "Exact alarm permission is missing! Requesting permission.")
-                requestExactAlarmPermission(context)
-                return
-            } else {
-                Log.d("AlarmAdapter1", "Exact alarm permission is granted.")
-            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+            Log.w("AlarmAdapter1", "Exact alarm permission is missing! Requesting permission.")
+            requestExactAlarmPermission(context)
+            return
         }
 
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             putExtra("alarmTime", "${alarm.hours}:${alarm.minutes}")
             putExtra("alarmName", alarm.alarmName)
         }
+
         val pendingIntent = PendingIntent.getBroadcast(
-            context, alarm.id, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            context, alarm.id + alarm.hours + alarm.minutes, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val calendar = Calendar.getInstance().apply {
+        val now = Calendar.getInstance()
+        val alarmTime = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, alarm.hours)
             set(Calendar.MINUTE, alarm.minutes)
             set(Calendar.SECOND, 0)
         }
 
-        if (calendar.timeInMillis < System.currentTimeMillis()) {
-            Log.d("AlarmAdapter1", "Alarm time has already passed today. Scheduling for the next day.")
-            calendar.add(Calendar.DAY_OF_YEAR, 1)
+        val selectedDays = alarm.selectedDays
+        val today = now.get(Calendar.DAY_OF_WEEK)
+        Log.d("AlarmAdapter1", "Today: $today")
+
+        if (selectedDays.any { it }) {
+            var closestDay: Int? = null
+            var minDiff = Long.MAX_VALUE
+
+            for (i in selectedDays.indices) {
+                if (selectedDays[i]) {
+                    Log.d("AlarmAdapter1", "Checking TRUE day: $i")
+                    val dayOfWeek = i + 1 // Adjust for Calendar.DAY_OF_WEEK (Sunday=1, Saturday=7)
+                    Log.d("AlarmAdapter1", "Day of week: $dayOfWeek")
+
+                    val tempCalendar = alarmTime.clone() as Calendar
+                    tempCalendar.set(Calendar.DAY_OF_WEEK, dayOfWeek)
+
+                    if (dayOfWeek == today && tempCalendar.timeInMillis <= now.timeInMillis) {
+                        tempCalendar.add(Calendar.WEEK_OF_YEAR, 1) // Move to next week if today and time has passed
+                    } else if (dayOfWeek < today) {
+                        tempCalendar.add(Calendar.WEEK_OF_YEAR, 1) // Move past to next week
+                    }
+
+                    val diff = tempCalendar.timeInMillis - now.timeInMillis
+                    if (diff < minDiff) {
+                        minDiff = diff
+                        closestDay = dayOfWeek
+                    }
+                }
+            }
+
+            if (closestDay != null) {
+                alarmTime.timeInMillis = now.timeInMillis + minDiff // Correctly adjust time based on closest day
+                Log.d("AlarmAdapter1", "Scheduled repeating alarm for: ${alarmTime.time}")
+            }
+        } else {
+            if (alarmTime.timeInMillis <= now.timeInMillis) {
+                alarmTime.add(Calendar.DAY_OF_YEAR, 1) // Move to the next day if time has passed
+                Log.d("AlarmAdapter1", "No repeat days selected. Scheduling for the next available day.")
+            }
         }
 
-        Log.d("AlarmAdapter1", "Final scheduled time: ${calendar.time}")
+        Log.d("AlarmAdapter1", "Final scheduled time: ${alarmTime.time}")
 
         try {
-            alarmManager.setExact(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, alarmTime.timeInMillis, pendingIntent)
             Log.d("AlarmAdapter1", "Alarm successfully scheduled.")
         } catch (e: SecurityException) {
-            Log.e("AlarmAdapter1", "Failed to schedule exact alarm due to missing permission: ${e.message}")
+            Log.e("AlarmAdapter1", "Failed to schedule exact alarm: ${e.message}")
             Toast.makeText(context, "Permission required to schedule exact alarms.", Toast.LENGTH_LONG).show()
             requestExactAlarmPermission(context)
         }
@@ -559,7 +593,7 @@ class AlarmAdapter(
             }
 
             // Convert selectedDays to a list and set selected days
-            val daysOfWeek = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+            val daysOfWeek = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
             val selectedDaysList = alarm.selectedDays.toList() // Convert BooleanArray to List<Boolean>
 
             val selectedDaysText = if (selectedDaysList.all { it }) {

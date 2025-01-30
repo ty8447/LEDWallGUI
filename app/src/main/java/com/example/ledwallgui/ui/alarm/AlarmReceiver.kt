@@ -16,7 +16,7 @@ class AlarmReceiver : BroadcastReceiver() {
 
         Log.d("AlarmReceiver", "Alarm details - Time: $alarmTime, Name: $alarmName")
 
-        Toast.makeText(context, "Alarm Triggered: $alarmName at $alarmTime", Toast.LENGTH_LONG).show()
+//        Toast.makeText(context, "Alarm Triggered: $alarmName at $alarmTime", Toast.LENGTH_LONG).show()
 
         val alarmIntent = Intent(context, AlarmAlertActivity::class.java).apply {
             putExtra("alarmTime", alarmTime)
