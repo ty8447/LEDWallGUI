@@ -1,8 +1,0 @@
-<!-- res/drawable/splash_circle.xml -->
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item>
-        <shape android:shape="oval">
-            <solid android:color="@android:color/white"/>
-        </shape>
-    </item>
-</layer-list>

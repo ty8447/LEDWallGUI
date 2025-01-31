@@ -11,6 +11,7 @@
     <color name="red">#DF6967</color>
     <color name="dark_gray">#333333</color>
     <color name="light_gray">#888888</color>
+    <color name="splash_background_color">#000000</color> <!-- Adjust color as needed -->
     <color name="activity_background">#222222</color> <!-- Darker background for activity -->
     <color name="lighter_background">#2E2E2E</color> <!-- Slightly lighter background for cards -->
 

@@ -2,15 +2,21 @@ package com.example.ledwallgui.ui.settings
 
 import android.app.Activity
 import android.Manifest
+import android.app.ActivityManager
 import android.app.Dialog
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -30,6 +36,9 @@ import com.example.ledwallgui.PreferenceUtils
 import com.example.ledwallgui.TimeMonitoringService
 import com.example.ledwallgui.ui.MotionDetectionService
 import com.google.android.material.snackbar.Snackbar
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class settingsActivity : AppCompatActivity() {
     private lateinit var micButton: AppCompatButton
@@ -152,6 +161,76 @@ class settingsActivity : AppCompatActivity() {
         setupButtons()
     }
 
+    private fun showDevInfoPopup() {
+        val dialog = Dialog(this)
+        dialog.setContentView(R.layout.popup_dev_info)
+        dialog.setCancelable(true)
+
+        // Set dialog width to 60% of the screen width
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.6).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT)) // Rounded corners
+
+        // Get UI elements
+        val versionText = dialog.findViewById<TextView>(R.id.versionText)
+        val permissionsText = dialog.findViewById<TextView>(R.id.permissionsText)
+        val servicesText = dialog.findViewById<TextView>(R.id.servicesText)
+        val dateTimeText = dialog.findViewById<TextView>(R.id.currentDateTime)
+        val closeButton = dialog.findViewById<Button>(R.id.closeButton)
+
+        // Get app version info
+        val packageInfo = packageManager.getPackageInfo(packageName, 0)
+        val versionName = packageInfo.versionName
+        versionText.text = "App Version: $versionName"
+
+        // Get granted permissions
+        val grantedPermissions = packageManager.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS)
+            .requestedPermissions
+            ?.filter { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
+            ?.joinToString("\n") ?: "None"
+        permissionsText.text = "Granted Permissions:\n$grantedPermissions"
+
+        // Get running services
+        servicesText.text = "Running Services:\n" + getRunningServices()
+
+        // Auto-update system time every second
+        val handler = Handler(Looper.getMainLooper())
+        val updateTimeRunnable = object : Runnable {
+            override fun run() {
+                dateTimeText.text = "System Time: ${getCurrentTime()}"
+                handler.postDelayed(this, 1000) // Update every second
+            }
+        }
+        handler.post(updateTimeRunnable)
+
+        // Close button listener
+        closeButton.setOnClickListener {
+            handler.removeCallbacks(updateTimeRunnable)
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
+    // Get current system time
+    private fun getCurrentTime(): String {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        return dateFormat.format(Date())
+    }
+
+    // Get list of running services
+    private fun getRunningServices(): String {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val services = activityManager.getRunningServices(Int.MAX_VALUE)
+        return if (services.isNotEmpty()) {
+            services.joinToString("\n") { it.service.className }
+        } else {
+            "No active services"
+        }
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_MICROPHONE_PERMISSION) {
@@ -206,6 +285,7 @@ class settingsActivity : AppCompatActivity() {
         val syncButton: Button = findViewById(R.id.syncButton)
         val connectButton = findViewById<AppCompatButton>(R.id.connectButton)
         val resetButton: Button = findViewById(R.id.resetButton)
+        val textView2: TextView = findViewById(R.id.textView2)
         val prefs = getSharedPreferences()
         micEnabled = prefs.getBoolean("mic_enabled", false)
         lockConfigEnabled = prefs.getBoolean("lock_config_enabled", false)
@@ -221,6 +301,11 @@ class settingsActivity : AppCompatActivity() {
         updateTimeButtonState()
 
         setupButtons()
+
+        textView2.setOnLongClickListener {
+            showDevInfoPopup()
+            true // Consume the event
+        }
 
         lockConfigButton.setOnClickListener {
             // Create a dialog for the popup
