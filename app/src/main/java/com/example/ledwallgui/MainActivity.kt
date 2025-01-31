@@ -59,6 +59,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.ActivityResult
 import com.example.ledwallgui.R
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat.getSystemService
 import androidx.core.content.ContextCompat.startActivity
 import androidx.core.graphics.drawable.toBitmap
 import com.example.ledwallgui.ui.settings.ColorWheel
@@ -78,12 +79,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var settingModeDivider: View // Declare without initialization
     private lateinit var flexboxLayout: FlexboxLayout
     private lateinit var textView: TextView
+    private val handler = Handler(Looper.getMainLooper()) // Define the handler
     private lateinit var modesActivityResultLauncher: ActivityResultLauncher<Intent>
     private lateinit var settingsActivityResultLauncher: ActivityResultLauncher<Intent>
     private val connectionCheckHandler = Handler(Looper.getMainLooper())
     private val connectionCheckInterval = 5000L // Check every 5 seconds
     private var isDragging = false
     private var lastY = 0f
+    private var initialInteractTime = 0L
     private var lastMoveTime = 0L
     private var brightnessSensitivity = 1.0f
     private var currentBrightness = 0
@@ -221,29 +224,34 @@ class MainActivity : AppCompatActivity() {
                 sliderBackground.setOnTouchListener { _, event ->
                     when (event.action) {
                         MotionEvent.ACTION_DOWN -> {
+                            // Reset dragging state on ACTION_DOWN
                             Log.d("Slider", "MotionEvent.ACTION_DOWN")
-                            Log.d("Slider", "sliderHeight: $sliderHeight")
-                            isDragging = false // Reset isDragging on ACTION_DOWN
+                            isDragging = false
                             Log.d("Slider", "isDragging: $isDragging")
                             lastY = event.y
-                            Log.d("Slider", "lastY: $lastY")
-                            lastMoveTime = System.currentTimeMillis()
-                            Log.d("Slider", "lastMoveTime: $lastMoveTime")
-                            // Calculate brightness percentage
-                            val adjustedY = event.y.coerceIn(0f, sliderHeight.toFloat())
-                            Log.d("Slider", "adjustedY: $adjustedY")
-                            val percentage = ((sliderHeight - adjustedY) / sliderHeight * 100).toInt()
-                            Log.d("Slider", "percentage: $percentage")
-                            currentBrightness = percentage
-                            Log.d("Slider", "currentBrightness: $currentBrightness")
-                            updateThumbPosition(sliderBackground, sliderThumb, currentBrightness)
-                            if(GlobalBluetoothManager.isConnected){
-                                if (currentBrightness != previousBrightness) {
-                                    GlobalBluetoothManager.setBrightness(percentage)
-                                    Log.d("Slider", "GlobalBluetoothManager.setBrightness($percentage)")
-                                    previousBrightness = currentBrightness
+                            initialInteractTime = System.currentTimeMillis()
+                            Log.d("Slider", "lastY: $lastY, lastMoveTime: $lastMoveTime")
+//
+//                            // Calculate brightness percentage for initial position
+//                            val adjustedY = event.y.coerceIn(0f, sliderHeight.toFloat())
+//                            val percentage = ((sliderHeight - adjustedY) / sliderHeight * 100).toInt()
+//                            currentBrightness = percentage
+//                            Log.d("Slider", "currentBrightness: $currentBrightness")
+
+                            // Set a delay to check for hold/tap after the touch starts
+                            handler.postDelayed({
+                                if (!isDragging) {
+                                    // If it's not dragging after the delay, it's a tap
+                                    updateThumbPosition(sliderBackground, sliderThumb, currentBrightness, isDragged = false)
+                                    Log.d("Slider", "User tapped. Jumping to: $currentBrightness")
+
+                                    // Set the brightness if connected
+                                    if (GlobalBluetoothManager.isConnected) {
+                                        GlobalBluetoothManager.setBrightness(currentBrightness)
+                                    }
                                 }
-                            }
+                            }, 200) // 200ms delay to detect tap vs hold
+
                             true
                         }
 
@@ -251,15 +259,14 @@ class MainActivity : AppCompatActivity() {
                             val currentY = event.y
                             val deltaY = currentY - lastY
                             // Check if there's no movement AND no brightness change
-                            if (deltaY == 0f && currentBrightness == previousBrightness) {
-                                return@setOnTouchListener true // Skip the rest of the code
+                            if (isDragging == false && deltaY == 0f){
+                                lastMoveTime = initialInteractTime
                             }
+                            if (deltaY != 0f) {
+                                isDragging = true
                             Log.d("Slider", "MotionEvent.ACTION_MOVE")
                             Log.d("Slider", "sliderHeight: $sliderHeight")
-                            if (!isDragging) {
-                                isDragging = true
-                                Log.d("Slider", "isDragging set to true")
-                            }
+                            Log.d("Slider", "isDragging set to true")
                             Log.d("Slider", "isDragging: $isDragging")
                             Log.d("Slider", "currentY: $currentY")
                             Log.d("Slider", "deltaY: $deltaY")
@@ -279,17 +286,24 @@ class MainActivity : AppCompatActivity() {
                             // Calculate brightness change
                             var brightnessChange = (deltaY * brightnessSensitivity).toInt()
                             Log.d("Slider", "brightnessChange before coerceIn: $brightnessChange")
-                            brightnessChange = brightnessChange.coerceIn(-maxBrightnessChange, maxBrightnessChange)
+                            brightnessChange =
+                                brightnessChange.coerceIn(-maxBrightnessChange, maxBrightnessChange)
                             Log.d("Slider", "brightnessChange after coerceIn: $brightnessChange")
 
                             // Apply brightness change
-                            currentBrightness = (currentBrightness - brightnessChange).coerceIn(0, 100)
+                            currentBrightness =
+                                (currentBrightness - brightnessChange).coerceIn(0, 100)
                             Log.d("Slider", "currentBrightness: $currentBrightness")
-                            updateThumbPosition(sliderBackground, sliderThumb, currentBrightness)
-                            if(GlobalBluetoothManager.isConnected){
+                                updateThumbPosition(sliderBackground, sliderThumb, currentBrightness, isDragged = true)
+                                Log.d("Slider", "Update Thumb Position 1")
+
+                            if (GlobalBluetoothManager.isConnected) {
                                 if (currentBrightness != previousBrightness) {
                                     GlobalBluetoothManager.setBrightness(currentBrightness)
-                                    Log.d("Slider", "GlobalBluetoothManager.setBrightness($currentBrightness)")
+                                    Log.d(
+                                        "Slider",
+                                        "GlobalBluetoothManager.setBrightness($currentBrightness)"
+                                    )
                                     previousBrightness = currentBrightness
                                 }
                             } else {
@@ -304,13 +318,30 @@ class MainActivity : AppCompatActivity() {
                             Log.d("Slider", "lastY: $lastY")
                             lastMoveTime = currentTime
                             Log.d("Slider", "lastMoveTime: $lastMoveTime")
+                        }
                             true
                         }
 
                         MotionEvent.ACTION_UP -> {
                             Log.d("Slider", "MotionEvent.ACTION_UP")
-                            isDragging = false
                             Log.d("Slider", "isDragging: $isDragging")
+                            Log.d("Slider", "Delta Time: ${System.currentTimeMillis()-initialInteractTime}")
+                            if (!isDragging || System.currentTimeMillis() - initialInteractTime < 120) {
+                                // If it wasn't a drag (i.e., it's a tap), update the brightness
+                                val adjustedY = event.y.coerceIn(0f, sliderHeight.toFloat())
+                                val percentage = ((sliderHeight - adjustedY) / sliderHeight * 100).toInt()
+                                currentBrightness = percentage
+                                updateThumbPosition(sliderBackground, sliderThumb, currentBrightness, isDragged = false)
+
+                                // Set the brightness if connected
+                                if (GlobalBluetoothManager.isConnected) {
+                                    GlobalBluetoothManager.setBrightness(currentBrightness)
+                                }
+
+                                Log.d("Slider", "User tapped. Final brightness: $currentBrightness")
+                            }
+                            // Reset the dragging state for next touch
+                            isDragging = false
                             true
                         }
 
@@ -368,21 +399,32 @@ class MainActivity : AppCompatActivity() {
         connectionCheckHandler.removeCallbacksAndMessages(null)
     }
 
-    private fun updateThumbPosition(sliderBackground: View, sliderThumb: View, brightness: Int) {
-
+    private fun updateThumbPosition(sliderBackground: View, sliderThumb: View, brightness: Int, isDragged: Boolean) {
         Log.d("Slider", "brightness: $brightness")
+
         val minHeight = 1 // Minimum height for the thumb in pixels
         val percentage = brightness.coerceIn(0, 100)
         val newY = sliderHeight - (percentage.toFloat() / 100f * sliderHeight)
-        // Calculate the new thumb height
+
+        // Calculate the new thumb height based on the brightness percentage
         val newHeight = (sliderHeight * (percentage / 100f)).toInt().coerceAtLeast(minHeight)
 
-        // Update the thumb's height while maintaining its width
         val thumbParams = sliderThumb.layoutParams
-        thumbParams.height = newHeight
-        sliderThumb.layoutParams = thumbParams
 
+        // If it's being dragged, adjust the thumb's position relatively
+        if (isDragged) {
+            thumbParams.height = newHeight
+        } else {
+            // If it's tapped, jump to the new position by updating the height directly
+            thumbParams.height = newHeight
+        }
+
+        // Apply the thumb parameters to update the layout
+        sliderThumb.layoutParams = thumbParams
         sliderThumb.requestLayout()
+
+        // Log the updated thumb height
+        Log.d("Slider", "Updated thumb height: $newHeight")
     }
 
     fun showConnectionSnackbar() {
