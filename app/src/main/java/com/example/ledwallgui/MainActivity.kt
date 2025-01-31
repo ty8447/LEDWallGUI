@@ -22,7 +22,6 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.app.Dialog
 import android.content.ContentValues.TAG
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
@@ -44,11 +43,9 @@ import com.google.android.material.snackbar.Snackbar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
-import androidx.core.view.children
 import com.example.ledwallgui.ui.MotionDetectionService
 import com.example.ledwallgui.ui.alarm.AlarmActivity
 import com.example.ledwallgui.ui.modes.ModeManager
-import com.example.ledwallgui.ui.modes.ModeManager.currentMode
 import com.example.ledwallgui.ui.modes.ModesActivity
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 import com.example.ledwallgui.ui.settings.ConnectionActivity
@@ -57,15 +54,10 @@ import com.example.ledwallgui.ui.settings.settingsActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.ActivityResult
-import com.example.ledwallgui.R
 import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat.getSystemService
-import androidx.core.content.ContextCompat.startActivity
-import androidx.core.graphics.drawable.toBitmap
 import com.example.ledwallgui.ui.settings.ColorWheel
 import kotlin.ranges.coerceAtLeast
 import kotlin.ranges.coerceIn
-import kotlin.text.toFloat
 
 
 class MainActivity : AppCompatActivity() {
@@ -242,7 +234,11 @@ class MainActivity : AppCompatActivity() {
                             handler.postDelayed({
                                 if (!isDragging) {
                                     // If it's not dragging after the delay, it's a tap
-                                    updateThumbPosition(sliderBackground, sliderThumb, currentBrightness, isDragged = false)
+                                    updateThumbPosition(
+                                        sliderThumb,
+                                        currentBrightness,
+                                        isDragged = false
+                                    )
                                     Log.d("Slider", "User tapped. Jumping to: $currentBrightness")
 
                                     // Set the brightness if connected
@@ -294,7 +290,11 @@ class MainActivity : AppCompatActivity() {
                             currentBrightness =
                                 (currentBrightness - brightnessChange).coerceIn(0, 100)
                             Log.d("Slider", "currentBrightness: $currentBrightness")
-                                updateThumbPosition(sliderBackground, sliderThumb, currentBrightness, isDragged = true)
+                                updateThumbPosition(
+                                    sliderThumb,
+                                    currentBrightness,
+                                    isDragged = true
+                                )
                                 Log.d("Slider", "Update Thumb Position 1")
 
                             if (GlobalBluetoothManager.isConnected) {
@@ -331,7 +331,11 @@ class MainActivity : AppCompatActivity() {
                                 val adjustedY = event.y.coerceIn(0f, sliderHeight.toFloat())
                                 val percentage = ((sliderHeight - adjustedY) / sliderHeight * 100).toInt()
                                 currentBrightness = percentage
-                                updateThumbPosition(sliderBackground, sliderThumb, currentBrightness, isDragged = false)
+                                updateThumbPosition(
+                                    sliderThumb,
+                                    currentBrightness,
+                                    isDragged = false
+                                )
 
                                 // Set the brightness if connected
                                 if (GlobalBluetoothManager.isConnected) {
@@ -399,12 +403,12 @@ class MainActivity : AppCompatActivity() {
         connectionCheckHandler.removeCallbacksAndMessages(null)
     }
 
-    private fun updateThumbPosition(sliderBackground: View, sliderThumb: View, brightness: Int, isDragged: Boolean) {
+    private fun updateThumbPosition(sliderThumb: View, brightness: Int, isDragged: Boolean) {
         Log.d("Slider", "brightness: $brightness")
 
         val minHeight = 1 // Minimum height for the thumb in pixels
         val percentage = brightness.coerceIn(0, 100)
-        val newY = sliderHeight - (percentage.toFloat() / 100f * sliderHeight)
+        sliderHeight - (percentage.toFloat() / 100f * sliderHeight)
 
         // Calculate the new thumb height based on the brightness percentage
         val newHeight = (sliderHeight * (percentage / 100f)).toInt().coerceAtLeast(minHeight)
