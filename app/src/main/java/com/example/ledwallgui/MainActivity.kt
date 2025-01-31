@@ -1069,14 +1069,6 @@ class MainActivity : AppCompatActivity() {
         settingsActivityResultLauncher.launch(intent)
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == SETTINGS_REQUEST_CODE && resultCode == RESULT_OK) {
-            // You no longer need to update use12HourTimeFormat directly here
-            // The SettingsActivity will update the preference on its own
-        }
-    }
-
     private fun getUse12HourTimeFormat(): Boolean {
         val prefs = getSharedPreferences("settings_prefs", Context.MODE_PRIVATE)
         return prefs.getBoolean("is_12_hour_time", true) // Retrieve the saved time format

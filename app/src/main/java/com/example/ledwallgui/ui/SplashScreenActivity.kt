@@ -94,7 +94,9 @@ class SplashScreenActivity : AppCompatActivity() {
 
             override fun onAnimationEnd(animation: Animation?) {
                 // Switch to normal icon after rotation
-                splashIcon.setImageResource(R.drawable.icon)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    splashIcon.setImageResource(R.drawable.icon)
+                }, 200)
             }
 
             override fun onAnimationRepeat(animation: Animation?) {}

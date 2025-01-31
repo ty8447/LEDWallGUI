@@ -1,10 +1,8 @@
 package com.example.ledwallgui.ui.modes
 
-import android.os.Build
 import androidx.core.content.ContextCompat
 import android.os.Bundle
 import android.util.Log
-import android.view.View
 import android.view.Window
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -18,7 +16,23 @@ import com.example.ledwallgui.R
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 
 object ModeManager {
-    var currentMode: String = "" // Global variable to store current mode
+    var currentMode: String = "" // Store the active mode
+
+    // Map to store parameters for each mode (e.g., "Color" -> {"Color" -> "255,0,0", "Brightness" -> "100"})
+    private val modeParameters: MutableMap<String, MutableMap<String, String>> = mutableMapOf()
+
+    // Set a parameter for the current mode
+    fun setModeParameter(mode: String, parameter: String, value: String) {
+        if (!modeParameters.containsKey(mode)) {
+            modeParameters[mode] = mutableMapOf()
+        }
+        modeParameters[mode]?.set(parameter, value)
+    }
+
+    // Retrieve a parameter for the current mode
+    fun getModeParameter(mode: String, parameter: String): String? {
+        return modeParameters[mode]?.get(parameter)
+    }
 }
 
 class ModesActivity : AppCompatActivity() {

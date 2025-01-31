@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
-import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
@@ -13,6 +12,8 @@ import android.content.SharedPreferences
 import android.util.Log
 import com.example.ledwallgui.PreferenceUtils
 import com.example.ledwallgui.ui.alarm.Alarm
+import com.example.ledwallgui.ui.modes.ModeManager
+import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.util.Calendar
@@ -29,6 +30,7 @@ class AlarmAlertActivity : Activity() {
     private lateinit var alarmRunnable: Runnable // Declare the variable here
     private var dismissedAlarmIndex: Int = -1 // Declare the variable here
     private var use12HourTimeFormat = false
+    private var previousMode: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +55,27 @@ class AlarmAlertActivity : Activity() {
 
         alarmTimeTextView.text = formatAlarmTime(alarmTime) // Use the helper function to format the time
         alarmNameTextView.text = alarmName
+
+        // Store previous mode and color parameters
+        val previousMode = ModeManager.currentMode
+        val previousColor = ModeManager.getModeParameter(previousMode, "Color") ?: "0,0,0"  // Default to black
+        val previousBrightness = ModeManager.getModeParameter(previousMode, "Brightness") ?: "100"  // Default brightness
+
+        Log.d("AlarmAlertActivity", "Previous Mode: $previousMode, Color: $previousColor, Brightness: $previousBrightness")
+
+        // Save previous settings in Intent
+        intent.putExtra("previousMode", previousMode)
+        intent.putExtra("previousColor", previousColor)
+        intent.putExtra("previousBrightness", previousBrightness)
+
+        // Change mode to "Color" and set it to red
+        ModeManager.currentMode = "Color"
+        ModeManager.setModeParameter("Color", "Color", "255,0,0")
+        GlobalBluetoothManager.setLedParameter("Color", "Color", "255,0,0")
+
+        // Optionally adjust brightness for the alarm
+        ModeManager.setModeParameter("Color", "Brightness", "255")
+        GlobalBluetoothManager.setBrightness(255)
 
         // Get the index of the dismissed alarm from intent
         dismissedAlarmIndex = intent.getIntExtra("dismissedAlarmIndex", -1)
@@ -108,24 +131,45 @@ class AlarmAlertActivity : Activity() {
         return ""
     }
 
+    private fun restorePreviousMode() {
+        val previousMode = intent.getStringExtra("previousMode")
+        val previousColor = intent.getStringExtra("previousColor")
+        val previousBrightness = intent.getStringExtra("previousBrightness")
+
+        if (!previousMode.isNullOrEmpty()) {
+            ModeManager.currentMode = previousMode
+            GlobalBluetoothManager.setLedMode(previousMode)
+
+            Log.d("AlarmAlertActivity", "Restoring previous mode: $previousMode, Color: $previousColor, Brightness: $previousBrightness")
+
+            // Restore previous color if applicable
+            if (!previousColor.isNullOrEmpty()) {
+                GlobalBluetoothManager.setLedParameter(previousMode, "Color", previousColor)
+            }
+
+            // Restore previous brightness if applicable
+            if (!previousBrightness.isNullOrEmpty()) {
+                GlobalBluetoothManager.setBrightness(previousBrightness.toInt())
+            }
+        }
+    }
+
     private fun snoozeAlarm() {
-        // Stop the media player
         println("Snooze button clicked")
-        // Remove the pending alarm to stop the scheduled alarm
-        // alarmHandler.removeCallbacks(alarmRunnable)
+        restorePreviousMode() // Restore the previous mode
         Log.d("Dismiss", "button Pressed")
-        // Finish this activity to go back to the previous activity (e.g., MainActivity)
         finish()
     }
 
     private fun dismissAlarm(dismissedAlarmIndex: Int) {
+        restorePreviousMode() // Restore the previous mode
         if (dismissedAlarmIndex != -1) {
             val alarms = getAlarmsFromSharedPreferences()
             val alarm = alarms[dismissedAlarmIndex]
 
             // Check if there are no repeating days (all selectedDays are false)
             if (alarm.selectedDays.all { !it }) {
-                // No repeating days, disable the alarm
+                Log.d("AlarmAlertActivity", "Dismissing alarm with no repeating days")
                 alarm.isEnabled = false
             }
 
