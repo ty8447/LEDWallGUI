@@ -706,7 +706,6 @@ class MainActivity : AppCompatActivity() {
                 if (currentColorName == "Custom" && parameter.value is Int) {
                     val customColor = parameter.value as Int
                     colorPreview.setBackgroundColor(customColor)
-//
                 } else {
                     // Use standard color from the color map
                     colorPreview.setBackgroundColor(colorMap[currentColorName] ?: Color.GREEN)

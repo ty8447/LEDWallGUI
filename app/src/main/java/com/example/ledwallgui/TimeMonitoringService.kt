@@ -16,29 +16,29 @@ class TimeMonitoringService : Service() {
     private val timeUpdateRunnable = object : Runnable {
         override fun run() {
             val currentTime = System.currentTimeMillis()
-            Log.d("TimeMonitoringService", "Running timeUpdateRunnable at $currentTime")
+            //Log.d("TimeMonitoringService", "Running timeUpdateRunnable at $currentTime")
 
             sendTimeUpdate()
 
             val nextInterval = if (firstRun) {
                 firstRun = false
-                Log.d("TimeMonitoringService", "First run complete. Switching to 15-second interval.")
+                //Log.d("TimeMonitoringService", "First run complete. Switching to 15-second interval.")
                 15_000L // Set future updates to 15 seconds
             } else {
                 15_000L
             }
 
-            Log.d("TimeMonitoringService", "Next update scheduled in ${nextInterval / 1000} seconds")
+            //Log.d("TimeMonitoringService", "Next update scheduled in ${nextInterval / 1000} seconds")
             handler.postDelayed(this, nextInterval)
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-        Log.d("TimeMonitoringService", "Service Created.")
+        //Log.d("TimeMonitoringService", "Service Created.")
 
         val initialDelay = calculateInitialDelay()
-        Log.d("TimeMonitoringService", "Initial delay calculated: $initialDelay ms before first broadcast.")
+        //Log.d("TimeMonitoringService", "Initial delay calculated: $initialDelay ms before first broadcast.")
 
         // Start the first execution with the calculated delay
         handler.postDelayed(timeUpdateRunnable, initialDelay)
@@ -46,13 +46,13 @@ class TimeMonitoringService : Service() {
 
     private fun sendTimeUpdate() {
         val currentTime = System.currentTimeMillis()
-        Log.d("TimeMonitoringService", "Sending time update broadcast: $currentTime")
+        //Log.d("TimeMonitoringService", "Sending time update broadcast: $currentTime")
 
         val intent = Intent("com.example.ledwallgui.TIME_UPDATE")
         intent.putExtra("current_time", currentTime)
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
 
-        Log.d("TimeMonitoringService", "Broadcast sent successfully.")
+        //Log.d("TimeMonitoringService", "Broadcast sent successfully.")
     }
 
     private fun calculateInitialDelay(): Long {
@@ -61,14 +61,14 @@ class TimeMonitoringService : Service() {
         val milliseconds = calendar.get(Calendar.MILLISECOND)
         val remainingMillis = ((60 - seconds) * 1000L) - milliseconds
 
-        Log.d("TimeMonitoringService", "Current time: ${calendar.time}")
-        Log.d("TimeMonitoringService", "Current seconds: $seconds, Remaining milliseconds until next minute: $remainingMillis")
+        //Log.d("TimeMonitoringService", "Current time: ${calendar.time}")
+        //Log.d("TimeMonitoringService", "Current seconds: $seconds, Remaining milliseconds until next minute: $remainingMillis")
 
         return remainingMillis
     }
 
     override fun onDestroy() {
-        Log.d("TimeMonitoringService", "Service is being destroyed. Removing callbacks.")
+        //Log.d("TimeMonitoringService", "Service is being destroyed. Removing callbacks.")
         handler.removeCallbacks(timeUpdateRunnable)
         super.onDestroy()
     }

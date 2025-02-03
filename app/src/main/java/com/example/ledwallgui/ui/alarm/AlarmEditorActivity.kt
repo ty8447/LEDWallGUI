@@ -3,29 +3,22 @@ package com.example.ledwallgui.ui.alarm
 import BrightnessPadDialog
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Rect
 import android.os.Bundle
-import android.os.Parcelable
 import android.util.Log
 import android.view.View
-import android.view.ViewTreeObserver
 import android.widget.Button
-import android.widget.TimePicker
 import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
+import android.widget.TimePicker
 import androidx.appcompat.app.AppCompatActivity
 import com.example.ledwallgui.R
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Locale
-
 
 class AlarmEditorActivity : AppCompatActivity() {
-    private var updatedTime: String? = null
     private var alarms: MutableList<Alarm> = mutableListOf()
     private var use12HourTimeFormat = false
     private var alarmToEdit: Alarm? = null
+    // Holds the selected days state; its initial value will be updated either from the alarm or by toggling
     private var selectedDays: BooleanArray = BooleanArray(7) { false }
     private lateinit var dayButtons: List<Button>
 
@@ -46,66 +39,72 @@ class AlarmEditorActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        handleTimePicker() // Call handleTimePicker() here
+        handleTimePicker()
     }
-
 
     private fun initializeViews() {
         dayButtons = listOf(
             R.id.day1, R.id.day2, R.id.day3, R.id.day4,
             R.id.day5, R.id.day6, R.id.day7
-        ).map { buttonId -> findViewById<Button>(buttonId) }
+        ).map { buttonId ->
+            val btn = findViewById<Button>(buttonId)
+            // Initialize the tag to false (unselected)
+            btn.tag = false
+            btn
+        }
     }
 
     private fun handleIntentExtras() {
         val isEditMode = intent.getBooleanExtra("isEditMode", false)
         Log.d("AlarmEditorActivity", "handleIntentExtras: isEditMode = $isEditMode")
 
-        val clickedAlarmIndex = intent.getIntExtra("clickedAlarmIndex", -1)
-        Log.d("AlarmEditorActivity", "handleIntentExtras: clickedAlarmIndex = $clickedAlarmIndex")
+        val clickedAlarmId = intent.getIntExtra("clickedAlarmId", -1)
+        Log.d("AlarmEditorActivity", "handleIntentExtras: clickedAlarmId = $clickedAlarmId")
 
         val alarmsList = intent.getParcelableArrayListExtra<Alarm>("alarmsList")
-        if (alarmsList != null && alarmsList.isNotEmpty()) {
+        if (alarmsList != null) {
+            alarms.clear()
             alarms.addAll(alarmsList)
-            Log.d("AlarmEditorActivity", "handleIntentExtras: Alarms list size = ${alarmsList.size}")
+            Log.d("AlarmEditorActivity", "handleIntentExtras: Alarms list size = ${alarms.size}")
         }
 
-        if (clickedAlarmIndex != -1 && alarms.isNotEmpty()) {
-            alarmToEdit = alarms[clickedAlarmIndex]
-            populateAlarmDetails(clickedAlarmIndex)
+        if (clickedAlarmId != -1) {
+            alarmToEdit = alarms.find { it.id == clickedAlarmId }
+            if (alarmToEdit != null) {
+                populateAlarmDetails(alarmToEdit!!)
+            } else {
+                Log.e("AlarmEditorActivity", "handleIntentExtras: Alarm with ID $clickedAlarmId not found")
+            }
         } else {
-            Log.d("AlarmEditorActivity", "handleIntentExtras: No alarm to edit or invalid index")
+            Log.d("AlarmEditorActivity", "handleIntentExtras: No alarm to edit or invalid ID")
+            alarmToEdit = null
         }
 
         use12HourTimeFormat = intent.getBooleanExtra("use12HourTimeFormat", false)
         Log.d("AlarmEditorActivity", "handleIntentExtras: use12HourTimeFormat = $use12HourTimeFormat")
 
-        handleTimePicker() // Call handleTimePicker() here as well
+        handleTimePicker()
     }
 
-    private fun populateAlarmDetails(clickedAlarmIndex: Int) {
-        val existingAlarm = alarms[clickedAlarmIndex]
-        alarmToEdit = existingAlarm
-
-        // Log to verify the alarm details
+    private fun populateAlarmDetails(existingAlarm: Alarm) {
         Log.d("AlarmEditorActivity", "populateAlarmDetails: Populating alarm with name: ${existingAlarm.alarmName}")
 
-        // Set the time picker to the existing alarm's time
         val timePicker = findViewById<TimePicker>(R.id.timePicker)
         Log.d("AlarmEditorActivity", "populateAlarmDetails: Setting time - Hour: ${existingAlarm.hours}, Minute: ${existingAlarm.minutes}")
         timePicker.hour = existingAlarm.hours
         timePicker.minute = existingAlarm.minutes
 
-        // Set the alarm name
         val alarmNameTextView = findViewById<TextView>(R.id.alarmName)
         alarmNameTextView.text = existingAlarm.alarmName
         Log.d("AlarmEditorActivity", "populateAlarmDetails: Setting alarm name: ${existingAlarm.alarmName}")
 
-        // Set the selected days
-        selectedDays = existingAlarm.selectedDays
+        // Update selectedDays from the existing alarm and also update each button's tag
+        selectedDays = existingAlarm.selectedDays.copyOf()
+        selectedDays.forEachIndexed { index, isSelected ->
+            dayButtons[index].tag = isSelected
+        }
         Log.d("AlarmEditorActivity", "populateAlarmDetails: Selected days: ${selectedDays.joinToString(", ")}")
 
-        // Update the day buttons based on the selected days
         updateDayButtonVisuals()
     }
 
@@ -154,7 +153,7 @@ class AlarmEditorActivity : AppCompatActivity() {
 
     private fun handleTimePicker() {
         val timePicker = findViewById<TimePicker>(R.id.timePicker)
-        Log.d("AlarmEditorActivity", "handleTimePicker: use12HourTimeFormat = $use12HourTimeFormat") // Log before setting format
+        Log.d("AlarmEditorActivity", "handleTimePicker: use12HourTimeFormat = $use12HourTimeFormat")
 
         alarmToEdit?.let {
             timePicker.hour = it.hours
@@ -168,7 +167,18 @@ class AlarmEditorActivity : AppCompatActivity() {
     }
 
     private fun toggleDayButtonState(dayIndex: Int) {
+        // Toggle the value in the array
         selectedDays[dayIndex] = !selectedDays[dayIndex]
+
+        // Update the corresponding button's tag
+        dayButtons[dayIndex].tag = selectedDays[dayIndex]
+
+        // Log the change
+        val dayNames = arrayOf("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+        val status = if (selectedDays[dayIndex]) "selected" else "deselected"
+        Log.d("AlarmEditorActivity", "Day ${dayNames[dayIndex]} was $status")
+
+        // Update UI to reflect changes
         updateDayButtonVisuals()
     }
 
@@ -183,43 +193,64 @@ class AlarmEditorActivity : AppCompatActivity() {
         }
     }
 
+    // Optionally, if you want to ensure you have the latest state from the UI,
+    // you can read each button's tag and update selectedDays accordingly.
+    private fun getSelectedDaysFromButtons(): BooleanArray {
+        val selectedDaysArray = dayButtons.map { (it.tag as? Boolean) ?: false }.toBooleanArray()
+
+        // Log the final selection
+        val dayNames = arrayOf("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+        val selectedDaysList = dayNames.indices.filter { selectedDaysArray[it] }.joinToString(", ") { dayNames[it] }
+        Log.d("AlarmEditorActivity", "Final selected days: $selectedDaysList")
+
+        return selectedDaysArray
+    }
+
     private fun saveAlarm() {
         val timePicker = findViewById<TimePicker>(R.id.timePicker)
         val alarmNameText = findViewById<TextView>(R.id.alarmName).text.toString()
-
         val hours = timePicker.hour
-        val newAlarm = Alarm(
-            hours,
-            timePicker.minute,
-            alarmNameText,
-            true, // isEnabled
-            false, // showCheckbox
-            false, // isSelected
-            findViewById<Switch>(R.id.rampBright).isChecked,
-            getSelectedDays(dayButtons), // This method already gets the selected days correctly
-            selectedDays // Ensure the selectedDays array is used here
-        )
+        val minutes = timePicker.minute
+        val rampBright = findViewById<Switch>(R.id.rampBright).isChecked
+
+        // Get selected days from buttons
+        val newSelectedDays = getSelectedDaysFromButtons()
+        Log.d("AlarmEditorActivity", "saveAlarm: Selected days: ${newSelectedDays.joinToString(", ")}")
 
         if (alarmToEdit != null) {
-            alarms[alarms.indexOf(alarmToEdit)] = newAlarm
-            Log.d("alarmEditorActivity", "Updated alarm: $newAlarm")
+            // Update existing alarm
+            alarmToEdit?.apply {
+                this.hours = hours
+                this.minutes = minutes
+                this.alarmName = alarmNameText
+                this.rampBright = rampBright
+                this.selectedDays = newSelectedDays.copyOf() // Ensure a new copy is created
+                if (!this.isEnabled) {
+                    this.isEnabled = true
+                }
+            }
+            Log.d("alarmEditorActivity", "Updated alarm: $alarmToEdit")
         } else {
+            // Create new alarm
+            val newAlarm = Alarm(
+                hours,
+                minutes,
+                alarmNameText,
+                true,  // New alarms are enabled by default
+                false,
+                rampBright,
+                newSelectedDays.copyOf(), // Copy the array to ensure it's properly set
+                id = System.currentTimeMillis().toInt() // Generate a unique ID
+            )
             alarms.add(newAlarm)
             Log.d("alarmEditorActivity", "Added new alarm: $newAlarm")
         }
 
-        val resultIntent = Intent()
-        resultIntent.putExtra("alarmsList", ArrayList(alarms))
+        val resultIntent = Intent().apply {
+            putExtra("alarmsList", ArrayList(alarms))
+        }
         setResult(Activity.RESULT_OK, resultIntent)
         finish()
-    }
-
-    private fun getSelectedDays(dayButtons: List<Button>): BooleanArray {
-        val days = BooleanArray(7) { false }
-        dayButtons.forEachIndexed { index, dayButton ->
-            days[index] = dayButton.background.constantState == resources.getDrawable(R.drawable.dow_button_shape_on).constantState
-        }
-        return days
     }
 
     private fun hideSystemUI() {

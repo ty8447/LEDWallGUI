@@ -21,7 +21,7 @@ object ModeManager {
     // Map to store parameters for each mode (e.g., "Color" -> {"Color" -> "255,0,0", "Brightness" -> "100"})
     private val modeParameters: MutableMap<String, MutableMap<String, String>> = mutableMapOf()
 
-    // Set a parameter for the current mode
+    // Set a parameter for the specified mode
     fun setModeParameter(mode: String, parameter: String, value: String) {
         if (!modeParameters.containsKey(mode)) {
             modeParameters[mode] = mutableMapOf()
@@ -29,9 +29,9 @@ object ModeManager {
         modeParameters[mode]?.set(parameter, value)
     }
 
-    // Retrieve a parameter for the current mode
-    fun getModeParameter(mode: String, parameter: String): String? {
-        return modeParameters[mode]?.get(parameter)
+    // Retrieve all parameters for a given mode
+    fun getModeParameters(mode: String): Map<String, String>? {
+        return modeParameters[mode]?.toMap()
     }
 }
 

@@ -1,23 +1,24 @@
 package com.example.ledwallgui.ui
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
-import com.example.ledwallgui.R
 import android.content.SharedPreferences
 import android.util.Log
+import com.example.ledwallgui.R
 import com.example.ledwallgui.PreferenceUtils
 import com.example.ledwallgui.ui.alarm.Alarm
 import com.example.ledwallgui.ui.modes.ModeManager
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 import com.google.gson.Gson
+import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
 import java.util.Calendar
-
 
 class AlarmAlertActivity : Activity() {
 
@@ -25,91 +26,126 @@ class AlarmAlertActivity : Activity() {
     private lateinit var alarmNameTextView: TextView
     private lateinit var snoozeButton: Button
     private lateinit var dismissButton: Button
+    private val sharedPreferencesName = "alarm_prefs"
+    private val alarmsKey = "alarms_list"
     private val snoozeDurationMillis: Long = 5 * 60 * 1000 // Snooze for 5 minutes
     private val alarmHandler = Handler()
-    private lateinit var alarmRunnable: Runnable // Declare the variable here
-    private var dismissedAlarmIndex: Int = -1 // Declare the variable here
+    private var alarmsList: List<Alarm> = emptyList()
+    private val REQUEST_CODE_ALARM_UPDATE = 1001
+    private lateinit var alarmRunnable: Runnable
+    // Use a property for alarmId so that dismissAlarm() uses the correct value
+    private var alarmId: Int = -1
     private var use12HourTimeFormat = false
-    private var previousMode: String? = null
+    private var gson = Gson()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_alarm_alert)
-        window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+        )
 
-        // Initialize views
         alarmTimeTextView = findViewById(R.id.textViewAlarmTime)
         alarmNameTextView = findViewById(R.id.textViewAlarmName)
         snoozeButton = findViewById(R.id.buttonSnooze)
         dismissButton = findViewById(R.id.buttonDismiss)
 
-        // Get alarm details from intent
         val alarmTime = intent.getStringExtra("alarmTime")
         val alarmName = intent.getStringExtra("alarmName")
 
-
         val preferenceUtils = PreferenceUtils(this)
-        use12HourTimeFormat = preferenceUtils.getIs12HourTimeFormat() // Retrieve time format preference
+        use12HourTimeFormat = preferenceUtils.getIs12HourTimeFormat()
         Log.d("AlarmAlertActivity", "handleIntentExtras: use12HourTimeFormat = $use12HourTimeFormat")
 
-        alarmTimeTextView.text = formatAlarmTime(alarmTime) // Use the helper function to format the time
+        alarmTimeTextView.text = formatAlarmTime(alarmTime)
         alarmNameTextView.text = alarmName
+        // *** IMPORTANT: assign to the property, not a local variable ***
+        alarmId = intent.getIntExtra("alarmId", -1)
+        Log.d("AlarmAlertActivity", "Dismissed Alarm Id: $alarmId")
 
-        // Store previous mode and color parameters
+        // Retrieve the list of alarms from shared preferences
+        val sharedPreferences = getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)
+        val alarmsJson = sharedPreferences.getString(alarmsKey, "[]")
+
+        alarmsList = try {
+            gson.fromJson(alarmsJson, object : TypeToken<List<Alarm>>() {}.type)
+        } catch (e: JsonSyntaxException) {
+            emptyList()
+        }
+
+        // Log the list of alarms being compared
+        Log.d("AlarmAlertActivity", "Alarms List: $alarmsList")
+
+        // Log matching alarms by searching for alarm.id == alarmId
+        for (alarm in alarmsList) {
+            Log.d("AlarmDebug", "Checking alarm: $alarm")
+            if (alarm.id == alarmId) {
+                Log.d("AlarmDebug", "Alarm matched with id: $alarmId")
+            }
+        }
+
         val previousMode = ModeManager.currentMode
-        val previousColor = ModeManager.getModeParameter(previousMode, "Color") ?: "0,0,0"  // Default to black
-        val previousBrightness = ModeManager.getModeParameter(previousMode, "Brightness") ?: "100"  // Default brightness
+        val previousParameters = ModeManager.getModeParameters(previousMode)
 
-        Log.d("AlarmAlertActivity", "Previous Mode: $previousMode, Color: $previousColor, Brightness: $previousBrightness")
+        Log.d("AlarmAlertActivity", "Previous Mode: $previousMode, Parameters: $previousParameters")
 
-        // Save previous settings in Intent
+        val previousParamsJson = gson.toJson(previousParameters)
         intent.putExtra("previousMode", previousMode)
-        intent.putExtra("previousColor", previousColor)
-        intent.putExtra("previousBrightness", previousBrightness)
+        intent.putExtra("previousParams", previousParamsJson)
 
-        // Change mode to "Color" and set it to red
         ModeManager.currentMode = "Color"
         ModeManager.setModeParameter("Color", "Color", "255,0,0")
+        GlobalBluetoothManager.setLedMode("Color")
         GlobalBluetoothManager.setLedParameter("Color", "Color", "255,0,0")
-
-        // Optionally adjust brightness for the alarm
         ModeManager.setModeParameter("Color", "Brightness", "255")
-        GlobalBluetoothManager.setBrightness(255)
-
-        // Get the index of the dismissed alarm from intent
-        dismissedAlarmIndex = intent.getIntExtra("dismissedAlarmIndex", -1)
+        GlobalBluetoothManager.setBrightness(100)
 
         alarmRunnable = Runnable {
-            dismissAlarm(dismissedAlarmIndex) // Pass the index of the dismissed alarm
+            restorePreviousMode()
+            Log.d("ALARM ALERT", "Stopped")
             finish()
         }
 
-        // Set click listeners for snooze and dismiss buttons
         snoozeButton.setOnClickListener {
             snoozeAlarm()
             finish()
         }
 
         dismissButton.setOnClickListener {
-            val dismissedAlarmIndex = intent.getIntExtra("dismissedAlarmIndex", -1)
-            Log.d("INDEX", "$dismissedAlarmIndex")
-            if (dismissedAlarmIndex != -1) {
+            Log.d("AlarmAlertActivity", "Dismiss button clicked with id $alarmId")
+            if (alarmId != -1) {
+                Log.d("AlarmAlertActivity", "Dismissing alarm with id $alarmId")
                 val resultIntent = Intent()
-                resultIntent.putExtra("alarmIndex", dismissedAlarmIndex)
+                resultIntent.putExtra("alarmId", alarmId)
                 setResult(RESULT_OK, resultIntent)
             }
+            dismissAlarm()
             finish()
         }
 
-        // Schedule alarm to stop after snooze duration
         alarmHandler.postDelayed(alarmRunnable, snoozeDurationMillis)
         Log.d("ALARM ALERT", "Running")
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_CODE_ALARM_UPDATE && resultCode == Activity.RESULT_OK) {
+            val updatedAlarmsJson = data?.getStringExtra("alarmsList")
+            if (!updatedAlarmsJson.isNullOrEmpty()) {
+                try {
+                    val type = object : TypeToken<List<Alarm>>() {}.type
+                    val updatedAlarms: List<Alarm> = Gson().fromJson(updatedAlarmsJson, type)
+                    alarmsList = updatedAlarms
+                } catch (e: JsonSyntaxException) {
+                    Log.e("AlarmAlertActivity", "Error parsing updated alarms: ${e.message}")
+                }
+            }
+        }
+    }
+
     private fun formatAlarmTime(alarmTime: String?): String {
         if (use12HourTimeFormat) {
-            // Convert the time to 12-hour format
             val calendar = Calendar.getInstance()
             val timeParts = alarmTime?.split(":")
             if (timeParts?.size == 2) {
@@ -125,72 +161,93 @@ class AlarmAlertActivity : Activity() {
                 return String.format("%02d:%02d %s", hour, minute, period)
             }
         } else {
-            // Return the time in 24-hour format
             return alarmTime ?: ""
         }
         return ""
     }
 
     private fun restorePreviousMode() {
+        Log.d("AlarmAlertActivity", "Restoring previous mode")
+
         val previousMode = intent.getStringExtra("previousMode")
-        val previousColor = intent.getStringExtra("previousColor")
-        val previousBrightness = intent.getStringExtra("previousBrightness")
+        val previousParamsJson = intent.getStringExtra("previousParams")
 
-        if (!previousMode.isNullOrEmpty()) {
-            ModeManager.currentMode = previousMode
-            GlobalBluetoothManager.setLedMode(previousMode)
+        if (previousMode.isNullOrEmpty() || previousParamsJson.isNullOrEmpty()) {
+            Log.e("AlarmAlertActivity", "Failed to restore previous mode due to null values")
+            return
+        }
 
-            Log.d("AlarmAlertActivity", "Restoring previous mode: $previousMode, Color: $previousColor, Brightness: $previousBrightness")
+        val previousParams: Map<String, String>? = try {
+            Gson().fromJson(previousParamsJson, object : TypeToken<Map<String, String>>() {}.type)
+        } catch (e: Exception) {
+            Log.e("AlarmAlertActivity", "Failed to parse previousParamsJson: ${e.message}")
+            null
+        }
 
-            // Restore previous color if applicable
-            if (!previousColor.isNullOrEmpty()) {
-                GlobalBluetoothManager.setLedParameter(previousMode, "Color", previousColor)
-            }
+        if (previousParams == null) {
+            Log.e("AlarmAlertActivity", "Parsed previousParams is null")
+            return
+        }
 
-            // Restore previous brightness if applicable
-            if (!previousBrightness.isNullOrEmpty()) {
-                GlobalBluetoothManager.setBrightness(previousBrightness.toInt())
-            }
+        Log.d("AlarmAlertActivity", "Restoring Mode: $previousMode with Parameters: $previousParams")
+
+        ModeManager.currentMode = previousMode
+        GlobalBluetoothManager.setLedMode(previousMode)
+
+        previousParams.forEach { (param, value) ->
+            ModeManager.setModeParameter(previousMode, param, value)
+            GlobalBluetoothManager.setLedParameter(previousMode, param, value)
         }
     }
 
     private fun snoozeAlarm() {
         println("Snooze button clicked")
-        restorePreviousMode() // Restore the previous mode
-        Log.d("Dismiss", "button Pressed")
+        restorePreviousMode()
         finish()
     }
 
-    private fun dismissAlarm(dismissedAlarmIndex: Int) {
-        restorePreviousMode() // Restore the previous mode
-        if (dismissedAlarmIndex != -1) {
-            val alarms = getAlarmsFromSharedPreferences()
-            val alarm = alarms[dismissedAlarmIndex]
-
-            // Check if there are no repeating days (all selectedDays are false)
-            if (alarm.selectedDays.all { !it }) {
-                Log.d("AlarmAlertActivity", "Dismissing alarm with no repeating days")
-                alarm.isEnabled = false
-            }
-
-            saveAlarmsToSharedPreferences(alarms) // Save updated alarms
-
-            // Update the alarm time only when it's dismissed
-            updateAlarmTimeForDismissedAlarm(dismissedAlarmIndex)
-        }
-        finish()
-    }
-
-    private fun updateAlarmTimeForDismissedAlarm(dismissedAlarmIndex: Int) {
+    // Update dismissAlarm() to search for the alarm by id instead of using it as an index
+    private fun dismissAlarm() {
+        Log.d("AlarmAlertActivity", "dismissAlarm called with id $alarmId")
         val alarms = getAlarmsFromSharedPreferences()
-        val alarm = alarms[dismissedAlarmIndex]
+        if (alarms.isNullOrEmpty()) {
+            Log.e("AlarmAlertActivity", "Alarms list is empty")
+            return
+        }
+        // Find the alarm by its unique id
+        val alarm = alarms.find { it.id == alarmId }
+        if (alarm == null) {
+            Log.e("AlarmAlertActivity", "Invalid alarm id: $alarmId")
+            return
+        }
 
-        // Check if the alarm is dismissed, and update the time if needed
+        // Update isEnabled based on the selectedDays array:
+        if (alarm.selectedDays.any { it }) {
+            // At least one day is true → keep the alarm enabled.
+            alarm.isEnabled = true
+            Log.d("AlarmAlertActivity", "Alarm has repeating days; keeping enabled")
+        } else {
+            // No days are selected → disable the alarm.
+            alarm.isEnabled = false
+            Log.d("AlarmAlertActivity", "No days selected; disabling alarm")
+        }
+
+        saveAlarmsToSharedPreferences(alarms)
+
+        // Update the alarm time based on the alarm’s id
+        updateAlarmTimeForDismissedAlarm(alarmId)
+    }
+
+
+    // Update updateAlarmTimeForDismissedAlarm() to search by id
+    private fun updateAlarmTimeForDismissedAlarm(alarmId: Int) {
+        val alarms = getAlarmsFromSharedPreferences()
+        val alarm = alarms.find { it.id == alarmId } ?: return
+
         val calendar = Calendar.getInstance()
         calendar.set(Calendar.HOUR_OF_DAY, alarm.hours)
         calendar.set(Calendar.MINUTE, alarm.minutes)
 
-        // Adjust alarm for the next valid selected day
         val currentDayIndex = calendar.get(Calendar.DAY_OF_WEEK) - 1
         var daysToAdd = 0
         while (!alarm.selectedDays[(currentDayIndex + daysToAdd) % 7]) {
@@ -198,7 +255,6 @@ class AlarmAlertActivity : Activity() {
             if (daysToAdd > 7) return // No valid day found
         }
 
-        // Add days and update the alarm time
         calendar.add(Calendar.DAY_OF_YEAR, daysToAdd)
         saveAlarmsToSharedPreferences(alarms)
     }
@@ -209,18 +265,29 @@ class AlarmAlertActivity : Activity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // Release the media player resources
     }
 
     private fun getAlarmsFromSharedPreferences(): List<Alarm> {
-        val sharedPreferences: SharedPreferences = getSharedPreferences("your_prefs_name", MODE_PRIVATE)
-        val alarmsJson = sharedPreferences.getString("alarms", "")
-        return Gson().fromJson(alarmsJson, object : TypeToken<List<Alarm>>() {}.type)
+        val sharedPreferences = getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)
+        val alarmsJson = sharedPreferences.getString(alarmsKey, null)
+
+        if (alarmsJson.isNullOrEmpty()) {
+            Log.e("AlarmAlertActivity", "Alarms list not found in shared preferences.")
+            return emptyList()
+        }
+
+        return try {
+            val type = object : TypeToken<List<Alarm>>() {}.type
+            Gson().fromJson(alarmsJson, type) ?: emptyList()
+        } catch (e: JsonSyntaxException) {
+            Log.e("AlarmAlertActivity", "Error parsing alarms: ${e.message}")
+            emptyList()
+        }
     }
 
     private fun saveAlarmsToSharedPreferences(alarms: List<Alarm>) {
-        val sharedPreferences: SharedPreferences = getSharedPreferences("your_prefs_name", MODE_PRIVATE)
+        val sharedPreferences: SharedPreferences = getSharedPreferences(sharedPreferencesName, MODE_PRIVATE)
         val alarmsJson = Gson().toJson(alarms)
-        sharedPreferences.edit().putString("alarms", alarmsJson).apply()
+        sharedPreferences.edit().putString(alarmsKey, alarmsJson).apply()
     }
 }

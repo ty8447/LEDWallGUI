@@ -9,12 +9,9 @@ data class Alarm(
     var minutes: Int,
     var alarmName: String,
     var isEnabled: Boolean,
-    var showCheckbox: Boolean = false,
     var isSelected: Boolean = false,
     var rampBright: Boolean = false,
-    var daysOfWeek: BooleanArray = BooleanArray(7) { false },
     var selectedDays: BooleanArray = BooleanArray(7) { false },
-    var isAlarmGoingOff: Boolean = false,
     var id: Int = generateUniqueId()
 ) : Parcelable {
 
@@ -32,10 +29,7 @@ data class Alarm(
         parcel.readByte() != 0.toByte(),
         parcel.readByte() != 0.toByte(),
         parcel.readByte() != 0.toByte(),
-        parcel.readByte() != 0.toByte(),
         parcel.createBooleanArray() ?: BooleanArray(7) { false },
-        parcel.createBooleanArray() ?: BooleanArray(7) { false },
-        parcel.readByte() != 0.toByte(),
         parcel.readInt()
     )
 
@@ -44,12 +38,9 @@ data class Alarm(
         parcel.writeInt(minutes)
         parcel.writeString(alarmName)
         parcel.writeByte(if (isEnabled) 1 else 0)
-        parcel.writeByte(if (showCheckbox) 1 else 0)
         parcel.writeByte(if (isSelected) 1 else 0)
         parcel.writeByte(if (rampBright) 1 else 0)
-        parcel.writeBooleanArray(daysOfWeek)
         parcel.writeBooleanArray(selectedDays)
-        parcel.writeByte(if (isAlarmGoingOff) 1 else 0)
         parcel.writeInt(id)
     }
 
@@ -62,13 +53,5 @@ data class Alarm(
         private var nextAlarmId = 0
 
         private fun generateUniqueId(): Int = nextAlarmId++
-    }
-
-    fun startGoingOff() {
-        isAlarmGoingOff = true
-    }
-
-    fun stopGoingOff() {
-        isAlarmGoingOff = false
     }
 }
