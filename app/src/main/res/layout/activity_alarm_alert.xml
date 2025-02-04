@@ -8,32 +8,74 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
 
-    <TextView
-        android:id="@+id/textViewAlarmTime"
-        android:background="@drawable/transparent_background"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/white"
-        android:layout_gravity="center_horizontal"
-        android:textSize="80dp"
-        android:layout_centerHorizontal="true"
-        android:layout_marginTop="100dp"
-        android:text="08:00 AM" />
+        <TextView
+            android:id="@+id/textViewAlarmTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/white"
+            android:textSize="80dp"
+            android:text="08:00 AM"
+            android:layout_marginTop="100dp" />
 
-    <TextView
-        android:id="@+id/textViewAlarmName"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="@drawable/transparent_background"
-        android:textColor="@color/white"
-        android:layout_gravity="center_horizontal"
-        android:textSize="35sp"
-        android:layout_centerHorizontal="true"
-        android:layout_below="@id/textViewAlarmTime"
-        android:text="Wake Up Alarm" />
+        <TextView
+            android:id="@+id/textViewAlarmName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/white"
+            android:textSize="35sp"
+            android:layout_marginTop="20dp"
+            android:text="Wake Up Alarm" />
 
+        <!-- Snooze Buttons -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="20dp">
+
+            <!-- Minus Button -->
+            <Button
+                android:id="@+id/buttonSnoozeMinus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:text="-"
+                android:textSize="20sp"
+                android:textColor="@color/white"
+                android:backgroundTint="@color/clicked_item_background"
+                android:background="@drawable/rounded_background"
+                android:layout_alignParentLeft="true" />
+
+            <!-- Snooze Button Text -->
+            <Button
+                android:id="@+id/buttonSnooze"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Snooze 5 Minute(s)"
+                android:textSize="20sp"
+                android:textColor="@color/white"
+                android:background="@drawable/rounded_background"
+                android:backgroundTint="@color/clicked_item_background"
+                android:layout_centerHorizontal="true" />
+
+            <!-- Plus Button -->
+            <Button
+                android:id="@+id/buttonSnoozePlus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="+"
+                android:textSize="20sp"
+                android:textColor="@color/white"
+                android:background="@drawable/rounded_background"
+                android:backgroundTint="@color/clicked_item_background"
+                android:layout_alignParentRight="true" />
+        </LinearLayout>
+
+        <!-- Dismiss Button -->
         <Button
             android:id="@+id/buttonDismiss"
             android:layout_width="wrap_content"
@@ -41,21 +83,11 @@
             android:layout_gravity="center_horizontal|bottom"
             android:backgroundTint="@color/clicked_item_background"
             android:textColor="@color/white"
-            android:layout_marginTop="20dp"
             android:text="Dismiss"
             android:textSize="40dp"
-            android:layout_centerHorizontal="true" />
-    <Button
-        android:id="@+id/buttonSnooze"
-        android:layout_width="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:layout_height="wrap_content"
-        android:text="Snooze"
-        android:layout_marginTop="20dp"
-        android:layout_centerHorizontal="true"
-        android:layout_below="@id/textViewAlarmName"
-        android:textSize="40dp"
-        android:textColor="@android:color/white"
-        android:backgroundTint="@color/clicked_item_background" />
+            android:layout_marginTop="20dp"
+            android:layout_centerHorizontal="true"
+            android:background="@drawable/rounded_background" />
     </LinearLayout>
+
 </androidx.constraintlayout.widget.ConstraintLayout>

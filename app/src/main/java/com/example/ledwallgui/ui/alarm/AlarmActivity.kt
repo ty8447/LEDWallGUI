@@ -628,6 +628,7 @@ class AlarmAdapter(
             // Listen for toggle changes to update the alarm's enabled state
             alarmSwitch.setOnCheckedChangeListener { _, isChecked ->
                 alarm.isEnabled = isChecked
+                Log.d("AlarmAdapter", "Switch state changed: $isChecked for alarm: ${alarm.alarmName}")
                 if (isChecked) {
                     scheduleAlarm(alarm, itemView.context)
                 } else {
@@ -636,7 +637,6 @@ class AlarmAdapter(
                 updateTimeTillNextAlarm()
                 onAlarmStateChanged()
             }
-
 
             // Show delete button only in delete mode
             deleteButton.visibility = if (isDeleteMode) View.VISIBLE else View.GONE

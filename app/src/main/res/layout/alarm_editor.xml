@@ -1,340 +1,331 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    xmlns:app="http://schemas.android.com/apk/res-auto">
+    android:layout_height="match_parent">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
+    <TextView
+        android:id="@+id/editor_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:text="Edit Alarm"
+        android:textAlignment="center"
+        android:textColor="@color/white"
+        android:textSize="40sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
-        <TextView
-            android:id="@+id/editor_name"
+    <!-- Time Picker -->
+    <!-- Time Picker Container -->
+    <FrameLayout
+        android:id="@+id/time_picker_container"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/editor_name">
+
+        <!-- Background View spanning all elements -->
+        <View
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="48dp"
+            android:layout_gravity="center"
+            android:layout_marginStart="5dp"
+            android:layout_marginEnd="5dp"
+            android:background="@drawable/rounded_picker_background" />
 
-            android:layout_marginTop="5dp"
-            android:text="Edit Alarm"
-            android:textAlignment="center"
-            android:textColor="@color/white"
-            android:textSize="40dp" />
-
+        <!-- Time Picker Layout -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:orientation="horizontal">
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingHorizontal="10dp"
+            android:background="@drawable/transparent_background">
 
-            <LinearLayout
+            <!-- Hours Picker -->
+            <NumberPicker
+                android:id="@+id/hour_picker"
                 android:layout_width="0dp"
-                android:layout_height="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:orientation="vertical">
+                android:background="@drawable/transparent_background"
+                android:gravity="center"
+                android:selectionDividerHeight="0dp"
+                android:textColor="@color/white"
+                android:layout_marginEnd="5dp" />
 
-                <FrameLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="1"
-                    android:layout_gravity="center_horizontal" >
+            <!-- Colon -->
+            <TextView
+                android:id="@+id/colon"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=":"
+                android:textColor="@color/white"
+                android:textSize="32sp"
+                android:layout_marginEnd="5dp"
+                android:background="@drawable/transparent_background"/>
 
-                    <TimePicker
-                        android:id="@+id/timePicker"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center"
-                        android:scaleX="1"
-                        android:scaleY="1"
-                        android:timePickerMode="spinner" />
-
-                </FrameLayout>
-
-                <TextView
-                    android:id="@+id/repeat_label"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginBottom="8dp"
-                    android:text="Repeat"
-                    android:textAlignment="center"
-                    android:textColor="@color/white"
-                    android:textSize="24sp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="80dp"
-                    android:orientation="horizontal">
-
-                    <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/day1"
-                        android:layout_width="@dimen/daySize"
-                        android:layout_height="@dimen/daySize"
-                        android:layout_marginLeft="12dp"
-                        android:layout_marginRight="4dp"
-                        android:background="@drawable/dow_button_shape_off"
-                        android:text="S"
-                        android:textColor="@color/black" />
-
-                    <Space
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1" />
-
-                    <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/day2"
-                        android:layout_width="@dimen/daySize"
-                        android:layout_height="@dimen/daySize"
-                        android:layout_marginLeft="4dp"
-                        android:layout_marginRight="4dp"
-                        android:background="@drawable/dow_button_shape_off"
-                        android:text="M"
-                        android:textColor="@color/black" />
-
-                    <Space
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1" />
-
-                    <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/day3"
-                        android:layout_width="@dimen/daySize"
-                        android:layout_height="@dimen/daySize"
-                        android:layout_marginLeft="4dp"
-                        android:layout_marginRight="4dp"
-                        android:background="@drawable/dow_button_shape_off"
-                        android:text="T"
-                        android:textColor="@color/black" />
-
-                    <Space
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1" />
-
-                    <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/day4"
-                        android:layout_width="@dimen/daySize"
-                        android:layout_height="@dimen/daySize"
-                        android:layout_marginLeft="4dp"
-                        android:layout_marginRight="4dp"
-                        android:background="@drawable/dow_button_shape_off"
-                        android:text="W"
-                        android:textColor="@color/black" />
-
-                    <Space
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1" />
-
-                    <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/day5"
-                        android:layout_width="@dimen/daySize"
-                        android:layout_height="@dimen/daySize"
-                        android:layout_marginLeft="4dp"
-                        android:layout_marginRight="4dp"
-                        android:background="@drawable/dow_button_shape_off"
-                        android:text="T"
-                        android:textColor="@color/black" />
-
-                    <Space
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1" />
-
-                    <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/day6"
-                        android:layout_width="@dimen/daySize"
-                        android:layout_height="@dimen/daySize"
-                        android:layout_marginLeft="4dp"
-                        android:layout_marginRight="4dp"
-                        android:background="@drawable/dow_button_shape_off"
-                        android:text="F"
-                        android:textColor="@color/black" />
-
-                    <Space
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1" />
-
-                    <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/day7"
-                        android:layout_width="@dimen/daySize"
-                        android:layout_height="@dimen/daySize"
-                        android:layout_marginLeft="4dp"
-                        android:layout_marginRight="12dp"
-                        android:background="@drawable/dow_button_shape_off"
-                        android:text="S"
-                        android:textColor="@color/black" />
-                </LinearLayout>
-
-            </LinearLayout>
-
-            <View
-                android:id="@+id/divider"
-                android:layout_width="5dp"
-                android:layout_height="match_parent"
-                android:layout_marginTop="20dp"
-                android:layout_marginBottom="20dp"
-                android:background="?android:attr/listDivider" />
-
-            <TableLayout
+            <!-- Minutes Picker -->
+            <NumberPicker
+                android:id="@+id/minute_picker"
                 android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1">
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/transparent_background"
+                android:gravity="center"
+                android:selectionDividerHeight="0dp"
+                android:textColor="@color/white"
+                android:layout_marginEnd="10dp" />
 
-                <TableRow
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:layout_gravity="center"
-                    android:layout_marginBottom="20dp"
-                    android:gravity="center|top">
-
-                    <EditText
-                        android:id="@+id/alarmName"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginLeft="20dp"
-                        android:layout_marginTop="60dp"
-                        android:background="@android:color/darker_gray"
-                        android:ems="10"
-                        android:hapticFeedbackEnabled="true"
-                        android:inputType="text"
-                        android:paddingTop="5dp"
-                        android:paddingBottom="5dp"
-                        android:text="Alarm Name"
-                        android:textAlignment="center"
-                        android:textColor="#FFFFFF"
-                        android:textColorHint="#A5A5A5" />
-
-                </TableRow>
-
-                <TableRow
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="20dp">
-
-                    <TextView
-                        android:id="@+id/textView4"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginLeft="20dp"
-                        android:text="Brightness"
-                        android:textAlignment="textEnd"
-                        android:textColor="#FFFFFF"
-                        android:textSize="24dp" />
-
-                    <SeekBar
-                        android:id="@+id/brightness"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:progress="100"
-                        android:layout_gravity="center_vertical"
-                        android:scrollbarSize="28dp" />
-
-                    <TextView
-                        android:id="@+id/brightVal"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginRight="20dp"
-                        android:layout_gravity="center_vertical"
-                        android:text="100%"
-                        android:textColor="#FFFFFF"
-                        android:textSize="18dp" />
-
-                </TableRow>
-
-                <TableRow
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="20dp">
-
-                    <TextView
-                        android:id="@+id/textView5"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginLeft="20dp"
-                        android:text="Ramp Brightness?"
-                        android:textAlignment="textEnd"
-                        android:textColor="#FFFFFF"
-                        android:textSize="24dp" />
-
-                    <Switch
-                        android:id="@+id/rampBright"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:scaleX="1.5"
-                        android:scaleY="1.5"
-                        android:height="40dp"
-                        android:layout_gravity="center" />
-                </TableRow>
-
-                <TableRow
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content">
-
-                    <TextView
-                        android:id="@+id/textView6"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginLeft="20dp"
-                        android:text="Alarm Mode:"
-                        android:textAlignment="textEnd"
-                        android:textColor="#FFFFFF"
-                        android:textSize="24dp" />
-
-                    <TextView
-                        android:id="@+id/alarmMode"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginLeft="20dp"
-                        android:text="Rainbow"
-                        android:textAlignment="textEnd"
-                        android:textColor="#FFFFFF"
-                        android:textSize="24dp" />
-                </TableRow>
-
-                <TableRow
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent">
-
-                    <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/grabCurrent"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginLeft="2dp"
-                        android:layout_gravity="right|bottom"
-                        android:text="Grab Current"
-                        android:textColor="@color/white"
-                        android:textSize="16dp" />
-                </TableRow>
-
-                <TableRow
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1">
-
-                    <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/cancel"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="right|bottom"
-                        android:background="@drawable/black_button_background"
-                        android:text="Cancel"
-                        android:textColor="@color/white"
-                        android:textSize="18dp" />
-
-                    <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/save"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="right|bottom"
-                        android:background="@drawable/black_button_background"
-                        android:text="Save"
-                        android:textColor="@color/white"
-                        android:textSize="18dp" />
-                </TableRow>
-
-            </TableLayout>
+            <!-- AM/PM Picker -->
+            <NumberPicker
+                android:id="@+id/ampm_picker"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/transparent_background"
+                android:gravity="center"
+                android:selectionDividerHeight="0dp"
+                android:textColor="@color/white" />
         </LinearLayout>
+    </FrameLayout>
+
+
+    <TextView
+        android:id="@+id/repeat_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Repeat"
+        android:textColor="@color/white"
+        android:textSize="24sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/time_picker_container" />
+
+    <!-- Repeating Days -->
+    <LinearLayout
+        android:id="@+id/repeat_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center"
+        android:orientation="horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/repeat_label">
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/day1"
+            android:layout_width="@dimen/daySize"
+            android:layout_height="@dimen/daySize"
+            android:background="@drawable/dow_button_shape_off"
+            android:text="S"
+            android:textColor="@color/black" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/day2"
+            android:layout_width="@dimen/daySize"
+            android:layout_height="@dimen/daySize"
+            android:background="@drawable/dow_button_shape_off"
+            android:text="M"
+            android:textColor="@color/black" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/day3"
+            android:layout_width="@dimen/daySize"
+            android:layout_height="@dimen/daySize"
+            android:background="@drawable/dow_button_shape_off"
+            android:text="T"
+            android:textColor="@color/black" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/day4"
+            android:layout_width="@dimen/daySize"
+            android:layout_height="@dimen/daySize"
+            android:background="@drawable/dow_button_shape_off"
+            android:text="W"
+            android:textColor="@color/black" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/day5"
+            android:layout_width="@dimen/daySize"
+            android:layout_height="@dimen/daySize"
+            android:background="@drawable/dow_button_shape_off"
+            android:text="T"
+            android:textColor="@color/black" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/day6"
+            android:layout_width="@dimen/daySize"
+            android:layout_height="@dimen/daySize"
+            android:background="@drawable/dow_button_shape_off"
+            android:text="F"
+            android:textColor="@color/black" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/day7"
+            android:layout_width="@dimen/daySize"
+            android:layout_height="@dimen/daySize"
+            android:background="@drawable/dow_button_shape_off"
+            android:text="S"
+            android:textColor="@color/black" />
     </LinearLayout>
+
+    <!-- Horizontal Divider -->
+    <View
+        android:id="@+id/divider"
+        android:layout_width="match_parent"
+        android:layout_height="5dp"
+        android:background="?android:attr/listDivider"
+        android:layout_marginTop="10dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/repeat_container" />
+
+    <EditText
+        android:id="@+id/alarmName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@android:color/darker_gray"
+        android:ems="10"
+        android:hapticFeedbackEnabled="true"
+        android:inputType="text"
+        android:paddingTop="5dp"
+        android:paddingBottom="5dp"
+        android:text="Alarm Name"
+        android:textAlignment="center"
+        android:textColor="#FFFFFF"
+        android:textColorHint="#A5A5A5"
+        app:layout_constraintTop_toBottomOf="@id/divider"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="60dp"
+        android:layout_marginStart="20dp"
+        android:layout_marginEnd="20dp"/>
+
+    <TextView
+        android:id="@+id/brightness_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Brightness"
+        android:textColor="@color/white"
+        android:textSize="18sp"
+        app:layout_constraintTop_toBottomOf="@id/alarmName"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginTop="20dp"
+        android:layout_marginStart="20dp"/>
+
+    <SeekBar
+        android:id="@+id/brightness"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="10dp"
+        app:layout_constraintTop_toBottomOf="@id/alarmName"
+        app:layout_constraintStart_toEndOf="@id/brightness_label"
+        app:layout_constraintEnd_toStartOf="@id/brightVal"
+        android:layout_marginTop="20dp"
+        android:layout_marginStart="10dp"/>
+
+    <TextView
+        android:id="@+id/brightVal"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="100%"
+        android:textColor="@color/white"
+        android:textSize="18sp"
+        app:layout_constraintTop_toBottomOf="@id/alarmName"
+        app:layout_constraintStart_toEndOf="@id/brightness"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="20dp"
+        android:layout_marginEnd="20dp"/>
+
+    <!-- Ramp Brightness -->
+    <TextView
+        android:id="@+id/ramp_brightness_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Ramp Brightness?"
+        android:textColor="@color/white"
+        android:textSize="18sp"
+        app:layout_constraintTop_toBottomOf="@id/brightness"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginTop="20dp"
+        android:layout_marginStart="20dp"/>
+
+    <Switch
+        android:id="@+id/ramp_brightness"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toBottomOf="@id/brightness"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="20dp" />
+
+    <!-- Alarm Mode -->
+    <TextView
+        android:id="@+id/alarm_mode_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Alarm Mode:"
+        android:textColor="@color/white"
+        android:textSize="18sp"
+        app:layout_constraintTop_toBottomOf="@id/ramp_brightness"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginTop="20dp"
+        android:layout_marginStart="20dp"/>
+
+    <TextView
+        android:id="@+id/alarm_mode"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Rainbow"
+        android:textColor="@color/white"
+        android:textSize="18sp"
+        app:layout_constraintTop_toBottomOf="@id/ramp_brightness_label"
+        app:layout_constraintStart_toEndOf="@id/alarm_mode_label"
+        app:layout_constraintEnd_toStartOf="@id/grab_current"
+        android:layout_marginTop="20dp"
+        android:layout_marginEnd="5dp" />
+
+    <Button
+        android:id="@+id/grab_current"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Grab Current"
+        android:textColor="@color/white"
+        android:background="@drawable/rounded_picker_background"
+        app:layout_constraintTop_toBottomOf="@id/ramp_brightness"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginEnd="20dp" />
+
+    <!-- Cancel and Save Buttons -->
+    <Button
+        android:id="@+id/cancel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Cancel"
+        android:textColor="@color/white"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        android:background="@drawable/transparent_background"
+        android:layout_marginBottom="20dp"
+        android:layout_marginStart="20dp" />
+
+    <Button
+        android:id="@+id/save"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Save"
+        android:textColor="@color/white"
+        app:layout_constraintBottom_toBottomOf="parent"
+        android:background="@drawable/transparent_background"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginBottom="20dp"
+        android:layout_marginEnd="20dp" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

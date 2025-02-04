@@ -26,9 +26,15 @@ class AlarmAlertActivity : Activity() {
     private lateinit var alarmNameTextView: TextView
     private lateinit var snoozeButton: Button
     private lateinit var dismissButton: Button
+    private lateinit var snoozeMinusButton: Button
+    private lateinit var snoozePlusButton: Button
+
     private val sharedPreferencesName = "alarm_prefs"
     private val alarmsKey = "alarms_list"
-    private val snoozeDurationMillis: Long = 5 * 60 * 1000 // Snooze for 5 minutes
+    private var snoozeDurationMinutes: Int = 5  // Default snooze duration (5 minutes)
+    private val maxSnoozeDuration = 60
+    private val minSnoozeDuration = 1
+    private var snoozeDurationMillis = snoozeDurationMinutes * 60 * 1000L
     private val alarmHandler = Handler()
     private var alarmsList: List<Alarm> = emptyList()
     private val REQUEST_CODE_ALARM_UPDATE = 1001
@@ -50,6 +56,8 @@ class AlarmAlertActivity : Activity() {
         alarmNameTextView = findViewById(R.id.textViewAlarmName)
         snoozeButton = findViewById(R.id.buttonSnooze)
         dismissButton = findViewById(R.id.buttonDismiss)
+        snoozeMinusButton = findViewById(R.id.buttonSnoozeMinus)
+        snoozePlusButton = findViewById(R.id.buttonSnoozePlus)
 
         val alarmTime = intent.getStringExtra("alarmTime")
         val alarmName = intent.getStringExtra("alarmName")
@@ -107,6 +115,22 @@ class AlarmAlertActivity : Activity() {
             finish()
         }
 
+        updateSnoozeButtonText()
+
+        snoozeMinusButton.setOnClickListener {
+            if (snoozeDurationMinutes > minSnoozeDuration) {
+                snoozeDurationMinutes--
+                updateSnoozeButtonText()
+            }
+        }
+
+        snoozePlusButton.setOnClickListener {
+            if (snoozeDurationMinutes < maxSnoozeDuration) {
+                snoozeDurationMinutes++
+                updateSnoozeButtonText()
+            }
+        }
+
         snoozeButton.setOnClickListener {
             snoozeAlarm()
             finish()
@@ -126,6 +150,10 @@ class AlarmAlertActivity : Activity() {
 
         alarmHandler.postDelayed(alarmRunnable, snoozeDurationMillis)
         Log.d("ALARM ALERT", "Running")
+    }
+
+    private fun updateSnoozeButtonText() {
+        snoozeButton.text = "Snooze $snoozeDurationMinutes Minute(s)"
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -202,6 +230,8 @@ class AlarmAlertActivity : Activity() {
 
     private fun snoozeAlarm() {
         println("Snooze button clicked")
+        Log.d("AlarmAlertActivity", "Snooze for $snoozeDurationMinutes minute(s)")
+        snoozeDurationMillis = snoozeDurationMinutes * 60 * 1000L
         restorePreviousMode()
         finish()
     }

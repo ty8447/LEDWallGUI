@@ -7,10 +7,10 @@ import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.widget.Button
+import android.widget.NumberPicker
 import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
-import android.widget.TimePicker
 import androidx.appcompat.app.AppCompatActivity
 import com.example.ledwallgui.R
 
@@ -18,6 +18,9 @@ class AlarmEditorActivity : AppCompatActivity() {
     private var alarms: MutableList<Alarm> = mutableListOf()
     private var use12HourTimeFormat = false
     private var alarmToEdit: Alarm? = null
+    private lateinit var hourPicker: NumberPicker
+    private lateinit var minutePicker: NumberPicker
+    private lateinit var amPmPicker: NumberPicker
     // Holds the selected days state; its initial value will be updated either from the alarm or by toggling
     private var selectedDays: BooleanArray = BooleanArray(7) { false }
     private lateinit var dayButtons: List<Button>
@@ -34,12 +37,12 @@ class AlarmEditorActivity : AppCompatActivity() {
         setUpSaveButton()
         setUpCancelButton()
         setUpBrightnessControls()
-        handleTimePicker()
+        setUpTimePicker()
     }
 
     override fun onResume() {
         super.onResume()
-        handleTimePicker()
+        setUpTimePicker()
     }
 
     private fun initializeViews() {
@@ -48,10 +51,13 @@ class AlarmEditorActivity : AppCompatActivity() {
             R.id.day5, R.id.day6, R.id.day7
         ).map { buttonId ->
             val btn = findViewById<Button>(buttonId)
-            // Initialize the tag to false (unselected)
             btn.tag = false
             btn
         }
+
+        hourPicker = findViewById(R.id.hour_picker)
+        minutePicker = findViewById(R.id.minute_picker)
+        amPmPicker = findViewById(R.id.ampm_picker)
     }
 
     private fun handleIntentExtras() {
@@ -83,27 +89,35 @@ class AlarmEditorActivity : AppCompatActivity() {
         use12HourTimeFormat = intent.getBooleanExtra("use12HourTimeFormat", false)
         Log.d("AlarmEditorActivity", "handleIntentExtras: use12HourTimeFormat = $use12HourTimeFormat")
 
-        handleTimePicker()
+        setUpTimePicker()
     }
 
     private fun populateAlarmDetails(existingAlarm: Alarm) {
-        Log.d("AlarmEditorActivity", "populateAlarmDetails: Populating alarm with name: ${existingAlarm.alarmName}")
+        Log.d("AlarmEditorActivity", "Populating alarm with name: ${existingAlarm.alarmName}")
 
-        val timePicker = findViewById<TimePicker>(R.id.timePicker)
-        Log.d("AlarmEditorActivity", "populateAlarmDetails: Setting time - Hour: ${existingAlarm.hours}, Minute: ${existingAlarm.minutes}")
-        timePicker.hour = existingAlarm.hours
-        timePicker.minute = existingAlarm.minutes
+        val hour = existingAlarm.hours
+        val minute = existingAlarm.minutes
+        val isPm = hour >= 12
+
+        if (use12HourTimeFormat) {
+            hourPicker.value = if (hour % 12 == 0) 12 else hour % 12
+            amPmPicker.value = if (isPm) 1 else 0
+        } else {
+            hourPicker.value = hour
+        }
+
+        minutePicker.value = minute
 
         val alarmNameTextView = findViewById<TextView>(R.id.alarmName)
-        alarmNameTextView.text = existingAlarm.alarmName
-        Log.d("AlarmEditorActivity", "populateAlarmDetails: Setting alarm name: ${existingAlarm.alarmName}")
-
-        // Update selectedDays from the existing alarm and also update each button's tag
+        if (alarmNameTextView == null) {
+            Log.e("AlarmEditorActivity", "editor_name TextView is null!")
+        } else {
+            alarmNameTextView.text = existingAlarm.alarmName
+        }
         selectedDays = existingAlarm.selectedDays.copyOf()
         selectedDays.forEachIndexed { index, isSelected ->
             dayButtons[index].tag = isSelected
         }
-        Log.d("AlarmEditorActivity", "populateAlarmDetails: Selected days: ${selectedDays.joinToString(", ")}")
 
         updateDayButtonVisuals()
     }
@@ -151,18 +165,33 @@ class AlarmEditorActivity : AppCompatActivity() {
         })
     }
 
-    private fun handleTimePicker() {
-        val timePicker = findViewById<TimePicker>(R.id.timePicker)
-        Log.d("AlarmEditorActivity", "handleTimePicker: use12HourTimeFormat = $use12HourTimeFormat")
+    private fun setUpTimePicker() {
+        hourPicker.minValue = if (use12HourTimeFormat) 1 else 0
+        hourPicker.maxValue = if (use12HourTimeFormat) 12 else 23
+        hourPicker.wrapSelectorWheel = true
+
+        minutePicker.minValue = 0
+        minutePicker.maxValue = 59
+        minutePicker.wrapSelectorWheel = true
+
+        amPmPicker.visibility = if (use12HourTimeFormat) View.VISIBLE else View.GONE
+        amPmPicker.minValue = 0
+        amPmPicker.maxValue = 1
+        amPmPicker.displayedValues = arrayOf("AM", "PM")
+        amPmPicker.descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
 
         alarmToEdit?.let {
-            timePicker.hour = it.hours
-            timePicker.minute = it.minutes
+            val hour = it.hours
+            val minute = it.minutes
+            val isPm = hour >= 12
+
             if (use12HourTimeFormat) {
-                timePicker.setIs24HourView(false)
+                hourPicker.value = if (hour % 12 == 0) 12 else hour % 12
+                amPmPicker.value = if (isPm) 1 else 0
             } else {
-                timePicker.setIs24HourView(true)
+                hourPicker.value = hour
             }
+            minutePicker.value = minute
         }
     }
 
@@ -207,11 +236,19 @@ class AlarmEditorActivity : AppCompatActivity() {
     }
 
     private fun saveAlarm() {
-        val timePicker = findViewById<TimePicker>(R.id.timePicker)
         val alarmNameText = findViewById<TextView>(R.id.alarmName).text.toString()
-        val hours = timePicker.hour
-        val minutes = timePicker.minute
         val rampBright = findViewById<Switch>(R.id.rampBright).isChecked
+        val minute = minutePicker.value
+
+        val hour: Int = if (use12HourTimeFormat) {
+            if (amPmPicker.value == 1) {
+                if (hourPicker.value == 12) 12 else hourPicker.value + 12
+            } else {
+                if (hourPicker.value == 12) 0 else hourPicker.value
+            }
+        } else {
+            hourPicker.value
+        }
 
         // Get selected days from buttons
         val newSelectedDays = getSelectedDaysFromButtons()
@@ -220,8 +257,8 @@ class AlarmEditorActivity : AppCompatActivity() {
         if (alarmToEdit != null) {
             // Update existing alarm
             alarmToEdit?.apply {
-                this.hours = hours
-                this.minutes = minutes
+                hours = hour
+                minutes = minute
                 this.alarmName = alarmNameText
                 this.rampBright = rampBright
                 this.selectedDays = newSelectedDays.copyOf() // Ensure a new copy is created
@@ -233,8 +270,8 @@ class AlarmEditorActivity : AppCompatActivity() {
         } else {
             // Create new alarm
             val newAlarm = Alarm(
-                hours,
-                minutes,
+                hours = hour,
+                minutes = minute,
                 alarmNameText,
                 true,  // New alarms are enabled by default
                 false,
