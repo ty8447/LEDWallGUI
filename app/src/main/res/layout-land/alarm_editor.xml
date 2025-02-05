@@ -315,12 +315,10 @@
                         android:textColor="#FFFFFF"
                         android:textSize="24dp" />
 
-                    <Switch
-                        android:id="@+id/rampBright"
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/ramp_brightness"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:scaleX="1.5"
-                        android:scaleY="1.5"
                         android:height="40dp"
                         android:layout_gravity="center" />
                 </TableRow>

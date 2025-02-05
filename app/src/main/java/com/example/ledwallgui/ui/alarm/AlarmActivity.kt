@@ -29,7 +29,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import android.widget.Switch
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.semantics.text
 import androidx.core.app.ActivityCompat
+import androidx.core.app.ActivityCompat.startActivityForResult
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
@@ -38,6 +41,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.ledwallgui.PreferenceUtils
 import com.example.ledwallgui.R
 import com.example.ledwallgui.TimeMonitoringService
+import com.example.ledwallgui.ui.alarm.AlarmActivity.Companion.REQUEST_CODE_ADD_ALARM
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -45,6 +49,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import com.google.gson.Gson
+import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
 
 class AlarmActivity : AppCompatActivity() {
@@ -64,6 +69,7 @@ class AlarmActivity : AppCompatActivity() {
 
     private val sharedPreferencesName = "alarm_prefs"
     private val alarmsKey = "alarms_list"
+    private val snoozedAlarmsKey = "snoozedAlarms"
     private lateinit var gson: Gson
 
     private val alarms = mutableListOf<Alarm>()
@@ -111,7 +117,34 @@ class AlarmActivity : AppCompatActivity() {
         updateEmptyState()
         val filter = IntentFilter("com.example.ledwallgui.TIME_UPDATE")
         LocalBroadcastManager.getInstance(this).registerReceiver(timeUpdateReceiver, filter)
+        removeExpiredSnoozedAlarms()
     }
+
+    private fun removeExpiredSnoozedAlarms() {
+        val sharedPreferences = getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)
+        val snoozedAlarmsJson = sharedPreferences.getString(snoozedAlarmsKey, "[]")
+        val snoozedAlarms: MutableList<SnoozedAlarm> = try {
+            gson.fromJson(snoozedAlarmsJson, object : TypeToken<MutableList<SnoozedAlarm>>() {}.type)
+        } catch (e: JsonSyntaxException) {
+            mutableListOf()
+        }
+
+        val currentTimeMillis = System.currentTimeMillis()
+        val iterator = snoozedAlarms.iterator()
+
+        while (iterator.hasNext()) {
+            val snoozedAlarm = iterator.next()
+            if (currentTimeMillis - snoozedAlarm.snoozeTime >= 5 * 60 * 1000) { // 5 minutes in milliseconds
+                Log.d("AlarmActivity", "Removing expired snoozed alarm with ID: ${snoozedAlarm.id}")
+                iterator.remove()
+            }
+        }
+
+        // Save updated snoozed alarms list
+        val updatedSnoozedAlarmsJson = gson.toJson(snoozedAlarms)
+        sharedPreferences.edit().putString(snoozedAlarmsKey, updatedSnoozedAlarmsJson).apply()
+    }
+
 
     private fun checkAndRequestPermission() {
         //Log.d("AlarmActivity", "Checking permissions...")
@@ -168,6 +201,19 @@ class AlarmActivity : AppCompatActivity() {
         updateCurrentTime()
         updateEmptyState()
         updateTimeTillNextAlarm()
+
+        // Log the list of snoozed alarms
+        val sharedPreferences = getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)
+        val snoozedAlarmsJson = sharedPreferences.getString(snoozedAlarmsKey, "[]")
+        val snoozedAlarms: MutableList<SnoozedAlarm> = try {
+            gson.fromJson(snoozedAlarmsJson, object : TypeToken<MutableList<SnoozedAlarm>>() {}.type)
+        } catch (e: JsonSyntaxException) {
+            Log.e("AlarmActivity", "Error parsing snoozed alarms JSON", e)
+            mutableListOf()
+        }
+
+        Log.d("AlarmActivity", "Snoozed Alarms List: ${snoozedAlarms.map { "ID: ${it.id}, Snooze Time: ${it.snoozeTime}" }}")
+
     }
 
     override fun onPause() {
@@ -252,83 +298,130 @@ class AlarmActivity : AppCompatActivity() {
     }
 
     private fun updateTimeTillNextAlarm() {
+        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Starting updateTimeTillNextAlarm")
         val currentTime = Calendar.getInstance()
-        //Log.d("AlarmDebug", "Current time: ${currentTime.time}")
+        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Current time: ${currentTime.time}")
+        val allAlarms = mutableListOf<Pair<Calendar, String>>() // List to hold alarm times and names
 
-        // Sort alarms to find the next one based on current time
-        val nextAlarm = alarms
-            .filter {
-                //Log.d("AlarmDebug", "Checking alarm: $it")
-                it.isEnabled
-            } // Only consider enabled alarms
-            .mapNotNull { alarm ->
+        // Function to process alarms and add them to the list
+        fun processAlarms(alarms: List<Alarm>, isSnoozed: Boolean = false) {
+            Log.d("AlarmActivity", "processAlarms: Processing ${if (isSnoozed) "snoozed" else "regular"} alarms")
+            alarms.filter { it.isEnabled }.forEach { alarm ->
+                Log.d("AlarmActivity", "processAlarms: Processing alarm: ${alarm.alarmName}, isEnabled: ${alarm.isEnabled}")
                 val alarmTime = Calendar.getInstance().apply {
                     set(Calendar.HOUR_OF_DAY, alarm.hours)
                     set(Calendar.MINUTE, alarm.minutes)
                     set(Calendar.SECOND, 0)
                     set(Calendar.MILLISECOND, 0)
                 }
-
-                //Log.d("AlarmDebug", "Initial alarm time for ${alarm.alarmName}: ${alarmTime.time}")
+                Log.d("AlarmActivity", "processAlarms: Initial alarm time for ${alarm.alarmName}: ${alarmTime.time}")
 
                 val currentDayIndex = currentTime.get(Calendar.DAY_OF_WEEK) - 1
-                //Log.d("AlarmDebug", "Current day index: $currentDayIndex")
+                Log.d("AlarmActivity", "processAlarms: Current day index: $currentDayIndex")
                 val selectedDays = alarm.selectedDays
-                //Log.d("AlarmDebug", "Selected days for ${alarm.alarmName}: ${selectedDays.joinToString()}")
+                Log.d("AlarmActivity", "processAlarms: Selected days for ${alarm.alarmName}: ${selectedDays.joinToString()}")
 
                 if (!selectedDays.contains(true)) {
-                    // Handle the case where no repeating days are selected
+                    Log.d("AlarmActivity", "processAlarms: No repeating days selected for ${alarm.alarmName}")
                     if (alarmTime.before(currentTime)) {
-                        //Log.d("AlarmDebug", "Skipping ${alarm.alarmName}, time has passed")
-                        alarmTime.add(Calendar.DAY_OF_YEAR, 1) // Set for the next day
+                        Log.d("AlarmActivity", "processAlarms: Alarm time for ${alarm.alarmName} is before current time, adding 1 day")
+                        alarmTime.add(Calendar.DAY_OF_YEAR, 1)
                     }
-                    //Log.d("AlarmDebug", "Skipping ${alarm.alarmName}, no days selected")
-                    return@mapNotNull alarmTime
+                    Log.d("AlarmActivity", "processAlarms: Adding ${alarm.alarmName} to allAlarms with time: ${alarmTime.time}")
+                    allAlarms.add(Pair(alarmTime, alarm.alarmName))
+                    return@forEach
                 }
 
-                // Adjust the alarm to the next available day based on selectedDays
                 var daysToAdd = 0
                 while (!selectedDays[(currentDayIndex + daysToAdd) % 7]) {
-                    //Log.d("AlarmDebug", "Incrementing daysToAdd for ${alarm.alarmName}: $daysToAdd")
+                    Log.d("AlarmActivity", "processAlarms: Incrementing daysToAdd for ${alarm.alarmName}: $daysToAdd")
                     daysToAdd++
                     if (daysToAdd > 7) {
-                        //Log.d("AlarmDebug", "No valid day found for ${alarm.alarmName}, skipping")
-                        return@mapNotNull null
-                    } // Prevent infinite loop
+                        Log.d("AlarmActivity", "processAlarms: No valid day found for ${alarm.alarmName}, skipping")
+                        return@forEach
+                    }
                 }
 
                 if (daysToAdd == 0 && alarmTime.before(currentTime)) {
-                    //Log.d("AlarmDebug", "${alarm.alarmName} is for today, but the time has passed")
+                    Log.d("AlarmActivity", "processAlarms: ${alarm.alarmName} is for today, but the time has passed")
                     daysToAdd = 1
                     while (!selectedDays[(currentDayIndex + daysToAdd) % 7]) {
+                        Log.d("AlarmActivity", "processAlarms: Incrementing daysToAdd for passed time on ${alarm.alarmName}: $daysToAdd")
                         daysToAdd++
-                        //Log.d("AlarmDebug", "Incrementing daysToAdd for passed time on ${alarm.alarmName}: $daysToAdd")
                         if (daysToAdd > 7) {
-                            //Log.d("AlarmDebug", "No valid future day found for ${alarm.alarmName}, skipping")
-                            return@mapNotNull null
-                        } // Prevent infinite loop
+                            Log.d("AlarmActivity", "processAlarms: No valid future day found for ${alarm.alarmName}, skipping")
+                            return@forEach
+                        }
                     }
                 }
-                //Log.d("AlarmDebug", "Final daysToAdd for ${alarm.alarmName}: $daysToAdd")
+
+                Log.d("AlarmActivity", "processAlarms: Final daysToAdd for ${alarm.alarmName}: $daysToAdd")
                 alarmTime.add(Calendar.DAY_OF_YEAR, daysToAdd)
-                //Log.d("AlarmDebug", "Adjusted alarm time for ${alarm.alarmName}: ${alarmTime.time}")
-                alarmTime
+                Log.d("AlarmActivity", "processAlarms: Adjusted alarm time for ${alarm.alarmName}: ${alarmTime.time}")
+                allAlarms.add(Pair(alarmTime, alarm.alarmName))
             }
-            .minByOrNull { it.timeInMillis } // Find the earliest alarm
+        }
+
+        // Process regular alarms
+        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Processing regular alarms")
+        processAlarms(alarms)
+
+        // Retrieve existing snoozed alarms
+        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Retrieving snoozed alarms")
+        val sharedPreferences = getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)
+        val snoozedAlarmsJson = sharedPreferences.getString(snoozedAlarmsKey, "[]")
+        val snoozedAlarms: MutableList<SnoozedAlarm> = try {
+            gson.fromJson(snoozedAlarmsJson, object : TypeToken<MutableList<SnoozedAlarm>>() {}.type)
+        } catch (e: JsonSyntaxException) {
+            Log.e("AlarmActivity", "updateTimeTillNextAlarm: Error parsing snoozed alarms JSON", e)
+            mutableListOf()
+        }
+
+        // Process snoozed alarms
+        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Processing snoozed alarms")
+        snoozedAlarms.forEach { snoozedAlarm ->
+            Log.d("AlarmActivity", "updateTimeTillNextAlarm: Processing snoozed alarm: ${snoozedAlarm.id}, snoozeTime: ${snoozedAlarm.snoozeTime}")
+            val snoozeTime = Calendar.getInstance().apply {
+                timeInMillis = snoozedAlarm.snoozeTime
+            }
+            Log.d("AlarmActivity", "updateTimeTillNextAlarm: Snooze time for ${snoozedAlarm.id}: ${snoozeTime.time}")
+            allAlarms.add(Pair(snoozeTime, "Snoozed: ${snoozedAlarm.id}"))
+        }
+
+        // Find the next alarm
+        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Finding next alarm from allAlarms: ${allAlarms.map { "${it.second} at ${it.first.time}" }}")
+        val nextAlarmPair = allAlarms.minByOrNull { it.first.timeInMillis }
 
         // Update the TextView with the time difference
-        if (nextAlarm != null) {
+        if (nextAlarmPair != null) {
+            val (nextAlarm, alarmName) = nextAlarmPair
+            Log.d("AlarmActivity", "updateTimeTillNextAlarm: Next alarm: $alarmName at ${nextAlarm.time}")
             var timeDifference = nextAlarm.timeInMillis - currentTime.timeInMillis
             timeDifference += 59_000
             val hours = timeDifference / (1000 * 60 * 60)
             val minutes = (timeDifference / (1000 * 60)) % 60
-            //Log.d("AlarmDebug", "Next alarm time: ${nextAlarm.time}")
-            //Log.d("AlarmDebug", "Time difference: $hours hours and $minutes minutes")
-            timeTillNext.text = getString(R.string.time_till_next_alarm, hours, minutes)
+            Log.d("AlarmActivity", "updateTimeTillNextAlarm: Time difference: $hours hours and $minutes minutes")
+            val timeText = when {
+                hours > 0 && minutes > 0 -> "Next Alarm in $hours ${if (hours.toInt() == 1) "hour" else "hours"} and $minutes ${if (minutes.toInt() == 1) "minute" else "minutes"}"
+                hours > 0 -> "Next Alarm in $hours ${if (hours.toInt() == 1) "hour" else "hours"}"
+                minutes > 0 -> "Next Alarm in $minutes ${if (minutes.toInt() == 1) "minute" else "minutes"}"
+                else -> ""
+            }
+
+            if (alarmName.startsWith("Snoozed:")) {
+                val snoozeText = when {
+                    minutes > 0 -> "Snoozed for $minutes ${if (minutes.toInt() == 1) "minute" else "minutes"}"
+                    else -> ""
+                }
+                timeTillNext.text = snoozeText
+            } else {
+                timeTillNext.text = timeText
+            }
         } else {
-            //Log.d("AlarmDebug", "No upcoming alarms found")
+            Log.d("AlarmActivity", "updateTimeTillNextAlarm: No upcoming alarms found")
             timeTillNext.text = getString(R.string.no_upcoming_alarms)
         }
+        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Finished updateTimeTillNextAlarm")
     }
 
     private fun configureSharedPreferences() {

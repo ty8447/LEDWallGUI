@@ -9,9 +9,9 @@ import android.view.View
 import android.widget.Button
 import android.widget.NumberPicker
 import android.widget.SeekBar
-import android.widget.Switch
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
 import com.example.ledwallgui.R
 
 class AlarmEditorActivity : AppCompatActivity() {
@@ -21,6 +21,7 @@ class AlarmEditorActivity : AppCompatActivity() {
     private lateinit var hourPicker: NumberPicker
     private lateinit var minutePicker: NumberPicker
     private lateinit var amPmPicker: NumberPicker
+    private lateinit var rampBrightnessSwitch: SwitchCompat
     // Holds the selected days state; its initial value will be updated either from the alarm or by toggling
     private var selectedDays: BooleanArray = BooleanArray(7) { false }
     private lateinit var dayButtons: List<Button>
@@ -38,6 +39,8 @@ class AlarmEditorActivity : AppCompatActivity() {
         setUpCancelButton()
         setUpBrightnessControls()
         setUpTimePicker()
+
+        rampBrightnessSwitch = findViewById(R.id.ramp_brightness)
     }
 
     override fun onResume() {
@@ -173,6 +176,7 @@ class AlarmEditorActivity : AppCompatActivity() {
         minutePicker.minValue = 0
         minutePicker.maxValue = 59
         minutePicker.wrapSelectorWheel = true
+        minutePicker.setFormatter { value -> String.format("%02d", value) }
 
         amPmPicker.visibility = if (use12HourTimeFormat) View.VISIBLE else View.GONE
         amPmPicker.minValue = 0
@@ -237,7 +241,7 @@ class AlarmEditorActivity : AppCompatActivity() {
 
     private fun saveAlarm() {
         val alarmNameText = findViewById<TextView>(R.id.alarmName).text.toString()
-        val rampBright = findViewById<Switch>(R.id.rampBright).isChecked
+        val rampBright = rampBrightnessSwitch.isChecked
         val minute = minutePicker.value
 
         val hour: Int = if (use12HourTimeFormat) {

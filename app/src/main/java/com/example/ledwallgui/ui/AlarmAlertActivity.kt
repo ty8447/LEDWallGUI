@@ -1,6 +1,8 @@
 package com.example.ledwallgui.ui
 
 import android.app.Activity
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -9,10 +11,17 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
 import android.content.SharedPreferences
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
+import androidx.compose.ui.input.key.type
 import com.example.ledwallgui.R
 import com.example.ledwallgui.PreferenceUtils
 import com.example.ledwallgui.ui.alarm.Alarm
+import com.example.ledwallgui.ui.alarm.AlarmReceiver
+import com.example.ledwallgui.ui.alarm.SnoozedAlarm
 import com.example.ledwallgui.ui.modes.ModeManager
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 import com.google.gson.Gson
@@ -31,6 +40,7 @@ class AlarmAlertActivity : Activity() {
 
     private val sharedPreferencesName = "alarm_prefs"
     private val alarmsKey = "alarms_list"
+    private val snoozedAlarmsKey = "snoozedAlarms"
     private var snoozeDurationMinutes: Int = 5  // Default snooze duration (5 minutes)
     private val maxSnoozeDuration = 60
     private val minSnoozeDuration = 1
@@ -229,43 +239,259 @@ class AlarmAlertActivity : Activity() {
     }
 
     private fun snoozeAlarm() {
-        println("Snooze button clicked")
+        Log.d("AlarmAlertActivity", "Snooze button clicked")
         Log.d("AlarmAlertActivity", "Snooze for $snoozeDurationMinutes minute(s)")
+
+        // Calculate the new snooze time.
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.MINUTE, snoozeDurationMinutes)
+        val snoozeTimeMillis = calendar.timeInMillis
+
+        // Retrieve existing snoozed alarms.
+        val sharedPreferences = getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)
+        val snoozedAlarmsJson = sharedPreferences.getString(snoozedAlarmsKey, "[]")
+        val snoozedAlarms: MutableList<SnoozedAlarm> = try {
+            gson.fromJson(snoozedAlarmsJson, object : TypeToken<MutableList<SnoozedAlarm>>() {}.type)
+        } catch (e: JsonSyntaxException) {
+            mutableListOf()
+        }
+
+        // Determine if the current alarm is a snoozed alarm or a base alarm.
+        val isSnoozedAlarm = (alarmId % 1000 == 1)  // if true, the alarm is a snoozed alarm.
+        val baseAlarmId = if (isSnoozedAlarm) alarmId / 1000 else alarmId
+
+        // Find the base (original) alarm using the computed baseAlarmId.
+        val originalAlarm = getAlarmsFromSharedPreferences().find { it.id == baseAlarmId }
+        if (originalAlarm != null) {
+            val originalTimeMillis = originalAlarm.getTimeAsCalendar().timeInMillis
+
+            if (isSnoozedAlarm) {
+                // Update the snooze time of the existing snoozed alarm.
+                val snoozedIndex = snoozedAlarms.indexOfFirst { it.id == alarmId }
+                if (snoozedIndex != -1) {
+                    snoozedAlarms[snoozedIndex].snoozeTime = snoozeTimeMillis
+                    Log.d("AlarmAlertActivity", "Updated snoozed alarm id $alarmId with new snooze time: $snoozeTimeMillis")
+                } else {
+                    Log.e("AlarmAlertActivity", "Snoozed alarm id $alarmId not found in snoozed alarms list.")
+                }
+            } else {
+                // If this is a base alarm, look for an existing snoozed alarm that matches originalId and originalTime.
+                val existingIndex = snoozedAlarms.indexOfFirst {
+                    it.originalId == originalAlarm.id && it.originalTime == originalTimeMillis
+                }
+                if (existingIndex != -1) {
+                    snoozedAlarms[existingIndex].snoozeTime = snoozeTimeMillis
+                    Log.d("AlarmAlertActivity", "Updated existing snoozed alarm (originalId: ${originalAlarm.id}) with new snooze time: $snoozeTimeMillis")
+                } else {
+                    // Create a new snoozed alarm.
+                    val newSnoozedAlarm = SnoozedAlarm(
+                        id = originalAlarm.id * 1000 + 1,  // unique id for snoozed alarm
+                        originalId = originalAlarm.id,
+                        originalTime = originalTimeMillis,
+                        snoozeTime = snoozeTimeMillis
+                    )
+                    snoozedAlarms.add(newSnoozedAlarm)
+                    Log.d("AlarmAlertActivity", "Added new snoozed alarm: $newSnoozedAlarm")
+                }
+            }
+
+            // Save the updated snoozed alarms list.
+            val updatedSnoozedAlarmsJson = gson.toJson(snoozedAlarms)
+            sharedPreferences.edit().putString(snoozedAlarmsKey, updatedSnoozedAlarmsJson).apply()
+
+            // Create a temporary alarm object for scheduling.
+            // Use the computed snoozed id if this is a base alarm; otherwise reuse the current id.
+            val snoozeAlarmId = if (!isSnoozedAlarm) originalAlarm.id * 1000 + 1 else alarmId
+            val snoozeAlarm = Alarm(
+                hours = calendar.get(Calendar.HOUR_OF_DAY),
+                minutes = calendar.get(Calendar.MINUTE),
+                alarmName = originalAlarm.alarmName + " (Snoozed)",
+                isEnabled = true,
+                id = snoozeAlarmId
+            )
+
+            // Schedule the snoozed alarm.
+            scheduleAlarm(snoozeAlarm, this)
+            Log.d("AlarmAlertActivity", "Scheduled snoozed alarm for ${snoozeAlarm.hours}:${snoozeAlarm.minutes}")
+        } else {
+            Log.e("AlarmAlertActivity", "Failed to find the alarm to snooze with base id $baseAlarmId")
+        }
+
+        // Display a toast with the formatted snooze time.
+        val snoozeTimeFormatted = if (use12HourTimeFormat) {
+            val hour = calendar.get(Calendar.HOUR)
+            val minute = calendar.get(Calendar.MINUTE)
+            val period = if (calendar.get(Calendar.AM_PM) == Calendar.AM) "AM" else "PM"
+            String.format("%02d:%02d %s", if (hour == 0) 12 else hour, minute, period)
+        } else {
+            String.format("%02d:%02d", calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE))
+        }
+        Toast.makeText(this, "Alarm will go off at $snoozeTimeFormatted", Toast.LENGTH_LONG).show()
+
         snoozeDurationMillis = snoozeDurationMinutes * 60 * 1000L
         restorePreviousMode()
         finish()
     }
 
-    // Update dismissAlarm() to search for the alarm by id instead of using it as an index
+    private fun scheduleAlarm(alarm: Alarm, context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        Log.d("AlarmAlertActivity", "Attempting to schedule alarm: ${alarm.alarmName} at ${alarm.hours}:${alarm.minutes}")
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+            Log.w("AlarmAlertActivity", "Exact alarm permission is missing! Requesting permission.")
+            requestExactAlarmPermission(context)
+            return
+        }
+
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            putExtra("alarmTime", "${alarm.hours}:${alarm.minutes}")
+            putExtra("alarmName", alarm.alarmName)
+            putExtra("alarmId", alarm.id)
+        }
+
+        // Compute a unique request code using a non-commutative formula.
+        val requestCode = alarm.id * 10000 + alarm.hours * 100 + alarm.minutes
+
+        val pendingIntent = PendingIntent.getBroadcast(
+            context, requestCode, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val now = Calendar.getInstance()
+        val alarmTime = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, alarm.hours)
+            set(Calendar.MINUTE, alarm.minutes)
+            set(Calendar.SECOND, 0)
+        }
+
+        val selectedDays = alarm.selectedDays
+        val today = now.get(Calendar.DAY_OF_WEEK)
+        Log.d("AlarmAlertActivity", "Today: $today")
+
+        if (selectedDays.any { it }) {
+            var closestDay: Int? = null
+            var minDiff = Long.MAX_VALUE
+
+            for (i in selectedDays.indices) {
+                if (selectedDays[i]) {
+                    Log.d("AlarmAlertActivity", "Checking TRUE day: $i")
+                    val dayOfWeek = i + 1 // Adjust for Calendar.DAY_OF_WEEK (Sunday=1, Saturday=7)
+                    Log.d("AlarmAlertActivity", "Day of week: $dayOfWeek")
+
+                    val tempCalendar = alarmTime.clone() as Calendar
+                    tempCalendar.set(Calendar.DAY_OF_WEEK, dayOfWeek)
+
+                    if (dayOfWeek == today && tempCalendar.timeInMillis <= now.timeInMillis) {
+                        tempCalendar.add(Calendar.WEEK_OF_YEAR, 1) // Move to next week if today and time has passed
+                    } else if (dayOfWeek < today) {
+                        tempCalendar.add(Calendar.WEEK_OF_YEAR, 1) // Move past to next week
+                    }
+
+                    val diff = tempCalendar.timeInMillis - now.timeInMillis
+                    if (diff < minDiff) {
+                        minDiff = diff
+                        closestDay = dayOfWeek
+                    }
+                }
+            }
+
+            if (closestDay != null) {
+                alarmTime.timeInMillis = now.timeInMillis + minDiff // Correctly adjust time based on closest day
+                Log.d("AlarmAlertActivity", "Scheduled repeating alarm for: ${alarmTime.time}")
+            }
+        } else {
+            if (alarmTime.timeInMillis <= now.timeInMillis) {
+                alarmTime.add(Calendar.DAY_OF_YEAR, 1) // Move to the next day if time has passed
+                Log.d("AlarmAlertActivity", "No repeat days selected. Scheduling for the next available day.")
+            }
+        }
+
+        Log.d("AlarmAlertActivity", "Final scheduled time: ${alarmTime.time}")
+
+        try {
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, alarmTime.timeInMillis, pendingIntent)
+            Log.d("AlarmAlertActivity", "Alarm successfully scheduled.")
+        } catch (e: SecurityException) {
+            Log.e("AlarmAlertActivity", "Failed to schedule exact alarm: ${e.message}")
+            Toast.makeText(context, "Permission required to schedule exact alarms.", Toast.LENGTH_LONG).show()
+            requestExactAlarmPermission(context)
+        }
+    }
+
+    private fun requestExactAlarmPermission(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Log.w("AlarmAlertActivity", "Redirecting user to grant exact alarm permission.")
+            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                data = Uri.parse("package:${context.packageName}")
+            }
+            context.startActivity(intent)
+        }
+    }
+
     private fun dismissAlarm() {
         Log.d("AlarmAlertActivity", "dismissAlarm called with id $alarmId")
+
+        // Retrieve the stored alarms.
         val alarms = getAlarmsFromSharedPreferences()
-        if (alarms.isNullOrEmpty()) {
+        if (alarms.isEmpty()) {
             Log.e("AlarmAlertActivity", "Alarms list is empty")
             return
         }
-        // Find the alarm by its unique id
-        val alarm = alarms.find { it.id == alarmId }
-        if (alarm == null) {
-            Log.e("AlarmAlertActivity", "Invalid alarm id: $alarmId")
+        Log.d("AlarmAlertActivity", "Stored Alarms List: ${alarms.joinToString(separator = "\n")}")
+
+        // Retrieve the current snoozed alarms list.
+        val sharedPreferences = getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)
+        val snoozedAlarmsJson = sharedPreferences.getString(snoozedAlarmsKey, "[]")
+        val snoozedAlarms: MutableList<SnoozedAlarm> = try {
+            gson.fromJson(snoozedAlarmsJson, object : TypeToken<MutableList<SnoozedAlarm>>() {}.type)
+        } catch (e: JsonSyntaxException) {
+            Log.e("AlarmAlertActivity", "Error parsing snoozed alarms JSON", e)
+            mutableListOf()
+        }
+
+        // Determine whether the alarm is a snoozed alarm by checking the snoozed alarms list.
+        val snoozedEntry = snoozedAlarms.find { it.id == alarmId }
+        val originalAlarm: Alarm? = if (snoozedEntry != null) {
+            // This is a snoozed alarm; look up the base alarm using snoozedEntry.originalId.
+            alarms.find { it.id == snoozedEntry.originalId }
+        } else {
+            // Assume it's a base alarm.
+            alarms.find { it.id == alarmId }
+        }
+
+        if (originalAlarm == null) {
+            Log.e("AlarmAlertActivity", "Could not find a matching alarm for id $alarmId")
             return
         }
 
-        // Update isEnabled based on the selectedDays array:
-        if (alarm.selectedDays.any { it }) {
-            // At least one day is true → keep the alarm enabled.
-            alarm.isEnabled = true
+        Log.d("AlarmAlertActivity", "Matched Alarm: $originalAlarm")
+
+        // Update isEnabled based on the selectedDays.
+        // If the alarm repeats (has any true in selectedDays) then keep it enabled; otherwise disable it.
+        if (originalAlarm.selectedDays.any { it }) {
+            originalAlarm.isEnabled = true
             Log.d("AlarmAlertActivity", "Alarm has repeating days; keeping enabled")
         } else {
-            // No days are selected → disable the alarm.
-            alarm.isEnabled = false
+            originalAlarm.isEnabled = false
             Log.d("AlarmAlertActivity", "No days selected; disabling alarm")
         }
-
         saveAlarmsToSharedPreferences(alarms)
 
-        // Update the alarm time based on the alarm’s id
-        updateAlarmTimeForDismissedAlarm(alarmId)
+        Log.d("AlarmAlertActivity", "Snoozed Alarms before removal: ${snoozedAlarms.joinToString(separator = "\n")}")
+        // Remove any snoozed alarm that corresponds to the original alarm.
+        val removed = snoozedAlarms.removeIf { it.originalId == originalAlarm.id }
+        if (removed) {
+            Log.d("AlarmAlertActivity", "Snoozed alarm(s) with original id ${originalAlarm.id} removed")
+            val updatedJson = gson.toJson(snoozedAlarms)
+            sharedPreferences.edit().putString(snoozedAlarmsKey, updatedJson).apply()
+        } else {
+            Log.d("AlarmAlertActivity", "No snoozed alarm found with original id ${originalAlarm.id}")
+        }
+        Log.d("AlarmAlertActivity", "Snoozed Alarms after removal: ${snoozedAlarms.joinToString(separator = "\n")}")
+
+        // Finally, update the scheduled alarm time based on the original alarm’s id.
+        updateAlarmTimeForDismissedAlarm(originalAlarm.id)
     }
 
 
