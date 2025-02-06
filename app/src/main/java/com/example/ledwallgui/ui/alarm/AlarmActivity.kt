@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -668,7 +669,12 @@ class AlarmAdapter(
         private val alarmSwitch: Switch = itemView.findViewById(R.id.alarmSwitch)
 
         fun bind(alarm: Alarm) {
-            // Format time based on the 12-hour or 24-hour preference
+            // Define text colors for enabled and disabled states.
+            // You can also use ContextCompat.getColor if you have defined colors in your resources.
+            val enabledColor = Color.WHITE
+            val disabledColor = Color.GRAY
+
+            // Format time based on the 12-hour or 24-hour preference.
             val calendar = Calendar.getInstance().apply {
                 set(Calendar.HOUR_OF_DAY, alarm.hours)
                 set(Calendar.MINUTE, alarm.minutes)
@@ -679,9 +685,36 @@ class AlarmAdapter(
             alarmTime.text = formattedTime
             alarmName.text = alarm.alarmName
 
+            // Set the text color based on the alarm's enabled state.
+            val textColor = if (alarm.isEnabled) enabledColor else disabledColor
+            alarmTime.setTextColor(textColor)
+            alarmName.setTextColor(textColor)
+
+            // Set the repeat days text (if any) and update its color.
+            val daysOfWeek = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+            val selectedDaysList = alarm.selectedDays.toList() // Convert BooleanArray to List<Boolean>
+            val selectedDaysText = if (selectedDaysList.all { it }) {
+                "Everyday"
+            } else {
+                selectedDaysList
+                    .mapIndexedNotNull { index, isSelected -> if (isSelected) daysOfWeek[index] else null }
+                    .joinToString(" ")
+            }
+            if (selectedDaysText.isNotEmpty()) {
+                repeatDaysTextView.text = selectedDaysText
+                repeatDaysTextView.visibility = View.VISIBLE
+                repeatDaysTextView.setTextColor(textColor)
+            } else {
+                repeatDaysTextView.visibility = View.GONE
+            }
+
+            // Set the switch state based on alarm.isEnabled.
+            alarmSwitch.isChecked = alarm.isEnabled
+
+            // Show delete button if in delete mode.
             deleteButtonContainer.visibility = if (isDeleteMode) View.VISIBLE else View.GONE
 
-            // Dynamically hide alarm parameters if space is insufficient
+            // Dynamically hide alarm parameters if space is insufficient.
             itemView.post {
                 val layoutWidth = itemView.measuredWidth
                 val containerWidth = alarmParametersContainer.measuredWidth
@@ -694,34 +727,16 @@ class AlarmAdapter(
                 }
             }
 
-            // Convert selectedDays to a list and set selected days
-            val daysOfWeek = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
-            val selectedDaysList = alarm.selectedDays.toList() // Convert BooleanArray to List<Boolean>
-
-            val selectedDaysText = if (selectedDaysList.all { it }) {
-                // If all days are selected, show "Everyday"
-                "Everyday"
-            } else {
-                // Otherwise, show selected days
-                selectedDaysList
-                    .mapIndexedNotNull { index, isSelected -> if (isSelected) daysOfWeek[index] else null }
-                    .joinToString(" ")
-            }
-
-            if (selectedDaysText.isNotEmpty()) {
-                repeatDaysTextView.text = selectedDaysText
-                repeatDaysTextView.visibility = View.VISIBLE
-            } else {
-                repeatDaysTextView.visibility = View.GONE
-            }
-
-            // Set the switch state based on alarm.isEnabled
-            alarmSwitch.isChecked = alarm.isEnabled
-
-            // Listen for toggle changes to update the alarm's enabled state
+            // Listen for toggle changes to update the alarm's enabled state.
             alarmSwitch.setOnCheckedChangeListener { _, isChecked ->
                 alarm.isEnabled = isChecked
                 Log.d("AlarmAdapter", "Switch state changed: $isChecked for alarm: ${alarm.alarmName}")
+                // Update the text color when the enabled state changes.
+                val newTextColor = if (isChecked) enabledColor else disabledColor
+                alarmTime.setTextColor(newTextColor)
+                alarmName.setTextColor(newTextColor)
+                repeatDaysTextView.setTextColor(newTextColor)
+
                 if (isChecked) {
                     scheduleAlarm(alarm, itemView.context)
                 } else {
@@ -731,25 +746,25 @@ class AlarmAdapter(
                 onAlarmStateChanged()
             }
 
-            // Show delete button only in delete mode
+            // Show delete button only in delete mode.
             deleteButton.visibility = if (isDeleteMode) View.VISIBLE else View.GONE
 
-            // Don't shrink item in delete mode, only show delete button
+            // Ensure the item view fills the width.
             itemView.layoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT
 
-            // Handle delete button click
+            // Handle delete button click.
             deleteButton.setOnClickListener {
                 onDeleteClicked(adapterPosition)
                 updateTimeTillNextAlarm()
             }
 
-            // Handle long click to enable delete mode
+            // Handle long click to enable delete mode.
             itemView.setOnLongClickListener {
                 onItemLongClickListener?.invoke(adapterPosition)
                 true
             }
 
-            // Handle click
+            // Handle click.
             itemView.setOnClickListener { onAlarmClick(alarm) }
         }
     }
@@ -762,16 +777,14 @@ class AlarmAdapter(
     private fun cancelAlarm(alarm: Alarm, context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(context, AlarmReceiver::class.java)
-
-        // Use the same unique request code formula as scheduleAlarm()
+        // Use the same unique request code formula as scheduleAlarm().
         val requestCode = alarm.id * 10000 + alarm.hours * 100 + alarm.minutes
 
         val pendingIntent = PendingIntent.getBroadcast(
             context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-
         alarmManager.cancel(pendingIntent)
-        Log.d("AlarmAdapter1", "Canceled alarm: ${alarm.alarmName}")
+        Log.d("AlarmAdapter", "Canceled alarm: ${alarm.alarmName}")
     }
 
     override fun onBindViewHolder(holder: AlarmViewHolder, position: Int) {
@@ -780,12 +793,13 @@ class AlarmAdapter(
 
     override fun getItemCount(): Int = alarms.size
 
-    // Handle delete button click
+    // Handle delete button click.
     private fun onDeleteClicked(position: Int) {
-        alarms.removeAt(position) // Remove alarm from the list
-        notifyItemRemoved(position) // Notify adapter
-        updateEmptyState() // Check if the list is empty
-        saveAlarms() // Save the updated alarms list to SharedPreferences
-//        updateTimeTillNextAlarm() // Update the time till next alarm
+        alarms.removeAt(position) // Remove alarm from the list.
+        notifyItemRemoved(position) // Notify adapter.
+        updateEmptyState() // Check if the list is empty.
+        saveAlarms() // Save the updated alarms list to SharedPreferences.
+        // updateTimeTillNextAlarm() // Uncomment if needed.
     }
 }
+

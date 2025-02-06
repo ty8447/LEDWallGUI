@@ -256,9 +256,13 @@ class AlarmAlertActivity : Activity() {
             mutableListOf()
         }
 
-        // Determine if the current alarm is a snoozed alarm or a base alarm.
-        val isSnoozedAlarm = (alarmId % 1000 == 1)  // if true, the alarm is a snoozed alarm.
-        val baseAlarmId = if (isSnoozedAlarm) alarmId / 1000 else alarmId
+        // Instead of checking by modulo arithmetic, search the stored snoozed alarms
+        // to see if the received alarmId is already a snoozed alarm.
+        val snoozedEntry = snoozedAlarms.find { it.id == alarmId }
+        val isSnoozedAlarm = snoozedEntry != null
+
+        // If it's a snoozed alarm, use its stored originalId; otherwise use alarmId.
+        val baseAlarmId = if (isSnoozedAlarm) snoozedEntry!!.originalId else alarmId
 
         // Find the base (original) alarm using the computed baseAlarmId.
         val originalAlarm = getAlarmsFromSharedPreferences().find { it.id == baseAlarmId }
@@ -267,15 +271,10 @@ class AlarmAlertActivity : Activity() {
 
             if (isSnoozedAlarm) {
                 // Update the snooze time of the existing snoozed alarm.
-                val snoozedIndex = snoozedAlarms.indexOfFirst { it.id == alarmId }
-                if (snoozedIndex != -1) {
-                    snoozedAlarms[snoozedIndex].snoozeTime = snoozeTimeMillis
-                    Log.d("AlarmAlertActivity", "Updated snoozed alarm id $alarmId with new snooze time: $snoozeTimeMillis")
-                } else {
-                    Log.e("AlarmAlertActivity", "Snoozed alarm id $alarmId not found in snoozed alarms list.")
-                }
+                snoozedEntry!!.snoozeTime = snoozeTimeMillis
+                Log.d("AlarmAlertActivity", "Updated snoozed alarm id $alarmId with new snooze time: $snoozeTimeMillis")
             } else {
-                // If this is a base alarm, look for an existing snoozed alarm that matches originalId and originalTime.
+                // Look for an existing snoozed alarm matching the originalId and originalTime.
                 val existingIndex = snoozedAlarms.indexOfFirst {
                     it.originalId == originalAlarm.id && it.originalTime == originalTimeMillis
                 }
@@ -284,8 +283,10 @@ class AlarmAlertActivity : Activity() {
                     Log.d("AlarmAlertActivity", "Updated existing snoozed alarm (originalId: ${originalAlarm.id}) with new snooze time: $snoozeTimeMillis")
                 } else {
                     // Create a new snoozed alarm.
+                    // (You can choose your own unique ID generation scheme.
+                    // Here we continue to use originalAlarm.id * 1000 + 1.)
                     val newSnoozedAlarm = SnoozedAlarm(
-                        id = originalAlarm.id * 1000 + 1,  // unique id for snoozed alarm
+                        id = originalAlarm.id * 1000 + 1,
                         originalId = originalAlarm.id,
                         originalTime = originalTimeMillis,
                         snoozeTime = snoozeTimeMillis
@@ -299,9 +300,14 @@ class AlarmAlertActivity : Activity() {
             val updatedSnoozedAlarmsJson = gson.toJson(snoozedAlarms)
             sharedPreferences.edit().putString(snoozedAlarmsKey, updatedSnoozedAlarmsJson).apply()
 
-            // Create a temporary alarm object for scheduling.
-            // Use the computed snoozed id if this is a base alarm; otherwise reuse the current id.
-            val snoozeAlarmId = if (!isSnoozedAlarm) originalAlarm.id * 1000 + 1 else alarmId
+            // Determine the ID for scheduling.
+            // If this is a base alarm, we use the new snoozed alarm's id (computed as originalAlarm.id * 1000 + 1).
+            // If it’s already a snoozed alarm, we continue using alarmId.
+            val snoozeAlarmId = if (!isSnoozedAlarm) {
+                originalAlarm.id * 1000 + 1
+            } else {
+                alarmId
+            }
             val snoozeAlarm = Alarm(
                 hours = calendar.get(Calendar.HOUR_OF_DAY),
                 minutes = calendar.get(Calendar.MINUTE),
@@ -450,13 +456,13 @@ class AlarmAlertActivity : Activity() {
             mutableListOf()
         }
 
-        // Determine whether the alarm is a snoozed alarm by checking the snoozed alarms list.
+        // Instead of a modulo check, see if the alarmId is in the snoozed alarms list.
         val snoozedEntry = snoozedAlarms.find { it.id == alarmId }
         val originalAlarm: Alarm? = if (snoozedEntry != null) {
-            // This is a snoozed alarm; look up the base alarm using snoozedEntry.originalId.
+            // This is a snoozed alarm; use its stored originalId.
             alarms.find { it.id == snoozedEntry.originalId }
         } else {
-            // Assume it's a base alarm.
+            // Otherwise assume it's a base alarm.
             alarms.find { it.id == alarmId }
         }
 
@@ -493,7 +499,6 @@ class AlarmAlertActivity : Activity() {
         // Finally, update the scheduled alarm time based on the original alarm’s id.
         updateAlarmTimeForDismissedAlarm(originalAlarm.id)
     }
-
 
     // Update updateAlarmTimeForDismissedAlarm() to search by id
     private fun updateAlarmTimeForDismissedAlarm(alarmId: Int) {
