@@ -2,6 +2,7 @@ package com.example.ledwallgui
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.ActivityManager
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
@@ -56,6 +57,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.ActivityResult
 import androidx.core.app.ActivityCompat
 import com.example.ledwallgui.ui.settings.ColorWheel
+import com.google.gson.Gson
 import kotlin.ranges.coerceAtLeast
 import kotlin.ranges.coerceIn
 
@@ -86,13 +88,13 @@ class MainActivity : AppCompatActivity() {
     private var minBrightnessChange = 1
     private var maxBrightnessChange = 10
     private var sliderHeight = 0
+    private var recordLedState = false
 
     companion object {
         private const val BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE = 102
         private const val SETTINGS_REQUEST_CODE = 100
         private const val MODES_REQUEST_CODE = 101 // Add this line
     }
-    private lateinit var serviceIntent: Intent
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -140,6 +142,7 @@ class MainActivity : AppCompatActivity() {
         )
 
         hideSystemUI()
+
         val sliderBackground = findViewById<View>(R.id.sliderBackground)
         val sliderThumb = findViewById<View>(R.id.sliderThumb)
         dynamicLayoutContainer = findViewById(R.id.dynamicLayoutContainer)
@@ -386,8 +389,57 @@ class MainActivity : AppCompatActivity() {
             stopService(intent)
             Log.d("Motion Detection", "Not Detecting Motion")
         }
-        serviceIntent = Intent(this, TimeMonitoringService::class.java)
-        startService(serviceIntent)
+        recordLedState = intent.getBooleanExtra("record_led_state", false)
+        if (recordLedState) {
+            val recordOverlay = findViewById<View>(R.id.recordOverlay)
+            val recordDoneButton = findViewById<Button>(R.id.recordDoneButton)
+            recordOverlay.visibility = View.VISIBLE
+            recordDoneButton.visibility = View.VISIBLE
+
+            // Hide the settings and alarm buttons to avoid loops.
+            imageButton2.visibility = View.GONE  // Hide Alarm button
+            imageButton3.visibility = View.GONE  // Hide Settings button
+
+            // Optionally hide other buttons that may lead to mode changes.
+            // For example, if you have any additional navigation that should be disabled.
+
+            // Set up the done button click listener.
+            recordDoneButton.setOnClickListener {
+                val currentMode = ModeManager.currentMode
+                val modeInfo = GlobalBluetoothManager.getModeInfo(currentMode)
+
+                if (modeInfo != null) {
+                    val ledParametersMap = mutableMapOf<String, String>()
+
+                    // Store Mode Name
+                    ledParametersMap["Name"] = currentMode
+
+                    // Store Parameter Names and Values
+                    modeInfo.parameterNames.forEachIndexed { _, parameterName ->
+                        val parameterValue = modeInfo.parameterValues[parameterName] // Get the value
+
+                        if (parameterValue != null) { // Check if the value exists
+                            ledParametersMap[parameterName] = parameterValue // Store name and value
+                        } else {
+                            Log.w("RecordMode", "Parameter value not found for: $parameterName in mode: $currentMode")
+                            // Handle the case where the value is missing (e.g., use a default value, skip it, or show an error)
+                            // Example: ledParametersMap[parameterName] = "" // Store an empty string
+                        }
+                    }
+
+                    val gson = Gson()
+                    val ledParametersJson = gson.toJson(ledParametersMap)
+
+                    val resultIntent = Intent()
+                    resultIntent.putExtra("led_parameters", ledParametersJson)
+                    setResult(Activity.RESULT_OK, resultIntent)
+                    finish()
+                } else {
+                    Log.e("RecordMode", "No mode info found for current mode: $currentMode")
+                    Toast.makeText(this, "No LED parameters available", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     private fun startConnectionCheck() {
@@ -674,7 +726,7 @@ class MainActivity : AppCompatActivity() {
 
                 val colorMap = mapOf(
                     "Red" to Color.RED,
-                    "Orange" to Color.parseColor("#FFA500"),
+                    "Orange" to Color.parseColor("#FF2F00"),
                     "Yellow" to Color.YELLOW,
                     "Green" to Color.GREEN,
                     "Blue" to Color.BLUE,
@@ -723,9 +775,8 @@ class MainActivity : AppCompatActivity() {
                         val green = Color.green(color)
                         val blue = Color.blue(color)
                         GlobalBluetoothManager.setLedParameter(
-                            ModeManager.currentMode,
-                            "Color",
-                            "$red,$green,$blue"
+                            parameter.name,
+                            "$red,$green,$blue".split(",").map { it.toInt() }
                         )
                     }
                 })
@@ -776,9 +827,8 @@ class MainActivity : AppCompatActivity() {
 
                                 // Send the color to Bluetooth manager
                                 GlobalBluetoothManager.setLedParameter(
-                                    ModeManager.currentMode,
-                                    "Color",
-                                    "$red,$green,$blue"
+                                    parameter.name,
+                                    "$red,$green,$blue".split(",").map { it.toInt() }
                                 )
                             }
                         }
@@ -819,11 +869,12 @@ class MainActivity : AppCompatActivity() {
                         // Update the parameter value
                         parameter.value = progress
 
+                        Log.d("MainActivity", "Parameter value updated: $progress.toString().split(\",\").map { it.toInt() }")
+
                         // Update the Bluetooth parameter
                         GlobalBluetoothManager.setLedParameter(
-                            ModeManager.currentMode,
                             parameter.name,
-                            progress.toString()
+                            progress.toString().split(",").map { it.toInt() }
                         )
 
                         // Update the main TextView
@@ -870,6 +921,7 @@ class MainActivity : AppCompatActivity() {
             return
         } else {
             val intent = Intent(this, ModesActivity::class.java)
+            intent.putExtra("record_led_state", recordLedState)
             modesActivityResultLauncher.launch(intent)
         }
     }
@@ -980,6 +1032,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+
         if (checkBluetoothPermission()) {
             Log.d("MainActivity", "Bluetooth permission is already granted")
         }
@@ -1002,27 +1055,9 @@ class MainActivity : AppCompatActivity() {
                 Log.w("MainActivity", "Mode info not found for mode: $selectedMode")
             }
         GlobalBluetoothManager.startConnectionCheck(this)
-
-        // Check if the service is running and start it if not
-        if (!isServiceRunning(TimeMonitoringService::class.java)) {
-            Log.d("MainActivity", "TimeMonitoringService is not running, starting it now.")
-            serviceIntent = Intent(this, TimeMonitoringService::class.java)
-            startService(serviceIntent)
-        } else {
-            Log.d("MainActivity", "TimeMonitoringService is already running.")
-        }
-
     }
 
-    private fun isServiceRunning(serviceClass: Class<*>): Boolean {
-        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        for (service in activityManager.getRunningServices(Int.MAX_VALUE)) {
-            if (serviceClass.name == service.service.className) {
-                return true
-            }
-        }
-        return false
-    }
+
 
     override fun onPause() {
         super.onPause()
@@ -1105,11 +1140,11 @@ class MainActivity : AppCompatActivity() {
     private fun updateLayoutWithModeInfo(modeInfo: GlobalBluetoothManager.ModeInfo) {
         val container = findViewById<FrameLayout>(R.id.dynamicLayoutContainer)
 
-        Log.d("MainActivity", "Updating layout for mode: ${modeInfo.name}, Parameters: ${modeInfo.parameters.joinToString(", ")}")
+        Log.d("MainActivity", "Updating layout for mode: ${modeInfo.name}, Parameters: ${modeInfo.parameterNames.joinToString(", ")}")
 
         flexboxLayout.removeAllViews()
 
-        val parameters = modeInfo.parameters.map { parameterName ->
+        val parameters = modeInfo.parameterNames.map { parameterName ->
             val parameterType = getParameterType(parameterName)
             val parameterValue = getParameterValue(parameterName)
             Parameter(parameterName, parameterType, parameterValue)
@@ -1131,7 +1166,7 @@ class MainActivity : AppCompatActivity() {
                 val child = dynamicLayout.getChildAt(i)
                 Log.d("MainActivity", "Child $i - Tag: ${child.tag}, Visibility: ${child.visibility}")
                 val tag = child.tag
-                if (tag is String && modeInfo.parameters.contains(tag)) {
+                if (tag is String && modeInfo.parameterNames.contains(tag)) {
                     child.visibility = View.VISIBLE
                     Log.d("MainActivity", "Setting visibility for parameter ${tag}: ${child.visibility}")
                 }
@@ -1142,8 +1177,8 @@ class MainActivity : AppCompatActivity() {
         container.invalidate()
         container.requestLayout()
 
-        for (i in modeInfo.parameters.indices) {
-            Log.d(TAG, "Setting parameter ${modeInfo.parameters[i]} to UI component ${i + 1}")
+        for (i in modeInfo.parameterNames.indices) {
+            Log.d(TAG, "Setting parameter ${modeInfo.parameterNames[i]} to UI component ${i + 1}")
         }
 
         Log.d("MainActivity", "Layout updated successfully for mode: ${modeInfo.name}")

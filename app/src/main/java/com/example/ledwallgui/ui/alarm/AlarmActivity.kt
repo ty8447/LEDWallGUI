@@ -3,6 +3,7 @@ package com.example.ledwallgui.ui.alarm
 import android.Manifest
 import android.animation.ObjectAnimator
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -65,6 +66,7 @@ class AlarmActivity : AppCompatActivity() {
     private lateinit var timeTillNext: TextView
     private lateinit var currentTime: TextView
     private lateinit var doneButton: Button
+    private val PERMISSIONREQUESTCODE = 1001
 
     private lateinit var preferenceUtils: PreferenceUtils // Declare preferenceUtils
 
@@ -72,6 +74,8 @@ class AlarmActivity : AppCompatActivity() {
     private val alarmsKey = "alarms_list"
     private val snoozedAlarmsKey = "snoozedAlarms"
     private lateinit var gson: Gson
+
+    private lateinit var serviceIntent: Intent
 
     private val alarms = mutableListOf<Alarm>()
     private var isDeleteMode = false // Track delete mode
@@ -116,6 +120,7 @@ class AlarmActivity : AppCompatActivity() {
         alarmAdapter.notifyDataSetChanged() // Notify the adapter that the data has changed
         //Log.d("AlarmActivity", "time format: $use12HourTimeFormat")
         updateEmptyState()
+
         val filter = IntentFilter("com.example.ledwallgui.TIME_UPDATE")
         LocalBroadcastManager.getInstance(this).registerReceiver(timeUpdateReceiver, filter)
         removeExpiredSnoozedAlarms()
@@ -165,8 +170,6 @@ class AlarmActivity : AppCompatActivity() {
         }
     }
 
-    private val PERMISSIONREQUESTCODE = 1001
-
     // Handle permission request result
     override fun onRequestPermissionsResult(
         requestCode: Int,
@@ -190,10 +193,8 @@ class AlarmActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         Log.d("AlarmActivity", "onResume called")
-        Log.d("AlarmActivity", "Registering receiver")
         val filter = IntentFilter("com.example.ledwallgui.TIME_UPDATE")
         LocalBroadcastManager.getInstance(this).registerReceiver(timeUpdateReceiver, filter)
-        Log.d("AlarmActivity", "Receiver registered")
         use12HourTimeFormat = preferenceUtils.getIs12HourTimeFormat() // Reload preference
         alarmAdapter.use12HourTimeFormat = use12HourTimeFormat // Update adapter
         // Check and request permission for foreground service data sync
@@ -202,6 +203,9 @@ class AlarmActivity : AppCompatActivity() {
         updateCurrentTime()
         updateEmptyState()
         updateTimeTillNextAlarm()
+
+        // Always start the time monitoring service when the activity is visible.
+        startTimeMonitoringService()
 
         // Log the list of snoozed alarms
         val sharedPreferences = getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)
@@ -221,6 +225,36 @@ class AlarmActivity : AppCompatActivity() {
         super.onPause()
         Log.d("AlarmActivity", "onPause called")
         LocalBroadcastManager.getInstance(this).unregisterReceiver(timeUpdateReceiver)
+        if (alarms.isEmpty()) {
+            stopTimeMonitoringService()
+        }
+    }
+
+    private fun startTimeMonitoringService() {
+        serviceIntent = Intent(this, TimeMonitoringService::class.java)
+                if (!isServiceRunning(TimeMonitoringService::class.java)) {
+            Log.d("MainActivity", "TimeMonitoringService is not running, starting it now.")
+            serviceIntent = Intent(this, TimeMonitoringService::class.java)
+            startService(serviceIntent)
+        } else {
+            Log.d("MainActivity", "TimeMonitoringService is already running.")
+        }
+    }
+
+    private fun isServiceRunning(serviceClass: Class<*>): Boolean {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        for (service in activityManager.getRunningServices(Int.MAX_VALUE)) {
+            if (serviceClass.name == service.service.className) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun stopTimeMonitoringService() {
+        serviceIntent = Intent(this, TimeMonitoringService::class.java)
+        stopService(serviceIntent)
+        Log.d("AlarmActivity", "TimeMonitoringService stopped")
     }
 
     private fun refreshAlarms() {
@@ -274,8 +308,6 @@ class AlarmActivity : AppCompatActivity() {
         alarmsRecyclerView.adapter = alarmAdapter
         alarmsRecyclerView.layoutManager = LinearLayoutManager(this)
 
-        cancelButton.setOnClickListener { onCancel() }
-        offButton.setOnClickListener { onTurnOff() }
         alarmAdapter.setOnItemLongClickListener { position ->
             enableDeleteMode(position)
         }
@@ -299,109 +331,109 @@ class AlarmActivity : AppCompatActivity() {
     }
 
     private fun updateTimeTillNextAlarm() {
-        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Starting updateTimeTillNextAlarm")
+//        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Starting updateTimeTillNextAlarm")
         val currentTime = Calendar.getInstance()
-        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Current time: ${currentTime.time}")
+//        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Current time: ${currentTime.time}")
         val allAlarms = mutableListOf<Pair<Calendar, String>>() // List to hold alarm times and names
 
         // Function to process alarms and add them to the list
         fun processAlarms(alarms: List<Alarm>, isSnoozed: Boolean = false) {
-            Log.d("AlarmActivity", "processAlarms: Processing ${if (isSnoozed) "snoozed" else "regular"} alarms")
+//            Log.d("AlarmActivity", "processAlarms: Processing ${if (isSnoozed) "snoozed" else "regular"} alarms")
             alarms.filter { it.isEnabled }.forEach { alarm ->
-                Log.d("AlarmActivity", "processAlarms: Processing alarm: ${alarm.alarmName}, isEnabled: ${alarm.isEnabled}")
+//                Log.d("AlarmActivity", "processAlarms: Processing alarm: ${alarm.alarmName}, isEnabled: ${alarm.isEnabled}")
                 val alarmTime = Calendar.getInstance().apply {
                     set(Calendar.HOUR_OF_DAY, alarm.hours)
                     set(Calendar.MINUTE, alarm.minutes)
                     set(Calendar.SECOND, 0)
                     set(Calendar.MILLISECOND, 0)
                 }
-                Log.d("AlarmActivity", "processAlarms: Initial alarm time for ${alarm.alarmName}: ${alarmTime.time}")
+//                Log.d("AlarmActivity", "processAlarms: Initial alarm time for ${alarm.alarmName}: ${alarmTime.time}")
 
                 val currentDayIndex = currentTime.get(Calendar.DAY_OF_WEEK) - 1
-                Log.d("AlarmActivity", "processAlarms: Current day index: $currentDayIndex")
+//                Log.d("AlarmActivity", "processAlarms: Current day index: $currentDayIndex")
                 val selectedDays = alarm.selectedDays
-                Log.d("AlarmActivity", "processAlarms: Selected days for ${alarm.alarmName}: ${selectedDays.joinToString()}")
+//                Log.d("AlarmActivity", "processAlarms: Selected days for ${alarm.alarmName}: ${selectedDays.joinToString()}")
 
                 if (!selectedDays.contains(true)) {
-                    Log.d("AlarmActivity", "processAlarms: No repeating days selected for ${alarm.alarmName}")
+//                    Log.d("AlarmActivity", "processAlarms: No repeating days selected for ${alarm.alarmName}")
                     if (alarmTime.before(currentTime)) {
-                        Log.d("AlarmActivity", "processAlarms: Alarm time for ${alarm.alarmName} is before current time, adding 1 day")
+//                        Log.d("AlarmActivity", "processAlarms: Alarm time for ${alarm.alarmName} is before current time, adding 1 day")
                         alarmTime.add(Calendar.DAY_OF_YEAR, 1)
                     }
-                    Log.d("AlarmActivity", "processAlarms: Adding ${alarm.alarmName} to allAlarms with time: ${alarmTime.time}")
+//                    Log.d("AlarmActivity", "processAlarms: Adding ${alarm.alarmName} to allAlarms with time: ${alarmTime.time}")
                     allAlarms.add(Pair(alarmTime, alarm.alarmName))
                     return@forEach
                 }
 
                 var daysToAdd = 0
                 while (!selectedDays[(currentDayIndex + daysToAdd) % 7]) {
-                    Log.d("AlarmActivity", "processAlarms: Incrementing daysToAdd for ${alarm.alarmName}: $daysToAdd")
+//                    Log.d("AlarmActivity", "processAlarms: Incrementing daysToAdd for ${alarm.alarmName}: $daysToAdd")
                     daysToAdd++
                     if (daysToAdd > 7) {
-                        Log.d("AlarmActivity", "processAlarms: No valid day found for ${alarm.alarmName}, skipping")
+//                        Log.d("AlarmActivity", "processAlarms: No valid day found for ${alarm.alarmName}, skipping")
                         return@forEach
                     }
                 }
 
                 if (daysToAdd == 0 && alarmTime.before(currentTime)) {
-                    Log.d("AlarmActivity", "processAlarms: ${alarm.alarmName} is for today, but the time has passed")
+//                    Log.d("AlarmActivity", "processAlarms: ${alarm.alarmName} is for today, but the time has passed")
                     daysToAdd = 1
                     while (!selectedDays[(currentDayIndex + daysToAdd) % 7]) {
-                        Log.d("AlarmActivity", "processAlarms: Incrementing daysToAdd for passed time on ${alarm.alarmName}: $daysToAdd")
+//                        Log.d("AlarmActivity", "processAlarms: Incrementing daysToAdd for passed time on ${alarm.alarmName}: $daysToAdd")
                         daysToAdd++
                         if (daysToAdd > 7) {
-                            Log.d("AlarmActivity", "processAlarms: No valid future day found for ${alarm.alarmName}, skipping")
+//                            Log.d("AlarmActivity", "processAlarms: No valid future day found for ${alarm.alarmName}, skipping")
                             return@forEach
                         }
                     }
                 }
 
-                Log.d("AlarmActivity", "processAlarms: Final daysToAdd for ${alarm.alarmName}: $daysToAdd")
+//                Log.d("AlarmActivity", "processAlarms: Final daysToAdd for ${alarm.alarmName}: $daysToAdd")
                 alarmTime.add(Calendar.DAY_OF_YEAR, daysToAdd)
-                Log.d("AlarmActivity", "processAlarms: Adjusted alarm time for ${alarm.alarmName}: ${alarmTime.time}")
+//                Log.d("AlarmActivity", "processAlarms: Adjusted alarm time for ${alarm.alarmName}: ${alarmTime.time}")
                 allAlarms.add(Pair(alarmTime, alarm.alarmName))
             }
         }
 
         // Process regular alarms
-        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Processing regular alarms")
+//        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Processing regular alarms")
         processAlarms(alarms)
 
         // Retrieve existing snoozed alarms
-        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Retrieving snoozed alarms")
+//        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Retrieving snoozed alarms")
         val sharedPreferences = getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)
         val snoozedAlarmsJson = sharedPreferences.getString(snoozedAlarmsKey, "[]")
         val snoozedAlarms: MutableList<SnoozedAlarm> = try {
             gson.fromJson(snoozedAlarmsJson, object : TypeToken<MutableList<SnoozedAlarm>>() {}.type)
         } catch (e: JsonSyntaxException) {
-            Log.e("AlarmActivity", "updateTimeTillNextAlarm: Error parsing snoozed alarms JSON", e)
+//            Log.e("AlarmActivity", "updateTimeTillNextAlarm: Error parsing snoozed alarms JSON", e)
             mutableListOf()
         }
 
         // Process snoozed alarms
-        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Processing snoozed alarms")
+//        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Processing snoozed alarms")
         snoozedAlarms.forEach { snoozedAlarm ->
-            Log.d("AlarmActivity", "updateTimeTillNextAlarm: Processing snoozed alarm: ${snoozedAlarm.id}, snoozeTime: ${snoozedAlarm.snoozeTime}")
+//            Log.d("AlarmActivity", "updateTimeTillNextAlarm: Processing snoozed alarm: ${snoozedAlarm.id}, snoozeTime: ${snoozedAlarm.snoozeTime}")
             val snoozeTime = Calendar.getInstance().apply {
                 timeInMillis = snoozedAlarm.snoozeTime
             }
-            Log.d("AlarmActivity", "updateTimeTillNextAlarm: Snooze time for ${snoozedAlarm.id}: ${snoozeTime.time}")
+//            Log.d("AlarmActivity", "updateTimeTillNextAlarm: Snooze time for ${snoozedAlarm.id}: ${snoozeTime.time}")
             allAlarms.add(Pair(snoozeTime, "Snoozed: ${snoozedAlarm.id}"))
         }
 
         // Find the next alarm
-        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Finding next alarm from allAlarms: ${allAlarms.map { "${it.second} at ${it.first.time}" }}")
+//        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Finding next alarm from allAlarms: ${allAlarms.map { "${it.second} at ${it.first.time}" }}")
         val nextAlarmPair = allAlarms.minByOrNull { it.first.timeInMillis }
 
         // Update the TextView with the time difference
         if (nextAlarmPair != null) {
             val (nextAlarm, alarmName) = nextAlarmPair
-            Log.d("AlarmActivity", "updateTimeTillNextAlarm: Next alarm: $alarmName at ${nextAlarm.time}")
+//            Log.d("AlarmActivity", "updateTimeTillNextAlarm: Next alarm: $alarmName at ${nextAlarm.time}")
             var timeDifference = nextAlarm.timeInMillis - currentTime.timeInMillis
             timeDifference += 59_000
             val hours = timeDifference / (1000 * 60 * 60)
             val minutes = (timeDifference / (1000 * 60)) % 60
-            Log.d("AlarmActivity", "updateTimeTillNextAlarm: Time difference: $hours hours and $minutes minutes")
+//            Log.d("AlarmActivity", "updateTimeTillNextAlarm: Time difference: $hours hours and $minutes minutes")
             val timeText = when {
                 hours > 0 && minutes > 0 -> "Next Alarm in $hours ${if (hours.toInt() == 1) "hour" else "hours"} and $minutes ${if (minutes.toInt() == 1) "minute" else "minutes"}"
                 hours > 0 -> "Next Alarm in $hours ${if (hours.toInt() == 1) "hour" else "hours"}"
@@ -419,10 +451,10 @@ class AlarmActivity : AppCompatActivity() {
                 timeTillNext.text = timeText
             }
         } else {
-            Log.d("AlarmActivity", "updateTimeTillNextAlarm: No upcoming alarms found")
+//            Log.d("AlarmActivity", "updateTimeTillNextAlarm: No upcoming alarms found")
             timeTillNext.text = getString(R.string.no_upcoming_alarms)
         }
-        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Finished updateTimeTillNextAlarm")
+//        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Finished updateTimeTillNextAlarm")
     }
 
     private fun configureSharedPreferences() {
@@ -613,14 +645,6 @@ class AlarmActivity : AppCompatActivity() {
         }
     }
 
-    private fun onCancel() {
-        // Your logic here
-    }
-
-    private fun onTurnOff() {
-        // Your logic here
-    }
-
     private fun enableDeleteMode(position: Int) {
         isDeleteMode = true
         alarmAdapter.isDeleteMode = isDeleteMode  // Update delete mode in adapter
@@ -799,7 +823,6 @@ class AlarmAdapter(
         notifyItemRemoved(position) // Notify adapter.
         updateEmptyState() // Check if the list is empty.
         saveAlarms() // Save the updated alarms list to SharedPreferences.
-        // updateTimeTillNextAlarm() // Uncomment if needed.
     }
 }
 

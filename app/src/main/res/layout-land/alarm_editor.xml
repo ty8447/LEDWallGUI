@@ -61,6 +61,8 @@
                             android:layout_width="0dp"
                             android:layout_height="match_parent"
                             android:layout_weight="1"
+                            android:layout_marginTop="40dp"
+                            android:layout_marginBottom="40dp"
                             android:textColor="@color/white"
                             android:selectionDividerHeight="0dp"
                             android:gravity="center"
@@ -87,6 +89,8 @@
                             android:layout_width="0dp"
                             android:layout_height="match_parent"
                             android:layout_weight="1"
+                            android:layout_marginTop="40dp"
+                            android:layout_marginBottom="40dp"
                             android:selectionDividerHeight="0dp"
                             android:textColor="@color/white"
                             android:gravity="center"
@@ -98,6 +102,8 @@
                             android:layout_width="0dp"
                             android:layout_height="match_parent"
                             android:layout_weight="1"
+                            android:layout_marginTop="60dp"
+                            android:layout_marginBottom="60dp"
                             android:selectionDividerHeight="0dp"
                             android:textColor="@color/white"
                             android:gravity="center"
@@ -328,7 +334,7 @@
                     android:layout_height="wrap_content">
 
                     <TextView
-                        android:id="@+id/textView6"
+                        android:id="@+id/alarm_mode_label"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginLeft="20dp"
@@ -338,11 +344,11 @@
                         android:textSize="24dp" />
 
                     <TextView
-                        android:id="@+id/alarmMode"
+                        android:id="@+id/alarm_mode"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginLeft="20dp"
-                        android:text="Rainbow"
+                        android:text="No Mode Captured"
                         android:textAlignment="textEnd"
                         android:textColor="#FFFFFF"
                         android:textSize="24dp" />
@@ -353,12 +359,12 @@
                     android:layout_height="match_parent">
 
                     <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/grabCurrent"
+                        android:id="@+id/setMode"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginLeft="2dp"
                         android:layout_gravity="right|bottom"
-                        android:text="Grab Current"
+                        android:text="Set Mode"
                         android:textColor="@color/white"
                         android:textSize="16dp" />
                 </TableRow>

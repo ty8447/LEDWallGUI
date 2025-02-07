@@ -115,6 +115,7 @@ class BluetoothReconnectionService : Service() {
                 isRetrying = false // Ensure this is reset regardless of success or failure
                 if (success) {
                     Log.d(TAG, "Reconnected successfully")
+                    nrTries = 0
                 } else {
                     Log.e(TAG, "Reconnection failed")
                     attemptReconnect(context) // Retry reconnection if failed

@@ -1,5 +1,6 @@
 package com.example.ledwallgui.ui.modes
 
+import android.app.Activity
 import androidx.core.content.ContextCompat
 import android.os.Bundle
 import android.util.Log
@@ -12,24 +13,22 @@ import android.widget.ImageButton
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatButton
+import android.content.Intent
+import android.view.View
+import android.widget.Button
 import com.example.ledwallgui.R
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
+import com.google.gson.Gson
 
 object ModeManager {
     var currentMode: String = "" // Store the active mode
-
-    // Map to store parameters for each mode (e.g., "Color" -> {"Color" -> "255,0,0", "Brightness" -> "100"})
     private val modeParameters: MutableMap<String, MutableMap<String, String>> = mutableMapOf()
-
-    // Set a parameter for the specified mode
     fun setModeParameter(mode: String, parameter: String, value: String) {
         if (!modeParameters.containsKey(mode)) {
             modeParameters[mode] = mutableMapOf()
         }
         modeParameters[mode]?.set(parameter, value)
     }
-
-    // Retrieve all parameters for a given mode
     fun getModeParameters(mode: String): Map<String, String>? {
         return modeParameters[mode]?.toMap()
     }
@@ -50,6 +49,61 @@ class ModesActivity : AppCompatActivity() {
         val backButton: ImageButton = findViewById(R.id.mBackButton)
         val modesContainer: GridLayout = findViewById(R.id.modesContainer)
 
+        // Check for record mode extra
+        val recordLedState = intent.getBooleanExtra("record_led_state", false)
+        if (recordLedState) {
+            Log.d("ModesActivity", "onCreate: recordLedState is true")
+            // Show the overlay and done button.
+            val recordOverlay = findViewById<View>(R.id.recordOverlay)
+            val recordDoneButton = findViewById<Button>(R.id.recordDoneButton)
+            recordOverlay.visibility = View.VISIBLE
+            recordDoneButton.visibility = View.VISIBLE
+
+            // Hide navigation buttons to avoid loops.
+            backButton.visibility = android.view.View.GONE
+
+            // Set the done button click listener.
+            recordDoneButton.setOnClickListener {
+                val currentMode = ModeManager.currentMode
+                val modeInfo = GlobalBluetoothManager.getModeInfo(currentMode)
+
+                if (modeInfo != null) {
+                    val ledParametersMap = mutableMapOf<String, String>()
+
+                    // Store Mode Name
+                    ledParametersMap["Name"] = currentMode
+
+                    // Store Parameter Names and Values
+                    modeInfo.parameterNames.forEachIndexed { _, parameterName ->
+                        val parameterValue = modeInfo.parameterValues[parameterName] // Get the value
+
+                        if (parameterValue != null) { // Check if the value exists
+                            ledParametersMap[parameterName] = parameterValue // Store name and value
+                        } else {
+                            Log.w("RecordMode", "Parameter value not found for: $parameterName in mode: $currentMode")
+                            // Handle the case where the value is missing (e.g., use a default value, skip it, or show an error)
+                            // Example: ledParametersMap[parameterName] = "" // Store an empty string
+                        }
+                    }
+
+                    val gson = Gson()
+                    val ledParametersJson = gson.toJson(ledParametersMap)
+
+                    val resultIntent = Intent()
+                    resultIntent.putExtra("led_parameters", ledParametersJson)
+                    setResult(Activity.RESULT_OK, resultIntent)
+                    finish()
+                } else {
+                    Log.e("RecordMode", "No mode info found for current mode: $currentMode")
+                    Toast.makeText(this, "No LED parameters available", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+        } else {
+            Log.d("ModesActivity", "onCreate: recordLedState is false")
+
+        }
+
         val modeInfoList = GlobalBluetoothManager.modeInfoList // Fetch from GlobalBluetoothManager
 
         if (modeInfoList.isEmpty()) {
@@ -58,43 +112,29 @@ class ModesActivity : AppCompatActivity() {
             Log.d("ModesActivity", "Mode Names: ${modeInfoList.joinToString(", ") { it.name }}")
         }
 
-            // Dynamically create buttons based on the mode names
+        // Dynamically create buttons based on the mode names.
         modeInfoList.forEach { modeInfo ->
             val button = AppCompatButton(this).apply {
-                text = modeInfo.name   // Use mode name from ModeInfo
+                text = modeInfo.name   // Use mode name from ModeInfo.
                 textSize = 20f
                 isEnabled = true
                 background = ContextCompat.getDrawable(this@ModesActivity, R.drawable.mode_button_shape)
-                setPadding(16, 16, 16, 16) // Padding (left, top, right, bottom)
-
+                setPadding(16, 16, 16, 16)
                 setOnClickListener {
-                    // Use modeInfo.name for the current mode
                     ModeManager.currentMode = modeInfo.name
                     GlobalBluetoothManager.setLedMode(modeInfo.name)
-
-                    // Show toast notification
                     Toast.makeText(this@ModesActivity, "Mode changed to ${modeInfo.name}", Toast.LENGTH_SHORT).show()
-
-                    // Finish the activity to return to MainActivity
                     setResult(RESULT_OK)
                     finish()
                 }
             }
-
             val params = GridLayout.LayoutParams().apply {
-                // Set width and height to match parent with equal weight
                 width = 0
                 height = 0
-
-                // Specify margins for the button (outside padding)
-                setMargins(8, 8, 8, 8) // Margins (left, top, right, bottom)
-
-                // Align to grid position (1f weight to make buttons equally spaced in the grid)
+                setMargins(8, 8, 8, 8)
                 columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
                 rowSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
             }
-
-            // Add the button to the container
             modesContainer.addView(button, params)
         }
 
@@ -108,11 +148,9 @@ class ModesActivity : AppCompatActivity() {
     }
 
     private fun hideSystemUI() {
-        // Use WindowInsetsController for Android 11+
         window.insetsController?.let { controller ->
-            controller.hide(WindowInsets.Type.systemBars()) // Hides status and navigation bars
-            controller.systemBarsBehavior =
-                WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE // Allows bars to reappear with a swipe
+            controller.hide(WindowInsets.Type.systemBars())
+            controller.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     }
 }

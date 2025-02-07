@@ -28,6 +28,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
 import java.util.Calendar
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 
 class AlarmAlertActivity : Activity() {
 
@@ -106,18 +108,67 @@ class AlarmAlertActivity : Activity() {
         val previousMode = ModeManager.currentMode
         val previousParameters = ModeManager.getModeParameters(previousMode)
 
+        if (params != null) {
+            Log.d("BeforeIntent", "Mode Parameters (onCreate) JSON: ${gson.toJson(params)}")
+        }
+
         Log.d("AlarmAlertActivity", "Previous Mode: $previousMode, Parameters: $previousParameters")
 
         val previousParamsJson = gson.toJson(previousParameters)
         intent.putExtra("previousMode", previousMode)
         intent.putExtra("previousParams", previousParamsJson)
 
-        ModeManager.currentMode = "Color"
-        ModeManager.setModeParameter("Color", "Color", "255,0,0")
-        GlobalBluetoothManager.setLedMode("Color")
-        GlobalBluetoothManager.setLedParameter("Color", "Color", "255,0,0")
-        ModeManager.setModeParameter("Color", "Brightness", "255")
-        GlobalBluetoothManager.setBrightness(100)
+        // Find the alarm that triggered the alert
+        val triggeredAlarm = alarmsList.find { it.id == alarmId }
+
+        if (triggeredAlarm != null) {
+            // Set the LED mode and parameters from the alarm
+            val alarmMode =
+                triggeredAlarm.modeInfo["Name"] ?: "Color" // Default to "Color" if not found
+            val alarmParameters =
+                triggeredAlarm.modeInfo.filterKeys { it != "Name" } //Filter out the name parameter
+
+            ModeManager.currentMode = alarmMode // Set the current mode
+
+            // Set the parameters using the correct function calls
+            alarmParameters.forEach { (paramName, paramValue) ->
+                ModeManager.setModeParameter(alarmMode, paramName, paramValue)  // Use ModeManager
+                when (paramName) {
+                    "Color", "SColor" -> {
+                        val rgbValues = paramValue.trim('{', '}').split(",")
+                            .map { it.trim().toIntOrNull() ?: 0 }
+                        GlobalBluetoothManager.setLedParameter(
+                            alarmMode,
+                            rgbValues
+                        ) // Set RGB values
+                    }
+
+                    "Brightness" -> {
+                        val brightness = paramValue.toIntOrNull() ?: 0
+                        GlobalBluetoothManager.setBrightness(brightness)
+                    }
+                    // Handle other parameter types as needed
+                    else -> {
+                        // For other parameter types (Speed, Frequency, Division, etc.)
+                        // Call appropriate GlobalBluetoothManager functions if they exist.
+                        // Example: GlobalBluetoothManager.setSpeed(alarmMode, paramValue.toIntOrNull() ?: 0)
+                    }
+                }
+            }
+            GlobalBluetoothManager.setLedMode(alarmMode) // Set the mode on the device
+
+
+            Log.d("AlarmAlertActivity", "Alarm Mode set to: $alarmMode, Parameters: $alarmParameters")
+
+        } else {
+            Log.w("AlarmAlertActivity", "Alarm with ID $alarmId not found in the list.")
+            // Handle the case where the alarm is not found (e.g., use default mode and parameters)
+            ModeManager.currentMode = "Color" // Or some default mode
+            GlobalBluetoothManager.setLedMode("Color")
+            GlobalBluetoothManager.setLedParameter("Color", listOf(255, 0, 0))
+            GlobalBluetoothManager.setBrightness(100)
+
+        }
 
         alarmRunnable = Runnable {
             restorePreviousMode()
@@ -234,7 +285,7 @@ class AlarmAlertActivity : Activity() {
 
         previousParams.forEach { (param, value) ->
             ModeManager.setModeParameter(previousMode, param, value)
-            GlobalBluetoothManager.setLedParameter(previousMode, param, value)
+            GlobalBluetoothManager.setLedParameter(param, value.split(",").map { it.toInt() })
         }
     }
 
@@ -483,6 +534,56 @@ class AlarmAlertActivity : Activity() {
             Log.d("AlarmAlertActivity", "No days selected; disabling alarm")
         }
         saveAlarmsToSharedPreferences(alarms)
+
+        val previousMode = intent.getStringExtra("previousMode")
+        val previousParamsJson = intent.getStringExtra("previousParams")
+
+        if (!previousMode.isNullOrEmpty() && !previousParamsJson.isNullOrEmpty()) {
+            try {
+                val gson = Gson()
+                val previousParameters: Map<String, String> = try {
+                    gson.fromJson(previousParamsJson ?: "{}", object : TypeToken<Map<String, String>>() {}.type) // Use "{}" as default
+                } catch (e: JsonSyntaxException) {
+                    Log.e("AlarmAlertActivity", "Error parsing previous parameters JSON", e)
+                    emptyMap() // Use empty map as default
+                }
+
+                ModeManager.currentMode = previousMode
+
+                previousParameters.forEach { (paramName, paramValue) -> // Correct forEach for Map
+                    ModeManager.setModeParameter(previousMode, paramName, paramValue)
+
+                    when (paramName) {
+                        "Color", "SColor" -> {
+                            val rgbValues = paramValue.trim('{', '}').split(",").map { it.trim().toIntOrNull() ?: 0 }
+                            GlobalBluetoothManager.setLedParameter(previousMode, rgbValues)
+                        }
+                        "Brightness" -> {
+                            val brightness = paramValue.toIntOrNull() ?: 0
+                            GlobalBluetoothManager.setBrightness(brightness)
+                        }
+                        // Handle other parameter types as needed
+                        else -> {
+                            // For other parameter types (Speed, Frequency, Division, etc.)
+                            // Call appropriate GlobalBluetoothManager functions if they exist.
+                            // Example: GlobalBluetoothManager.setSpeed(previousMode, paramValue.toIntOrNull() ?: 0)
+                        }
+                    }
+                }
+                GlobalBluetoothManager.setLedMode(previousMode)
+
+                Log.d("AlarmAlertActivity", "Restored previous mode: $previousMode, Parameters: $previousParameters")
+            } catch (e: JsonSyntaxException) {
+                Log.e("AlarmAlertActivity", "Error parsing previous parameters JSON", e)
+            }
+        } else {
+            Log.w("AlarmAlertActivity", "Previous mode or parameters not found in intent extras")
+            // Handle the case where previous mode/parameters are missing (e.g., set a default mode)
+            ModeManager.currentMode = "Color" // Or some default mode
+            GlobalBluetoothManager.setLedMode("Color")
+            GlobalBluetoothManager.setLedParameter("Color", listOf(255, 0, 0))
+            GlobalBluetoothManager.setBrightness(100)
+        }
 
         Log.d("AlarmAlertActivity", "Snoozed Alarms before removal: ${snoozedAlarms.joinToString(separator = "\n")}")
         // Remove any snoozed alarm that corresponds to the original alarm.

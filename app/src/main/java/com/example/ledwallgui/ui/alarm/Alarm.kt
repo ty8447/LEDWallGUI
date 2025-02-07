@@ -12,6 +12,7 @@ data class Alarm(
     var isSelected: Boolean = false,
     var rampBright: Boolean = false,
     var selectedDays: BooleanArray = BooleanArray(7) { false },
+    var modeInfo: MutableMap<String, String> = mutableMapOf(),
     var id: Int = generateUniqueId()
 ) : Parcelable {
 
@@ -30,6 +31,14 @@ data class Alarm(
         parcel.readByte() != 0.toByte(),
         parcel.readByte() != 0.toByte(),
         parcel.createBooleanArray() ?: BooleanArray(7) { false },
+        mutableMapOf<String, String>().apply { // Initialize here as well when reading
+            val size = parcel.readInt()
+            repeat(size) {
+                val key = parcel.readString() ?: ""
+                val value = parcel.readString() ?: ""
+                put(key, value)
+            }
+        },
         parcel.readInt()
     )
 
@@ -41,6 +50,13 @@ data class Alarm(
         parcel.writeByte(if (isSelected) 1 else 0)
         parcel.writeByte(if (rampBright) 1 else 0)
         parcel.writeBooleanArray(selectedDays)
+
+        // Defensive null check (good practice)
+        parcel.writeInt(modeInfo?.size ?: 0) // Write 0 if modeInfo is null
+        modeInfo?.forEach { (key, value) -> // Safe call operator ?.
+            parcel.writeString(key)
+            parcel.writeString(value)
+        }
         parcel.writeInt(id)
     }
 

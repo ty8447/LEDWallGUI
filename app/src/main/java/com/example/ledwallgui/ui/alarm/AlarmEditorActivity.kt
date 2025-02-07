@@ -10,9 +10,12 @@ import android.widget.Button
 import android.widget.NumberPicker
 import android.widget.SeekBar
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
+import com.example.ledwallgui.MainActivity
 import com.example.ledwallgui.R
+import com.google.gson.Gson
 
 class AlarmEditorActivity : AppCompatActivity() {
     private var alarms: MutableList<Alarm> = mutableListOf()
@@ -25,11 +28,17 @@ class AlarmEditorActivity : AppCompatActivity() {
     // Holds the selected days state; its initial value will be updated either from the alarm or by toggling
     private var selectedDays: BooleanArray = BooleanArray(7) { false }
     private lateinit var dayButtons: List<Button>
+    private var selectedModeParams: MutableMap<String, String> = mutableMapOf()
+
+    // Request code for recording LED state
+    companion object {
+        const val RECORD_LED_STATE_REQUEST_CODE = 2001
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.alarm_editor)
-        Log.d("alarmEditorActivity", "onCreate: Activity started")
+        Log.d("AlarmEditorActivity", "onCreate: Activity started")
         hideSystemUI()
 
         initializeViews()
@@ -41,6 +50,14 @@ class AlarmEditorActivity : AppCompatActivity() {
         setUpTimePicker()
 
         rampBrightnessSwitch = findViewById(R.id.ramp_brightness)
+
+        findViewById<Button>(R.id.setMode).setOnClickListener {
+            Log.d("AlarmEditorActivity", "set_mode button clicked: launching MainActivity in record mode")
+            val intent = Intent(this, MainActivity::class.java)
+            intent.putExtra("record_led_state", true)
+            // Launch the intent using the new launcher
+            recordLedStateLauncher.launch(intent)
+        }
     }
 
     override fun onResume() {
@@ -123,6 +140,15 @@ class AlarmEditorActivity : AppCompatActivity() {
         }
 
         updateDayButtonVisuals()
+
+        // Get and set the mode name
+        val modeName = existingAlarm.modeInfo["Name"] // Get the mode name from the map
+        val alarmModeTextView = findViewById<TextView>(R.id.alarm_mode) // Get the TextView
+        alarmModeTextView?.text = modeName ?: "Unknown Mode" // Set the text, or a default if null
+
+        //Log the mode parameters
+        Log.d("AlarmEditorActivity", "Mode Parameters: ${existingAlarm.modeInfo}")
+
     }
 
     private fun setUpDayButtons() {
@@ -239,6 +265,34 @@ class AlarmEditorActivity : AppCompatActivity() {
         return selectedDaysArray
     }
 
+    private val recordLedStateLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val ledParametersJson = result.data?.getStringExtra("led_parameters")
+
+            if (!ledParametersJson.isNullOrEmpty()) {
+                try {
+                    val gson = Gson()
+                    val parsedParams: MutableMap<String, String> = gson.fromJson(
+                        ledParametersJson,
+                        object : com.google.gson.reflect.TypeToken<MutableMap<String, String>>() {}.type
+                    ) ?: mutableMapOf()
+
+                    selectedModeParams = parsedParams.toMutableMap()
+
+                    val modeName = parsedParams["Name"] ?: "Unknown Mode"
+                    findViewById<TextView>(R.id.alarm_mode).text = modeName  // Update TextView here!
+
+                    Log.d("AlarmEditorActivity", "Mode Information: $selectedModeParams")
+
+                } catch (e: Exception) {
+                    Log.e("AlarmEditorActivity", "Error parsing LED parameters JSON", e)
+                }
+            } else {
+                Log.w("AlarmEditorActivity", "No LED parameters received")
+            }
+        }
+    }
+
     private fun saveAlarm() {
         val alarmNameText = findViewById<TextView>(R.id.alarmName).text.toString()
         val rampBright = rampBrightnessSwitch.isChecked
@@ -259,32 +313,33 @@ class AlarmEditorActivity : AppCompatActivity() {
         Log.d("AlarmEditorActivity", "saveAlarm: Selected days: ${newSelectedDays.joinToString(", ")}")
 
         if (alarmToEdit != null) {
-            // Update existing alarm
             alarmToEdit?.apply {
                 hours = hour
                 minutes = minute
                 this.alarmName = alarmNameText
                 this.rampBright = rampBright
-                this.selectedDays = newSelectedDays.copyOf() // Ensure a new copy is created
+                this.selectedDays = newSelectedDays.copyOf()
+                this.modeInfo = selectedModeParams.toMutableMap() // Apply stored parameters
                 if (!this.isEnabled) {
                     this.isEnabled = true
                 }
             }
-            Log.d("alarmEditorActivity", "Updated alarm: $alarmToEdit")
+            Log.d("AlarmEditorActivity", "Updated alarm: $alarmToEdit")
         } else {
-            // Create new alarm
             val newAlarm = Alarm(
                 hours = hour,
                 minutes = minute,
-                alarmNameText,
-                true,  // New alarms are enabled by default
-                false,
-                rampBright,
-                newSelectedDays.copyOf(), // Copy the array to ensure it's properly set
-                id = System.currentTimeMillis().toInt() // Generate a unique ID
+                alarmName = alarmNameText,
+                isEnabled = true,
+                isSelected = false,
+                rampBright = rampBright,
+                selectedDays = newSelectedDays.copyOf(),
+                modeInfo = selectedModeParams.toMutableMap(), // Set modeParameters for new alarm
+                id = System.currentTimeMillis().toInt()
             )
+
             alarms.add(newAlarm)
-            Log.d("alarmEditorActivity", "Added new alarm: $newAlarm")
+            Log.d("AlarmEditorActivity", "Added new alarm: $newAlarm")
         }
 
         val resultIntent = Intent().apply {
