@@ -24,7 +24,7 @@ import java.util.Queue
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 
-object GlobalBluetoothManager {
+object OldGlobalBluetoothManager {
     private val LED_CONNECTION_SERVICE: UUID =
         UUID.fromString("12345678-1234-5678-1234-56789abcdef0") //Server for Modes
     private val LED_MODE_LIST_UUID: UUID =

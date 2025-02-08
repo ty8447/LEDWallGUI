@@ -15,7 +15,7 @@ import com.example.ledwallgui.R
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 
 class BluetoothReconnectionService : Service() {
-
+    private lateinit var globalBluetoothManager: GlobalBluetoothManager
     private val CHANNEL_ID = "BluetoothReconnectionChannel"
     private val TAG = "BluetoothReconnectionService"
     private lateinit var handler: Handler
@@ -30,13 +30,14 @@ class BluetoothReconnectionService : Service() {
         startForeground(1, createNotification())
         Log.d(TAG, "Service started")
         handler = Handler(Looper.getMainLooper())
+        globalBluetoothManager = GlobalBluetoothManager(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Thread {
             while (true) {
                 try {
-                    val isConnected = GlobalBluetoothManager.isConnected
+                    val isConnected = globalBluetoothManager.isConnected
                     if (!isConnected) {
                         Log.d(TAG, "Device disconnected. Attempting to reconnect...")
                         attemptReconnect(applicationContext)
@@ -108,10 +109,10 @@ class BluetoothReconnectionService : Service() {
         }
 
         // Fetch the device from the address
-        val device = GlobalBluetoothManager.getDeviceFromAddress(deviceAddress)
+        val device = globalBluetoothManager.getDeviceFromAddress(deviceAddress)
         device?.let {
             // Proceed with connection attempt
-            GlobalBluetoothManager.connectToDevice(context, it, handler) { success ->
+            globalBluetoothManager.connectToDevice(context, it, handler) { success: Boolean->
                 isRetrying = false // Ensure this is reset regardless of success or failure
                 if (success) {
                     Log.d(TAG, "Reconnected successfully")

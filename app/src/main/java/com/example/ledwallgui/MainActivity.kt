@@ -50,19 +50,20 @@ import com.example.ledwallgui.ui.modes.ModeManager
 import com.example.ledwallgui.ui.modes.ModesActivity
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 import com.example.ledwallgui.ui.settings.ConnectionActivity
-import com.example.ledwallgui.ui.settings.GlobalBluetoothManager.sendPowerStateToArduino
 import com.example.ledwallgui.ui.settings.settingsActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.ActivityResult
 import androidx.core.app.ActivityCompat
 import com.example.ledwallgui.ui.settings.ColorWheel
+import com.example.ledwallgui.ui.settings.ModeInfo
 import com.google.gson.Gson
 import kotlin.ranges.coerceAtLeast
 import kotlin.ranges.coerceIn
 
 
 class MainActivity : AppCompatActivity() {
+    private lateinit var globalBluetoothManager: GlobalBluetoothManager
     private var use12HourTimeFormat = true // Initialize with default value ***CHANGE IN SETTINGS***
     private var powerState = false
     private var connectState = false
@@ -129,6 +130,7 @@ class MainActivity : AppCompatActivity() {
         if (!checkBluetoothPermission()) {
             requestBluetoothPermission()
         }
+        globalBluetoothManager = GlobalBluetoothManager(this)
 
         modesActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
             if (result.resultCode == RESULT_OK) {
@@ -220,12 +222,11 @@ class MainActivity : AppCompatActivity() {
 
         // Handle PowerState button click
         imageButton1.setOnClickListener {
-            if (GlobalBluetoothManager.isConnected) {
+            if (globalBluetoothManager.isConnected) {
                 powerState = !powerState
                 Log.d("PowerState", "Power state clicked: $powerState")
                 updatePowerButtonImage()
-                sendPowerStateToArduino(powerState)
-//                saveSharedPreferences()
+                globalBluetoothManager.sendPowerStateToArduino(powerState)
             } else {
                 showConnectionSnackbar()
             }
@@ -300,8 +301,8 @@ class MainActivity : AppCompatActivity() {
                                     Log.d("Slider", "User tapped. Jumping to: $currentBrightness")
 
                                     // Set the brightness if connected
-                                    if (GlobalBluetoothManager.isConnected) {
-                                        GlobalBluetoothManager.setBrightness(currentBrightness)
+                                    if (globalBluetoothManager.isConnected) {
+                                        globalBluetoothManager.setBrightness(currentBrightness)
                                     }
                                 }
                             }, 200) // 200ms delay to detect tap vs hold
@@ -355,9 +356,9 @@ class MainActivity : AppCompatActivity() {
                                 )
                                 Log.d("Slider", "Update Thumb Position 1")
 
-                            if (GlobalBluetoothManager.isConnected) {
+                            if (globalBluetoothManager.isConnected) {
                                 if (currentBrightness != previousBrightness) {
-                                    GlobalBluetoothManager.setBrightness(currentBrightness)
+                                    globalBluetoothManager.setBrightness(currentBrightness)
                                     Log.d(
                                         "Slider",
                                         "GlobalBluetoothManager.setBrightness($currentBrightness)"
@@ -396,8 +397,8 @@ class MainActivity : AppCompatActivity() {
                                 )
 
                                 // Set the brightness if connected
-                                if (GlobalBluetoothManager.isConnected) {
-                                    GlobalBluetoothManager.setBrightness(currentBrightness)
+                                if (globalBluetoothManager.isConnected) {
+                                    globalBluetoothManager.setBrightness(currentBrightness)
                                 }
 
                                 Log.d("Slider", "User tapped. Final brightness: $currentBrightness")
@@ -418,7 +419,7 @@ class MainActivity : AppCompatActivity() {
 
         // Handle Mode button click
         button2.setOnClickListener {
-            if (GlobalBluetoothManager.isConnected) {
+            if (globalBluetoothManager.isConnected) {
                 showModesMenu()
             } else {
                 showConnectionSnackbar()
@@ -461,7 +462,7 @@ class MainActivity : AppCompatActivity() {
             // Set up the done button click listener.
             recordDoneButton.setOnClickListener {
                 val currentMode = ModeManager.currentMode
-                val modeInfo = GlobalBluetoothManager.getModeInfo(currentMode)
+                val modeInfo = globalBluetoothManager.getModeInfo(currentMode)
 
                 if (modeInfo != null) {
                     val ledParametersMap = mutableMapOf<String, String>()
@@ -829,9 +830,9 @@ class MainActivity : AppCompatActivity() {
                         val red = Color.red(color)
                         val green = Color.green(color)
                         val blue = Color.blue(color)
-                        GlobalBluetoothManager.setLedParameter(
+                        globalBluetoothManager.setLedParameter(
                             parameter.name,
-                            "$red,$green,$blue".split(",").map { it.toInt() }
+                            "$red,$green,$blue".split(",").map { it.toInt() }.toString()
                         )
                     }
                 })
@@ -881,9 +882,9 @@ class MainActivity : AppCompatActivity() {
                                 colorPreview.setBackgroundColor(selectedColor)
 
                                 // Send the color to Bluetooth manager
-                                GlobalBluetoothManager.setLedParameter(
+                                globalBluetoothManager.setLedParameter(
                                     parameter.name,
-                                    "$red,$green,$blue".split(",").map { it.toInt() }
+                                    "$red,$green,$blue".split(",").map { it.toInt() }.toString()
                                 )
                             }
                         }
@@ -927,9 +928,9 @@ class MainActivity : AppCompatActivity() {
                         Log.d("MainActivity", "Parameter value updated: $progress.toString().split(\",\").map { it.toInt() }")
 
                         // Update the Bluetooth parameter
-                        GlobalBluetoothManager.setLedParameter(
+                        globalBluetoothManager.setLedParameter(
                             parameter.name,
-                            progress.toString().split(",").map { it.toInt() }
+                            progress.toString().split(",").map { it.toInt() }.toString()
                         )
 
                         // Update the main TextView
@@ -1078,7 +1079,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateConnectIcon() {
         val connectButton: ImageView = findViewById(R.id.imageView)
 //        Log.d("MainActivity", "Updating connect icon: $connectState")
-        if (GlobalBluetoothManager.isConnected) { // Use GlobalBluetoothManager.isConnected
+        if (globalBluetoothManager.isConnected) { // Use GlobalBluetoothManager.isConnected
             connectButton.setImageResource(R.drawable.stat_con_button)
         } else {
             connectButton.setImageResource(R.drawable.stat_dis_button)
@@ -1095,14 +1096,14 @@ class MainActivity : AppCompatActivity() {
         val currentMode = ModeManager.currentMode
         textView.text = "$currentMode Parameters"
 
-        connectState = GlobalBluetoothManager.isConnected
+        connectState = globalBluetoothManager.isConnected
         Log.d("MainActivity", "Current mode: ${ModeManager.currentMode}")
 
         // Fetch mode info and request parameters
-        val modeInfo = GlobalBluetoothManager.getModeInfo(currentMode)
+        val modeInfo = globalBluetoothManager.getModeInfo(currentMode)
         if (modeInfo != null) {
             Log.d("MainActivity", "Mode info found for mode: $currentMode")
-            GlobalBluetoothManager.requestValues("Power","None")
+            globalBluetoothManager.requestValues("Power","None")
             updateLayoutWithModeInfo(modeInfo)
         } else {
             Log.w("MainActivity", "Mode info not found for mode: $currentMode")
@@ -1111,21 +1112,21 @@ class MainActivity : AppCompatActivity() {
         // Explicitly request the power state
         Log.d("MainActivity", "Requesting power state parameter")
 
-        GlobalBluetoothManager.requestValues("Power","None")
+        globalBluetoothManager.requestValues("Power","None")
 
-        GlobalBluetoothManager.startConnectionCheck(this)
+        globalBluetoothManager.startConnectionCheck(this)
     }
 
     override fun onPause() {
         super.onPause()
         Log.d("MainActivity", "onPause called")
-        GlobalBluetoothManager.stopConnectionCheck()
+        globalBluetoothManager.stopConnectionCheck()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         Log.d("MainActivity", "onDestroy called")
-        GlobalBluetoothManager.stopConnectionCheck()
+        globalBluetoothManager.stopConnectionCheck()
     }
 
     @SuppressLint("ResourceType")
@@ -1194,14 +1195,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateLayoutWithModeInfo(modeInfo: GlobalBluetoothManager.ModeInfo) {
+    private fun updateLayoutWithModeInfo(modeInfo: ModeInfo) {
+
         val container = findViewById<FrameLayout>(R.id.dynamicLayoutContainer)
 
         Log.d("MainActivity", "Updating layout for mode: ${modeInfo.name}, Parameters: ${modeInfo.parameterNames.joinToString(", ")}")
 
         flexboxLayout.removeAllViews()
 
-        val parameters = modeInfo.parameterNames.map { parameterName ->
+        val parameters = modeInfo.parameterNames.map { parameterName: String ->
             val parameterType = getParameterType(parameterName)
             val parameterValue = getParameterValue(parameterName)
             Parameter(parameterName, parameterType, parameterValue)

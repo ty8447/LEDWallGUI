@@ -35,6 +35,7 @@ object ModeManager {
 }
 
 class ModesActivity : AppCompatActivity() {
+    private lateinit var globalBluetoothManager: GlobalBluetoothManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,6 +45,7 @@ class ModesActivity : AppCompatActivity() {
             WindowManager.LayoutParams.FLAG_FULLSCREEN
         )
         setContentView(R.layout.activity_mode_menu)
+        globalBluetoothManager = GlobalBluetoothManager(this)
         hideSystemUI()
 
         val backButton: ImageButton = findViewById(R.id.mBackButton)
@@ -65,7 +67,7 @@ class ModesActivity : AppCompatActivity() {
             // Set the done button click listener.
             recordDoneButton.setOnClickListener {
                 val currentMode = ModeManager.currentMode
-                val modeInfo = GlobalBluetoothManager.getModeInfo(currentMode)
+                val modeInfo = globalBluetoothManager.getModeInfo(currentMode)
 
                 if (modeInfo != null) {
                     val ledParametersMap = mutableMapOf<String, String>()
@@ -104,7 +106,7 @@ class ModesActivity : AppCompatActivity() {
 
         }
 
-        val modeInfoList = GlobalBluetoothManager.modeInfoList // Fetch from GlobalBluetoothManager
+        val modeInfoList = globalBluetoothManager.modeInfoList // Fetch from GlobalBluetoothManager
 
         if (modeInfoList.isEmpty()) {
             Log.w("ModesActivity", "No modes available in GlobalBluetoothManager")
@@ -122,7 +124,7 @@ class ModesActivity : AppCompatActivity() {
                 setPadding(16, 16, 16, 16)
                 setOnClickListener {
                     ModeManager.currentMode = modeInfo.name
-                    GlobalBluetoothManager.setLedMode(modeInfo.name)
+                    globalBluetoothManager.setLedMode(modeInfo.name)
                     Toast.makeText(this@ModesActivity, "Mode changed to ${modeInfo.name}", Toast.LENGTH_SHORT).show()
                     setResult(RESULT_OK)
                     finish()

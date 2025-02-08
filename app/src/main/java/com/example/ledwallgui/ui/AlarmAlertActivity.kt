@@ -16,7 +16,6 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
-import androidx.compose.ui.input.key.type
 import com.example.ledwallgui.R
 import com.example.ledwallgui.PreferenceUtils
 import com.example.ledwallgui.ui.alarm.Alarm
@@ -28,11 +27,9 @@ import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
 import java.util.Calendar
-import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.minutes
 
 class AlarmAlertActivity : Activity() {
-
+    private lateinit var globalBluetoothManager: GlobalBluetoothManager
     private lateinit var alarmTimeTextView: TextView
     private lateinit var alarmNameTextView: TextView
     private lateinit var snoozeButton: Button
@@ -59,6 +56,7 @@ class AlarmAlertActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_alarm_alert)
+        globalBluetoothManager = GlobalBluetoothManager(this)
         window.addFlags(
             WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
                     WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
@@ -137,15 +135,15 @@ class AlarmAlertActivity : Activity() {
                     "Color", "SColor" -> {
                         val rgbValues = paramValue.trim('{', '}').split(",")
                             .map { it.trim().toIntOrNull() ?: 0 }
-                        GlobalBluetoothManager.setLedParameter(
+                        globalBluetoothManager.setLedParameter(
                             alarmMode,
-                            rgbValues
+                            rgbValues.toString()
                         ) // Set RGB values
                     }
 
                     "Brightness" -> {
                         val brightness = paramValue.toIntOrNull() ?: 0
-                        GlobalBluetoothManager.setBrightness(brightness)
+                        globalBluetoothManager.setBrightness(brightness)
                     }
                     // Handle other parameter types as needed
                     else -> {
@@ -155,7 +153,7 @@ class AlarmAlertActivity : Activity() {
                     }
                 }
             }
-            GlobalBluetoothManager.setLedMode(alarmMode) // Set the mode on the device
+            globalBluetoothManager.setLedMode(alarmMode) // Set the mode on the device
 
 
             Log.d("AlarmAlertActivity", "Alarm Mode set to: $alarmMode, Parameters: $alarmParameters")
@@ -164,9 +162,9 @@ class AlarmAlertActivity : Activity() {
             Log.w("AlarmAlertActivity", "Alarm with ID $alarmId not found in the list.")
             // Handle the case where the alarm is not found (e.g., use default mode and parameters)
             ModeManager.currentMode = "Color" // Or some default mode
-            GlobalBluetoothManager.setLedMode("Color")
-            GlobalBluetoothManager.setLedParameter("Color", listOf(255, 0, 0))
-            GlobalBluetoothManager.setBrightness(100)
+            globalBluetoothManager.setLedMode("Color")
+            globalBluetoothManager.setLedParameter("Color", listOf(255, 0, 0).toString())
+            globalBluetoothManager.setBrightness(100)
 
         }
 
@@ -281,11 +279,13 @@ class AlarmAlertActivity : Activity() {
         Log.d("AlarmAlertActivity", "Restoring Mode: $previousMode with Parameters: $previousParams")
 
         ModeManager.currentMode = previousMode
-        GlobalBluetoothManager.setLedMode(previousMode)
+        globalBluetoothManager.setLedMode(previousMode)
 
         previousParams.forEach { (param, value) ->
             ModeManager.setModeParameter(previousMode, param, value)
-            GlobalBluetoothManager.setLedParameter(param, value.split(",").map { it.toInt() })
+            globalBluetoothManager.setLedParameter(param,
+                value.split(",").map { it.toInt() }.toString()
+            )
         }
     }
 
@@ -556,11 +556,13 @@ class AlarmAlertActivity : Activity() {
                     when (paramName) {
                         "Color", "SColor" -> {
                             val rgbValues = paramValue.trim('{', '}').split(",").map { it.trim().toIntOrNull() ?: 0 }
-                            GlobalBluetoothManager.setLedParameter(previousMode, rgbValues)
+                            globalBluetoothManager.setLedParameter(previousMode,
+                                rgbValues.toString()
+                            )
                         }
                         "Brightness" -> {
                             val brightness = paramValue.toIntOrNull() ?: 0
-                            GlobalBluetoothManager.setBrightness(brightness)
+                            globalBluetoothManager.setBrightness(brightness)
                         }
                         // Handle other parameter types as needed
                         else -> {
@@ -570,7 +572,7 @@ class AlarmAlertActivity : Activity() {
                         }
                     }
                 }
-                GlobalBluetoothManager.setLedMode(previousMode)
+                globalBluetoothManager.setLedMode(previousMode)
 
                 Log.d("AlarmAlertActivity", "Restored previous mode: $previousMode, Parameters: $previousParameters")
             } catch (e: JsonSyntaxException) {
@@ -580,9 +582,9 @@ class AlarmAlertActivity : Activity() {
             Log.w("AlarmAlertActivity", "Previous mode or parameters not found in intent extras")
             // Handle the case where previous mode/parameters are missing (e.g., set a default mode)
             ModeManager.currentMode = "Color" // Or some default mode
-            GlobalBluetoothManager.setLedMode("Color")
-            GlobalBluetoothManager.setLedParameter("Color", listOf(255, 0, 0))
-            GlobalBluetoothManager.setBrightness(100)
+            globalBluetoothManager.setLedMode("Color")
+            globalBluetoothManager.setLedParameter("Color", listOf(255, 0, 0).toString())
+            globalBluetoothManager.setBrightness(100)
         }
 
         Log.d("AlarmAlertActivity", "Snoozed Alarms before removal: ${snoozedAlarms.joinToString(separator = "\n")}")
