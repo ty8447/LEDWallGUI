@@ -70,6 +70,8 @@ dependencies {
     testImplementation("junit:junit:4.13.2") // No change needed
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    debugImplementation ("com.squareup.leakcanary:leakcanary-android:2.14")
+    implementation ("no.nordicsemi.android:ble-ktx:2.9.0")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.78.1") {
         exclude(group = "org.osgi", module = "org.osgi.core") // Exclude the OSGI bundle
     }

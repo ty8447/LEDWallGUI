@@ -3,7 +3,7 @@ package com.example.ledwallgui
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.ActivityManager
+import android.app.AlertDialog
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.Intent
@@ -95,9 +95,34 @@ class MainActivity : AppCompatActivity() {
         private const val SETTINGS_REQUEST_CODE = 100
         private const val MODES_REQUEST_CODE = 101 // Add this line
     }
+    private lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            if (isGranted) {
+                // Permission granted
+            } else if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.POST_NOTIFICATIONS)) {
+                // Show rationale
+                AlertDialog.Builder(this)
+                    .setTitle("Notification Permission")
+                    .setMessage("Notifications are needed...")
+                    .setPositiveButton("Grant") { _, _ ->
+                        requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                    .setNegativeButton("Deny", null)
+                    .show()
+            } else {
+                // Permission permanently denied
+                AlertDialog.Builder(this)
+                    .setTitle("Permission Denied")
+                    .setMessage("Notification permission is permanently denied...")
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+        }
+
         requestWindowFeature(Window.FEATURE_NO_TITLE) // Hide the title bar
         setContentView(R.layout.activity_main)
 
@@ -204,6 +229,36 @@ class MainActivity : AppCompatActivity() {
             } else {
                 showConnectionSnackbar()
             }
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            when {
+                ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED -> {
+                    // Permission is granted.
+                }
+
+                shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS) -> {
+                    // Show rationale (as shown in the launcher callback above)
+                    AlertDialog.Builder(this)
+                        .setTitle("Notification Permission")
+                        .setMessage("Notifications are needed to alert you about memory leaks. Please grant the permission.")
+                        .setPositiveButton("Grant") { _, _ ->
+                            requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        .setNegativeButton("Deny", null) // Or handle denial as needed
+                        .show()
+                }
+
+                else -> {
+                    // The permission is not granted, and should we request it?
+                    requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+
+
         }
 
         // Get the sliderHeight after the layout is complete
@@ -1038,26 +1093,28 @@ class MainActivity : AppCompatActivity() {
         }
 
         val currentMode = ModeManager.currentMode
-        // Update the textView5 with the current mode name
         textView.text = "$currentMode Parameters"
 
-        // Update connectState based on GlobalBluetoothManager
         connectState = GlobalBluetoothManager.isConnected
         Log.d("MainActivity", "Current mode: ${ModeManager.currentMode}")
-//         Update UI based on modeInfo
-            val selectedMode = currentMode
-            val modeInfo = GlobalBluetoothManager.getModeInfo(selectedMode)
-            if (modeInfo != null) {
-                Log.d("MainActivity", "Mode info found for mode: $selectedMode")
-                GlobalBluetoothManager.requestParameterValues(selectedMode)
-                updateLayoutWithModeInfo(modeInfo)
-            } else {
-                Log.w("MainActivity", "Mode info not found for mode: $selectedMode")
-            }
+
+        // Fetch mode info and request parameters
+        val modeInfo = GlobalBluetoothManager.getModeInfo(currentMode)
+        if (modeInfo != null) {
+            Log.d("MainActivity", "Mode info found for mode: $currentMode")
+            GlobalBluetoothManager.requestValues("Power","None")
+            updateLayoutWithModeInfo(modeInfo)
+        } else {
+            Log.w("MainActivity", "Mode info not found for mode: $currentMode")
+        }
+
+        // Explicitly request the power state
+        Log.d("MainActivity", "Requesting power state parameter")
+
+        GlobalBluetoothManager.requestValues("Power","None")
+
         GlobalBluetoothManager.startConnectionCheck(this)
     }
-
-
 
     override fun onPause() {
         super.onPause()

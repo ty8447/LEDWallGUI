@@ -29,16 +29,19 @@ object GlobalBluetoothManager {
         UUID.fromString("12345678-1234-5678-1234-56789abcdef0") //Server for Modes
     private val LED_MODE_LIST_UUID: UUID =
         UUID.fromString("12345678-1234-5678-1234-56789abcdef1") //Get List of Saved Modes from Arduino
-    private val CLIENT_DESCRIPTOR_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")  // Use UUID directly
     private val PARAMETER_REQUEST_UUID: UUID =
-        UUID.fromString("12345678-1234-5678-1234-56789abcdef2") //GET LED Parameter Values
-    private val MODE_CONTROL_UUID: UUID =
-        UUID.fromString("12345678-1234-5678-1234-56789abcdef3") //Write Current Mode
+        UUID.fromString("12345678-1234-5678-1234-56789abcdef2") //ASK FOR LED Parameter Values
+    private val PARAMETER_RESPONSE_UUID: UUID =
+        UUID.fromString("12345678-1234-5678-1234-56789abcdef3") //ASK FOR LED Parameter Values
+    private val PARAMETER_CONTROL_UUID: UUID =
+        UUID.fromString("12345678-1234-5678-1234-56789abcdef4") //Write Current Mode
+    private val CLIENT_DESCRIPTOR_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")  // Use UUID directly
     var bluetoothSocket: BluetoothSocket? = null
     private var _isConnected: Boolean = false
     private var _deviceAddress: String? = null
     private var _deviceName: String? = null  // Added device name
     private var gatt: BluetoothGatt? = null
+    private var parameterResponseCharacteristic: BluetoothGattCharacteristic? = null // Declare it here
     var shouldLoadSavedStatus = false
     private val discoveredUUIDs = CopyOnWriteArrayList<UUID>()
     var modeInfoList: MutableList<ModeInfo> = mutableListOf()
@@ -168,7 +171,6 @@ object GlobalBluetoothManager {
                 }
             }
 
-
             override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
                 if (status == BluetoothGatt.GATT_SUCCESS) {
                     Log.i(TAG, "Discovered services:")
@@ -182,12 +184,7 @@ object GlobalBluetoothManager {
                                 Log.d(TAG, "  Characteristic UUID: ${characteristic.uuid}")
                                 discoveredUUIDs.add(characteristic.uuid)
 
-                                if (characteristic.uuid == PARAMETER_REQUEST_UUID) {
-                                    commandQueue.add {
-                                        enableNotifications(gatt)
-                                    }
-                                    nextCommand()
-                            } else if (characteristic.uuid == LED_MODE_LIST_UUID) {
+                                if (characteristic.uuid == LED_MODE_LIST_UUID) { // Keep this read
                                     commandQueue.add {
                                         gatt.readCharacteristic(characteristic)
                                     }
@@ -196,6 +193,30 @@ object GlobalBluetoothManager {
                             }
                         }
                     }
+
+                    // Enable notifications *AFTER* discovering all characteristics
+//                    commandQueue.add {
+//                        enableNotifications(gatt!!)
+//                    }
+
+                    val service = gatt?.getService(LED_CONNECTION_SERVICE)
+                    if (service != null) {
+                        parameterResponseCharacteristic =
+                            service.getCharacteristic(PARAMETER_RESPONSE_UUID)
+
+                        if (parameterResponseCharacteristic != null) { // Check if it's not null
+                            enableNotifications(gatt!!, parameterResponseCharacteristic!!)
+                        } else {
+                            Log.e(
+                                TAG,
+                                "parameterResponseCharacteristic is null after service discovery!"
+                            )
+                            callback(false) // Important: Notify if characteristic is not found.
+                            return // Stop here to avoid a NullPointerException
+                        }
+                    }
+                    nextCommand()
+
                     callback(true) // Notify successful service discovery
                 } else {
                     Log.w(TAG, "onServicesDiscovered received: $status")
@@ -284,15 +305,15 @@ object GlobalBluetoothManager {
                 }
 
                 // Read the descriptor after reading the characteristic (if needed)
-                val descriptor = characteristic.getDescriptor(CLIENT_DESCRIPTOR_UUID)
-                if (descriptor != null) {
-                    Log.d(TAG, "Reading descriptor for characteristic: ${characteristic.uuid}")
-                    if (gatt!!.readDescriptor(descriptor)) {
-                        Log.d(TAG, "Descriptor read successfully for characteristic: ${characteristic.uuid}")
-                    } else {
-                        Log.e(TAG, "Failed to read descriptor for characteristic: ${characteristic.uuid}")
-                    }
-                }
+//                val descriptor = characteristic.getDescriptor(CLIENT_DESCRIPTOR_UUID)
+//                if (descriptor != null) {
+//                    Log.d(TAG, "Reading descriptor for characteristic: ${characteristic.uuid}")
+//                    if (gatt!!.readDescriptor(descriptor)) {
+//                        Log.d(TAG, "Descriptor read successfully for characteristic: ${characteristic.uuid}")
+//                    } else {
+//                        Log.e(TAG, "Failed to read descriptor for characteristic: ${characteristic.uuid}")
+//                    }
+//                }
 
                 // Command completed successfully
                 Log.d(TAG, "Characteristic ${characteristic.uuid} read successfully and processed.")
@@ -314,57 +335,28 @@ object GlobalBluetoothManager {
                 completedCommand()
             }
 
-            fun enableNotifications(gatt: BluetoothGatt) {
-                val service = gatt.getService(LED_CONNECTION_SERVICE)
-                val characteristic = service?.getCharacteristic(PARAMETER_REQUEST_UUID)
-                characteristic?.let {
-                    // Enable notifications
-                    if (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY == 0) {
-                        Log.e(
-                            TAG,
-                            "Characteristic ${characteristic.uuid} does not support notifications."
-                        )
-                        return
-                    } else {
-                        Log.d(
-                            TAG,
-                            "Enabling notifications for characteristic: ${characteristic.uuid}"
-                        )
-                        gatt.setCharacteristicNotification(it, true)
+            private fun enableNotifications(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
 
-                        // Write to CCCD to enable notifications
-                        val descriptor = it.getDescriptor(CLIENT_DESCRIPTOR_UUID)
-                        Log.d("ENN", "Descriptor UUID: ${descriptor.uuid}")
-                        Log.d(
-                            "ENN",
-                            "Descriptor value: ${
-                                descriptor.value?.joinToString {
-                                    String.format(
-                                        "0x%02X",
-                                        it
-                                    )
-                                } ?: "null"
-                            }")
+                // Log the characteristic UUID for verification
+                Log.d(TAG, "Attempting to enable notifications for characteristic: ${characteristic.uuid}")
 
-                        Log.d("ENN", "Descriptor permissions: ${descriptor.permissions}")
-                        descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                        val writeSuccess = gatt?.writeDescriptor(descriptor) == true
-                        Log.d("DESCW", "writeDescriptor() initiated: $writeSuccess")
-                        Log.d("ENN", "Descriptor UUID: ${descriptor.uuid}")
-                        Log.d(
-                            "ENN",
-                            "Descriptor value: ${
-                                descriptor.value?.joinToString {
-                                    String.format(
-                                        "0x%02X",
-                                        it
-                                    )
-                                } ?: "null"
-                            }")
-                        Log.d("ENN", "Descriptor permissions: ${descriptor.permissions}")
-                        gatt.writeDescriptor(descriptor)
-                    }
+                if ((characteristic.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY) == 0) {
+                    Log.e(TAG, "Characteristic ${characteristic.uuid} does not support notifications.")
+                    return // Exit if notifications not supported
                 }
+
+                gatt.setCharacteristicNotification(characteristic, true) // Call this *before* writing the descriptor
+
+                val descriptor = characteristic.getDescriptor(CLIENT_DESCRIPTOR_UUID)
+                if (descriptor == null) {
+                    Log.e(TAG, "CLIENT_CHARACTERISTIC_CONFIG_UUID descriptor not found!")
+                    return // Handle null descriptor
+                }
+
+                descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+
+                val writeResult = gatt.writeDescriptor(descriptor)
+                Log.i("Bluetooth", "Descriptor write initiated, result: $writeResult") // Log the result!
             }
 
             override fun onCharacteristicChanged(
@@ -389,10 +381,9 @@ object GlobalBluetoothManager {
                 Log.d("BluetoothGatt", "Notification received for characteristic: ${characteristic.uuid}")
                 Log.d(TAG, "Received parameter values: $response")
 
-                if (characteristic.uuid == PARAMETER_REQUEST_UUID) {
+                if (characteristic.uuid == PARAMETER_RESPONSE_UUID) {
                     try {
                         val parametersMap = parseParameterResponse(response)
-
                         val modeName = parametersMap["Name"] // Get the mode name from the response
 
                         if (modeName != null) {
@@ -407,33 +398,38 @@ object GlobalBluetoothManager {
                                     ledParameters = parametersMap
                                 }
 
-                                // Log the updated values (for debugging)
                                 Log.d(TAG, "Updated parameter values for mode $modeName: ${modeInfo.parameterValues}")
                             } else {
-                                Log.w(TAG, "ModeInfo not found for mode: $modeName") // Log if modeInfo not found
+                                Log.w(TAG, "ModeInfo not found for mode: $modeName")
                             }
                         } else {
-                            Log.w(TAG, "Mode name not found in the response") // Log if modeName not found in response
+                            Log.w(TAG, "Mode name not found in the response")
                         }
-
                     } catch (e: Exception) {
                         Log.e(TAG, "Error parsing parameters: ${e.message}")
                     }
+                } else {
+                    Log.d(TAG, "Notification received from unhandled characteristic: ${characteristic.uuid}")
                 }
 
                 Log.d(TAG, "Characteristic ${characteristic.uuid} updated with value: $response")
             }
 
-            override fun onDescriptorWrite(
-                gatt: BluetoothGatt,
-                descriptor: BluetoothGattDescriptor,
-                status: Int
-            ) {
-                if (status == BluetoothGatt.GATT_SUCCESS) {
-                    Log.d("DESCW", "Descriptor write successful: ${descriptor.uuid}")
-                }
+            override fun onDescriptorWrite(gatt: BluetoothGatt?, descriptor: BluetoothGattDescriptor?, status: Int) {
+                super.onDescriptorWrite(gatt, descriptor, status)
 
-                completedCommand()
+                when (status) {
+                    BluetoothGatt.GATT_SUCCESS -> {
+                        Log.i(TAG, "Descriptor write successful for ${descriptor?.characteristic?.uuid}")
+                    }
+                    BluetoothGatt.GATT_WRITE_NOT_PERMITTED -> {
+                        Log.e(TAG, "GATT_WRITE_NOT_PERMITTED for ${descriptor?.characteristic?.uuid}! Check permissions and Arduino code.")
+                    }
+                    else -> {
+                        Log.e(TAG, "Descriptor write failed for ${descriptor?.characteristic?.uuid}, status: $status")
+                    }
+                }
+                completedCommand() // Ensure this is called regardless of success or failure
             }
 
         }
@@ -614,7 +610,7 @@ object GlobalBluetoothManager {
 
         sendDataToDevice(
             LED_CONNECTION_SERVICE,    // Use the appropriate service UUID
-            MODE_CONTROL_UUID,              // Use a generalized command UUID
+            PARAMETER_CONTROL_UUID,              // Use a generalized command UUID
             formattedData,
             clearBuffer = true,
             appendNullTerminator = false
@@ -664,7 +660,7 @@ object GlobalBluetoothManager {
         return modeInfoList.find { it.name == modeName }
     }
 
-    fun requestParameterValues(modeName: String) {
+    fun requestValues(type: String, modeName: String) {
         val gatt = gatt // Use existing gatt reference
 
         if (gatt != null && isConnected) {
@@ -672,7 +668,7 @@ object GlobalBluetoothManager {
 
             characteristic?.let {
                 // Construct the request string (using the new format)
-                val requestString = "Parameter:$modeName:{}" // Or whatever format your device expects
+                val requestString = "$type:$modeName:{}" // Or whatever format your device expects
 
                 it.value = requestString.toByteArray(Charsets.UTF_8)
                 commandQueue.add {
@@ -682,7 +678,7 @@ object GlobalBluetoothManager {
                     Log.d(TAG, "Queue not busy. Starting command processing.")
                     nextCommand()
                 }
-                Log.d(TAG, "Requested parameter values for mode: $modeName")
+                Log.d(TAG, "Requested $type values for mode: $modeName")
             } ?: run {
                 Log.w(TAG, "Parameter request characteristic not found")
             }
