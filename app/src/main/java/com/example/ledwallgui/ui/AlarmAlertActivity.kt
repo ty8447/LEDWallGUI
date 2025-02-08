@@ -137,7 +137,7 @@ class AlarmAlertActivity : Activity() {
                             .map { it.trim().toIntOrNull() ?: 0 }
                         globalBluetoothManager.setLedParameter(
                             alarmMode,
-                            rgbValues.toString()
+                            rgbValues
                         ) // Set RGB values
                     }
 
@@ -163,7 +163,7 @@ class AlarmAlertActivity : Activity() {
             // Handle the case where the alarm is not found (e.g., use default mode and parameters)
             ModeManager.currentMode = "Color" // Or some default mode
             globalBluetoothManager.setLedMode("Color")
-            globalBluetoothManager.setLedParameter("Color", listOf(255, 0, 0).toString())
+            globalBluetoothManager.setLedParameter("Color", listOf(255, 0, 0))
             globalBluetoothManager.setBrightness(100)
 
         }
@@ -284,7 +284,7 @@ class AlarmAlertActivity : Activity() {
         previousParams.forEach { (param, value) ->
             ModeManager.setModeParameter(previousMode, param, value)
             globalBluetoothManager.setLedParameter(param,
-                value.split(",").map { it.toInt() }.toString()
+                value.split(",").map { it.toInt() }
             )
         }
     }
@@ -557,7 +557,7 @@ class AlarmAlertActivity : Activity() {
                         "Color", "SColor" -> {
                             val rgbValues = paramValue.trim('{', '}').split(",").map { it.trim().toIntOrNull() ?: 0 }
                             globalBluetoothManager.setLedParameter(previousMode,
-                                rgbValues.toString()
+                                rgbValues
                             )
                         }
                         "Brightness" -> {
@@ -583,7 +583,7 @@ class AlarmAlertActivity : Activity() {
             // Handle the case where previous mode/parameters are missing (e.g., set a default mode)
             ModeManager.currentMode = "Color" // Or some default mode
             globalBluetoothManager.setLedMode("Color")
-            globalBluetoothManager.setLedParameter("Color", listOf(255, 0, 0).toString())
+            globalBluetoothManager.setLedParameter("Color", listOf(255, 0, 0))
             globalBluetoothManager.setBrightness(100)
         }
 

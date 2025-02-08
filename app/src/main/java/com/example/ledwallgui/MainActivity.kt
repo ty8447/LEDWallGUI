@@ -832,7 +832,7 @@ class MainActivity : AppCompatActivity() {
                         val blue = Color.blue(color)
                         globalBluetoothManager.setLedParameter(
                             parameter.name,
-                            "$red,$green,$blue".split(",").map { it.toInt() }.toString()
+                            "$red,$green,$blue".split(",").map { it.toInt() }
                         )
                     }
                 })
@@ -884,7 +884,7 @@ class MainActivity : AppCompatActivity() {
                                 // Send the color to Bluetooth manager
                                 globalBluetoothManager.setLedParameter(
                                     parameter.name,
-                                    "$red,$green,$blue".split(",").map { it.toInt() }.toString()
+                                    "$red,$green,$blue".split(",").map { it.toInt() }
                                 )
                             }
                         }
@@ -930,7 +930,7 @@ class MainActivity : AppCompatActivity() {
                         // Update the Bluetooth parameter
                         globalBluetoothManager.setLedParameter(
                             parameter.name,
-                            progress.toString().split(",").map { it.toInt() }.toString()
+                            progress.toString().split(",").map { it.toInt() }
                         )
 
                         // Update the main TextView
