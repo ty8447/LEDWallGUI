@@ -5,7 +5,6 @@ import android.content.SharedPreferences
 import android.util.Log
 import com.google.gson.Gson
 
-
 class PreferenceUtils(private val context: Context) {
     private val PREFS_NAME = "MyPrefs"
     private val gson = Gson()
@@ -16,13 +15,13 @@ class PreferenceUtils(private val context: Context) {
     // Save device address to SharedPreferences
     fun saveDeviceAddress(address: String) {
         val editor = sharedPreferences.edit()
-        editor.putString("device_address", address)
-        editor.apply()  // Use apply() for asynchronous saving
+        editor.putString(KEY_DEVICE_ADDRESS, address)
+        editor.apply()
     }
 
     // Fetch device address from SharedPreferences
     fun fetchDeviceAddress(): String? {
-        return sharedPreferences.getString("device_address", null)  // Return null if no address is saved
+        return sharedPreferences.getString(KEY_DEVICE_ADDRESS, null)
     }
 
     fun savePowerState(powerState: Boolean) {
@@ -32,13 +31,12 @@ class PreferenceUtils(private val context: Context) {
     }
 
     fun getMotionDetectionEnabled(): Boolean {
-        val sharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return sharedPreferences.getBoolean(KEY_MOTION_DETECTION_ENABLED, false) // Default to false
+        return sharedPreferences.getBoolean(KEY_MOTION_DETECTION_ENABLED, false)
     }
 
     fun saveConnectState(connectState: Boolean) {
         val editor = sharedPreferences.edit()
-        editor.putBoolean("connectState", connectState)
+        editor.putBoolean(KEY_CONNECT_STATE, connectState)
         editor.apply()
     }
 
@@ -50,14 +48,33 @@ class PreferenceUtils(private val context: Context) {
 
     fun saveIs12HourTimeFormat(is12HourTimeFormat: Boolean) {
         val editor = sharedPreferences.edit()
-        editor.putBoolean("is_12_hour_time", is12HourTimeFormat)  // Use the same key as in SettingsActivity
+        editor.putBoolean("is_12_hour_time", is12HourTimeFormat)
         Log.d("PreferenceUtils", "saveIs12HourTimeFormat: $is12HourTimeFormat")
         editor.apply()
     }
 
     fun getIs12HourTimeFormat(): Boolean {
         Log.d("PreferenceUtils", "getIs12HourTimeFormat called: ${sharedPreferences.getBoolean("is_12_hour_time", true)}")
-        return sharedPreferences.getBoolean("is_12_hour_time", true)  // Default to true if not set
+        return sharedPreferences.getBoolean("is_12_hour_time", true)
+    }
+
+    // Save connection state (isConnected, deviceAddress, deviceName)
+    fun saveConnectionState(isConnected: Boolean, deviceAddress: String?, deviceName: String?) {
+        val editor = sharedPreferences.edit()
+        editor.putBoolean(KEY_IS_CONNECTED, isConnected)
+        editor.putString(KEY_DEVICE_ADDRESS, deviceAddress)
+        editor.putString(KEY_DEVICE_NAME, deviceName)
+        editor.apply()
+//        Log.d("PreferenceUtils", "Connection state saved: isConnected=$isConnected, deviceAddress=$deviceAddress, deviceName=$deviceName")
+    }
+
+    // Load connection state
+    fun loadConnectionState(): Triple<Boolean, String?, String?> {
+        val isConnected = sharedPreferences.getBoolean(KEY_IS_CONNECTED, false)
+        val deviceAddress = sharedPreferences.getString(KEY_DEVICE_ADDRESS, null)
+        val deviceName = sharedPreferences.getString(KEY_DEVICE_NAME, null)
+//        Log.d("PreferenceUtils", "Connection state loaded: isConnected=$isConnected, deviceAddress=$deviceAddress, deviceName=$deviceName")
+        return Triple(isConnected, deviceAddress, deviceName)
     }
 
     // For saving the PIN dynamically based on actionType
@@ -94,5 +111,9 @@ class PreferenceUtils(private val context: Context) {
     companion object {
         private const val PREFS_NAME = "app_prefs"
         private const val KEY_MOTION_DETECTION_ENABLED = "motion_detection_enabled"
+        private const val KEY_DEVICE_ADDRESS = "device_address"
+        private const val KEY_DEVICE_NAME = "device_name"
+        private const val KEY_IS_CONNECTED = "is_connected"
+        private const val KEY_CONNECT_STATE = "connectState"
     }
 }

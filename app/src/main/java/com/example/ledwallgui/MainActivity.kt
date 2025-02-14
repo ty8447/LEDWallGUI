@@ -222,7 +222,7 @@ class MainActivity : AppCompatActivity() {
 
         // Handle PowerState button click
         imageButton1.setOnClickListener {
-            if (globalBluetoothManager.isConnected) {
+            if (connectState) {
                 powerState = !powerState
                 Log.d("PowerState", "Power state clicked: $powerState")
                 updatePowerButtonImage()
@@ -301,7 +301,7 @@ class MainActivity : AppCompatActivity() {
                                     Log.d("Slider", "User tapped. Jumping to: $currentBrightness")
 
                                     // Set the brightness if connected
-                                    if (globalBluetoothManager.isConnected) {
+                                    if (connectState) {
                                         globalBluetoothManager.setBrightness(currentBrightness)
                                     }
                                 }
@@ -356,7 +356,7 @@ class MainActivity : AppCompatActivity() {
                                 )
                                 Log.d("Slider", "Update Thumb Position 1")
 
-                            if (globalBluetoothManager.isConnected) {
+                            if (connectState) {
                                 if (currentBrightness != previousBrightness) {
                                     globalBluetoothManager.setBrightness(currentBrightness)
                                     Log.d(
@@ -397,7 +397,7 @@ class MainActivity : AppCompatActivity() {
                                 )
 
                                 // Set the brightness if connected
-                                if (globalBluetoothManager.isConnected) {
+                                if (connectState) {
                                     globalBluetoothManager.setBrightness(currentBrightness)
                                 }
 
@@ -419,7 +419,7 @@ class MainActivity : AppCompatActivity() {
 
         // Handle Mode button click
         button2.setOnClickListener {
-            if (globalBluetoothManager.isConnected) {
+            if (connectState) {
                 showModesMenu()
             } else {
                 showConnectionSnackbar()
@@ -501,7 +501,18 @@ class MainActivity : AppCompatActivity() {
     private fun startConnectionCheck() {
         connectionCheckHandler.post(object : Runnable {
             override fun run() {
-                    updateConnectIcon()
+                val (isConnected, deviceAddress, deviceName) = preferenceUtils.loadConnectionState()
+
+                if (isConnected && !connectState) {
+                    connectState = true
+                } else if (!isConnected && connectState){
+                    connectState = false
+                    Log.d("MainActivity", "Bluetooth connection is not active")
+                } else {
+                    //Nothing Happens
+                }
+
+                updateConnectIcon()
                 connectionCheckHandler.postDelayed(this, connectionCheckInterval)
             }
         })
@@ -1079,7 +1090,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateConnectIcon() {
         val connectButton: ImageView = findViewById(R.id.imageView)
 //        Log.d("MainActivity", "Updating connect icon: $connectState")
-        if (globalBluetoothManager.isConnected) { // Use GlobalBluetoothManager.isConnected
+        if (connectState) {
             connectButton.setImageResource(R.drawable.stat_con_button)
         } else {
             connectButton.setImageResource(R.drawable.stat_dis_button)
@@ -1095,8 +1106,6 @@ class MainActivity : AppCompatActivity() {
 
         val currentMode = ModeManager.currentMode
         textView.text = "$currentMode Parameters"
-
-        connectState = globalBluetoothManager.isConnected
         Log.d("MainActivity", "Current mode: ${ModeManager.currentMode}")
 
         // Fetch mode info and request parameters
