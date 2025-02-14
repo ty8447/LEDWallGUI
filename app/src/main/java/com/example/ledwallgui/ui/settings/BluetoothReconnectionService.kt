@@ -16,13 +16,14 @@ import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 
 class BluetoothReconnectionService : Service() {
     private lateinit var globalBluetoothManager: GlobalBluetoothManager
+    private lateinit var preferenceUtils: PreferenceUtils
     private val CHANNEL_ID = "BluetoothReconnectionChannel"
     private val TAG = "BluetoothReconnectionService"
     private lateinit var handler: Handler
-
     private var isRetrying = false
     private var nrTries = 0
     private val MAX_TRIES = 20
+    private val RECONNECT_INTERVAL = 5000L // 5 seconds
 
     override fun onCreate() {
         super.onCreate()
@@ -31,30 +32,37 @@ class BluetoothReconnectionService : Service() {
         Log.d(TAG, "Service started")
         handler = Handler(Looper.getMainLooper())
         globalBluetoothManager = GlobalBluetoothManager(this)
+        preferenceUtils = PreferenceUtils(this)
+
+        // Start monitoring connection state
+        startReconnectionLoop()
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Thread {
-            while (true) {
-                try {
-                    val isConnected = globalBluetoothManager.isConnected
-                    if (!isConnected) {
-                        Log.d(TAG, "Device disconnected. Attempting to reconnect...")
-                        attemptReconnect(applicationContext)
-                    }
-                    Thread.sleep(5000)
-                } catch (e: InterruptedException) {
-                    Log.e(TAG, "Reconnection thread interrupted", e)
-                    break
+    private fun startReconnectionLoop() {
+        handler.post(object : Runnable {
+            override fun run() {
+                val isConnected = PreferenceUtils(applicationContext).loadConnectionState().first
+//                Log.d(TAG, "Connection check - isConnected: $isConnected")
+
+                if (!isConnected) {
+                    Log.d(TAG, "Device disconnected. Attempting to reconnect...")
+                    attemptReconnect(applicationContext)
                 }
+
+                handler.postDelayed(this, RECONNECT_INTERVAL) // Re-run after interval
             }
-        }.start()
+        })
+    }
+
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return START_STICKY
     }
 
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "Service destroyed")
+        handler.removeCallbacksAndMessages(null) // Stop the reconnection loop
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -74,19 +82,14 @@ class BluetoothReconnectionService : Service() {
     private fun createNotification(): Notification {
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("Bluetooth Reconnection Service")
-            .setContentText("Reconnecting to Bluetooth devices...")
+            .setContentText("Monitoring Bluetooth connection...")
             .setSmallIcon(R.drawable.ic_bluetooth)
             .build()
     }
 
     private fun attemptReconnect(context: Context) {
-        if (!::handler.isInitialized) {
-            // Initialize the handler if it hasn't been initialized yet
-            handler = Handler(Looper.getMainLooper()) // Use the main looper or whichever looper is appropriate
-        }
-
         if (nrTries >= MAX_TRIES) {
-            Log.w(TAG, "Max reconnection attempts reached.")
+            Log.w(TAG, "Max reconnection attempts reached. Stopping retries.")
             return
         }
 
@@ -95,39 +98,32 @@ class BluetoothReconnectionService : Service() {
             return
         }
 
-        nrTries++
         isRetrying = true
+        nrTries++
         Log.d(TAG, "Reconnection attempt $nrTries/$MAX_TRIES")
 
-        // Fetch device address from preferences
         val deviceAddress = PreferenceUtils(context).fetchDeviceAddress()
-
         if (deviceAddress.isNullOrEmpty()) {
-            isRetrying = false // Reset `isRetrying` if the address is null or empty
-            Log.e(TAG, "No device address found in preferences")
+            isRetrying = false
+//            Log.e(TAG, "No device address found in preferences")
             return
         }
 
-        // Fetch the device from the address
         val device = globalBluetoothManager.getDeviceFromAddress(deviceAddress)
-        device?.let {
-            // Proceed with connection attempt
-            globalBluetoothManager.connectToDevice(context, it, handler) { success: Boolean->
-                isRetrying = false // Ensure this is reset regardless of success or failure
-                if (success) {
-                    Log.d(TAG, "Reconnected successfully")
-                    nrTries = 0
-                } else {
-                    Log.e(TAG, "Reconnection failed")
-                    attemptReconnect(context) // Retry reconnection if failed
-                }
-            }
-        } ?: run {
-            isRetrying = false // Reset `isRetrying` if the device is not found
+        if (device == null) {
+            isRetrying = false
             Log.e(TAG, "Device not found for address: $deviceAddress")
+            return
+        }
+
+        globalBluetoothManager.connectToDevice(context, device, handler) { success ->
+            isRetrying = false
+            if (success) {
+                Log.d(TAG, "Reconnected successfully")
+                nrTries = 0
+            } else {
+                Log.e(TAG, "Reconnection failed. Will retry in $RECONNECT_INTERVAL ms")
+            }
         }
     }
-
-
-
 }
