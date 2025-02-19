@@ -34,6 +34,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.ledwallgui.PreferenceUtils
 import com.example.ledwallgui.R
+import no.nordicsemi.android.kotlin.ble.core.RealServerDevice
 import java.util.UUID
 
 
@@ -330,7 +331,10 @@ class ConnectionActivity : AppCompatActivity() {
         Log.d("ConnectionActivity6", "Current isConnected value: $currentConnectionStatus")
         Log.d("ConnectionActivity6", "Current deviceAddress value: $deviceAddress")
 
-        globalBluetoothManager.connectToDevice(applicationContext, device, handler) { success ->
+        // Wrap the BluetoothDevice into a ServerDevice using RealServerDevice.
+        val serverDevice = RealServerDevice(device)
+
+        globalBluetoothManager.connectToDevice(applicationContext, serverDevice, handler) { success ->
             runOnUiThread {
                 if (success) {
                     updateConnectionStatus(device.address, true)

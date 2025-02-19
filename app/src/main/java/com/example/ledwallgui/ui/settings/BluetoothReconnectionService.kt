@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
@@ -13,6 +14,7 @@ import android.util.Log
 import com.example.ledwallgui.PreferenceUtils
 import com.example.ledwallgui.R
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
+import no.nordicsemi.android.kotlin.ble.core.RealServerDevice  // Import the conversion class
 
 class BluetoothReconnectionService : Service() {
     private lateinit var globalBluetoothManager: GlobalBluetoothManager
@@ -42,18 +44,14 @@ class BluetoothReconnectionService : Service() {
         handler.post(object : Runnable {
             override fun run() {
                 val isConnected = PreferenceUtils(applicationContext).loadConnectionState().first
-//                Log.d(TAG, "Connection check - isConnected: $isConnected")
-
                 if (!isConnected) {
                     Log.d(TAG, "Device disconnected. Attempting to reconnect...")
                     attemptReconnect(applicationContext)
                 }
-
                 handler.postDelayed(this, RECONNECT_INTERVAL) // Re-run after interval
             }
         })
     }
-
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return START_STICKY
@@ -105,18 +103,22 @@ class BluetoothReconnectionService : Service() {
         val deviceAddress = PreferenceUtils(context).fetchDeviceAddress()
         if (deviceAddress.isNullOrEmpty()) {
             isRetrying = false
-//            Log.e(TAG, "No device address found in preferences")
             return
         }
 
-        val device = globalBluetoothManager.getDeviceFromAddress(deviceAddress)
-        if (device == null) {
+        // Retrieve the BluetoothDevice from your global manager.
+        // (Assuming getDeviceFromAddress returns a BluetoothDevice.)
+        val bluetoothDevice: BluetoothDevice? = globalBluetoothManager.getDeviceFromAddress(deviceAddress)
+        if (bluetoothDevice == null) {
             isRetrying = false
             Log.e(TAG, "Device not found for address: $deviceAddress")
             return
         }
 
-        globalBluetoothManager.connectToDevice(context, device, handler) { success ->
+        // Convert the BluetoothDevice into a ServerDevice using RealServerDevice.
+        val serverDevice = RealServerDevice(bluetoothDevice)
+
+        globalBluetoothManager.connectToDevice(context, serverDevice, handler) { success ->
             isRetrying = false
             if (success) {
                 Log.d(TAG, "Reconnected successfully")

@@ -55,9 +55,11 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.ActivityResult
 import androidx.core.app.ActivityCompat
+import androidx.lifecycle.lifecycleScope
 import com.example.ledwallgui.ui.settings.ColorWheel
 import com.example.ledwallgui.ui.settings.ModeInfo
 import com.google.gson.Gson
+import kotlinx.coroutines.launch
 import kotlin.ranges.coerceAtLeast
 import kotlin.ranges.coerceIn
 
@@ -96,33 +98,39 @@ class MainActivity : AppCompatActivity() {
         private const val SETTINGS_REQUEST_CODE = 100
         private const val MODES_REQUEST_CODE = 101 // Add this line
     }
+
     private lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-            if (isGranted) {
-                // Permission granted
-            } else if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.POST_NOTIFICATIONS)) {
-                // Show rationale
-                AlertDialog.Builder(this)
-                    .setTitle("Notification Permission")
-                    .setMessage("Notifications are needed...")
-                    .setPositiveButton("Grant") { _, _ ->
-                        requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    }
-                    .setNegativeButton("Deny", null)
-                    .show()
-            } else {
-                // Permission permanently denied
-                AlertDialog.Builder(this)
-                    .setTitle("Permission Denied")
-                    .setMessage("Notification permission is permanently denied...")
-                    .setPositiveButton("OK", null)
-                    .show()
+        requestPermissionLauncher =
+            registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+                if (isGranted) {
+                    // Permission granted
+                } else if (ActivityCompat.shouldShowRequestPermissionRationale(
+                        this,
+                        Manifest.permission.POST_NOTIFICATIONS
+                    )
+                ) {
+                    // Show rationale
+                    AlertDialog.Builder(this)
+                        .setTitle("Notification Permission")
+                        .setMessage("Notifications are needed...")
+                        .setPositiveButton("Grant") { _, _ ->
+                            requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        .setNegativeButton("Deny", null)
+                        .show()
+                } else {
+                    // Permission permanently denied
+                    AlertDialog.Builder(this)
+                        .setTitle("Permission Denied")
+                        .setMessage("Notification permission is permanently denied...")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
             }
-        }
 
         requestWindowFeature(Window.FEATURE_NO_TITLE) // Hide the title bar
         setContentView(R.layout.activity_main)
@@ -132,36 +140,42 @@ class MainActivity : AppCompatActivity() {
         }
         globalBluetoothManager = GlobalBluetoothManager(this)
 
-        modesActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
-            if (result.resultCode == RESULT_OK) {
-                // Handle the result here
-                Toast.makeText(this, "Mode selected", Toast.LENGTH_SHORT).show()
+        modesActivityResultLauncher =
+            registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
+                if (result.resultCode == RESULT_OK) {
+                    // Handle the result here
+                    Toast.makeText(this, "Mode selected", Toast.LENGTH_SHORT).show()
+                }
             }
-        }
 
-        settingsActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
-            if (result.resultCode == RESULT_OK) {
-                // Handle the result here
-                val data = result.data
+        settingsActivityResultLauncher =
+            registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
+                if (result.resultCode == RESULT_OK) {
+                    // Handle the result here
+                    val data = result.data
 
-                // Retrieve the stored boolean from shared preferences for 12-hour time format
-                val prefs = getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
-                val use12HourTimeFormat = prefs.getBoolean("is_12_hour_time", true) // Default to true if not set
+                    // Retrieve the stored boolean from shared preferences for 12-hour time format
+                    val prefs = getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+                    val use12HourTimeFormat =
+                        prefs.getBoolean("is_12_hour_time", true) // Default to true if not set
 
-                // Retrieve the time format option (defaults to 0)
-                val timeFormatOption = data?.getIntExtra("timeFormatOption", 0) ?: 0
+                    // Retrieve the time format option (defaults to 0)
+                    val timeFormatOption = data?.getIntExtra("timeFormatOption", 0) ?: 0
 
-                // Log the updated settings for debugging
-                Log.d("Settings", "use12HourTimeFormat: $use12HourTimeFormat, timeFormatOption: $timeFormatOption")
+                    // Log the updated settings for debugging
+                    Log.d(
+                        "Settings",
+                        "use12HourTimeFormat: $use12HourTimeFormat, timeFormatOption: $timeFormatOption"
+                    )
 
-                // Optionally update UI or preferences based on the returned data
-                // Save the updated boolean and time format option to SharedPreferences
-                val editor = prefs.edit()
-                editor.putBoolean("is_12_hour_time", use12HourTimeFormat)
-                editor.putInt("timeFormatOption", timeFormatOption)
-                editor.apply()
+                    // Optionally update UI or preferences based on the returned data
+                    // Save the updated boolean and time format option to SharedPreferences
+                    val editor = prefs.edit()
+                    editor.putBoolean("is_12_hour_time", use12HourTimeFormat)
+                    editor.putInt("timeFormatOption", timeFormatOption)
+                    editor.apply()
+                }
             }
-        }
 
         window.setFlags(
             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
@@ -264,7 +278,8 @@ class MainActivity : AppCompatActivity() {
 
         // Get the sliderHeight after the layout is complete
         val viewTreeObserver = sliderBackground.viewTreeObserver
-        viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
+        viewTreeObserver.addOnGlobalLayoutListener(object :
+            ViewTreeObserver.OnGlobalLayoutListener {
             override fun onGlobalLayout() {
                 // Remove the listener to avoid multiple calls
                 sliderBackground.viewTreeObserver.removeOnGlobalLayoutListener(this)
@@ -314,41 +329,50 @@ class MainActivity : AppCompatActivity() {
                             val currentY = event.y
                             val deltaY = currentY - lastY
                             // Check if there's no movement AND no brightness change
-                            if (isDragging == false && deltaY == 0f){
+                            if (isDragging == false && deltaY == 0f) {
                                 lastMoveTime = initialInteractTime
                             }
                             if (deltaY != 0f) {
                                 isDragging = true
-                            Log.d("Slider", "MotionEvent.ACTION_MOVE")
-                            Log.d("Slider", "sliderHeight: $sliderHeight")
-                            Log.d("Slider", "isDragging set to true")
-                            Log.d("Slider", "isDragging: $isDragging")
-                            Log.d("Slider", "currentY: $currentY")
-                            Log.d("Slider", "deltaY: $deltaY")
-                            val currentTime = System.currentTimeMillis()
-                            Log.d("Slider", "currentTime: $currentTime")
-                            val deltaTime = currentTime - lastMoveTime
-                            Log.d("Slider", "deltaTime: $deltaTime")
+                                Log.d("Slider", "MotionEvent.ACTION_MOVE")
+                                Log.d("Slider", "sliderHeight: $sliderHeight")
+                                Log.d("Slider", "isDragging set to true")
+                                Log.d("Slider", "isDragging: $isDragging")
+                                Log.d("Slider", "currentY: $currentY")
+                                Log.d("Slider", "deltaY: $deltaY")
+                                val currentTime = System.currentTimeMillis()
+                                Log.d("Slider", "currentTime: $currentTime")
+                                val deltaTime = currentTime - lastMoveTime
+                                Log.d("Slider", "deltaTime: $deltaTime")
 
-                            // Adjust sensitivity based on speed
-                            brightnessSensitivity = when {
-                                deltaTime < 50 -> 0.5f // Fast movement
-                                deltaTime < 100 -> 0.25f // Medium movement
-                                else -> 0.1f // Slow movement
-                            }
-                            Log.d("Slider", "brightnessSensitivity: $brightnessSensitivity")
+                                // Adjust sensitivity based on speed
+                                brightnessSensitivity = when {
+                                    deltaTime < 50 -> 0.5f // Fast movement
+                                    deltaTime < 100 -> 0.25f // Medium movement
+                                    else -> 0.1f // Slow movement
+                                }
+                                Log.d("Slider", "brightnessSensitivity: $brightnessSensitivity")
 
-                            // Calculate brightness change
-                            var brightnessChange = (deltaY * brightnessSensitivity).toInt()
-                            Log.d("Slider", "brightnessChange before coerceIn: $brightnessChange")
-                            brightnessChange =
-                                brightnessChange.coerceIn(-maxBrightnessChange, maxBrightnessChange)
-                            Log.d("Slider", "brightnessChange after coerceIn: $brightnessChange")
+                                // Calculate brightness change
+                                var brightnessChange = (deltaY * brightnessSensitivity).toInt()
+                                Log.d(
+                                    "Slider",
+                                    "brightnessChange before coerceIn: $brightnessChange"
+                                )
+                                brightnessChange =
+                                    brightnessChange.coerceIn(
+                                        -maxBrightnessChange,
+                                        maxBrightnessChange
+                                    )
+                                Log.d(
+                                    "Slider",
+                                    "brightnessChange after coerceIn: $brightnessChange"
+                                )
 
-                            // Apply brightness change
-                            currentBrightness =
-                                (currentBrightness - brightnessChange).coerceIn(0, 100)
-                            Log.d("Slider", "currentBrightness: $currentBrightness")
+                                // Apply brightness change
+                                currentBrightness =
+                                    (currentBrightness - brightnessChange).coerceIn(0, 100)
+                                Log.d("Slider", "currentBrightness: $currentBrightness")
                                 updateThumbPosition(
                                     sliderThumb,
                                     currentBrightness,
@@ -356,39 +380,43 @@ class MainActivity : AppCompatActivity() {
                                 )
                                 Log.d("Slider", "Update Thumb Position 1")
 
-                            if (connectState) {
-                                if (currentBrightness != previousBrightness) {
-                                    globalBluetoothManager.setBrightness(currentBrightness)
-                                    Log.d(
-                                        "Slider",
-                                        "GlobalBluetoothManager.setBrightness($currentBrightness)"
-                                    )
-                                    previousBrightness = currentBrightness
+                                if (connectState) {
+                                    if (currentBrightness != previousBrightness) {
+                                        globalBluetoothManager.setBrightness(currentBrightness)
+                                        Log.d(
+                                            "Slider",
+                                            "GlobalBluetoothManager.setBrightness($currentBrightness)"
+                                        )
+                                        previousBrightness = currentBrightness
+                                    }
+                                } else {
+                                    if (currentBrightness != previousBrightness) {
+                                        previousBrightness = currentBrightness
+                                    }
                                 }
-                            } else {
-                                if (currentBrightness != previousBrightness) {
-                                    previousBrightness = currentBrightness
-                                }
-                            }
-                            Log.d("Slider", "brightness: $currentBrightness")
+                                Log.d("Slider", "brightness: $currentBrightness")
 
-                            // Update for next move
-                            lastY = currentY
-                            Log.d("Slider", "lastY: $lastY")
-                            lastMoveTime = currentTime
-                            Log.d("Slider", "lastMoveTime: $lastMoveTime")
-                        }
+                                // Update for next move
+                                lastY = currentY
+                                Log.d("Slider", "lastY: $lastY")
+                                lastMoveTime = currentTime
+                                Log.d("Slider", "lastMoveTime: $lastMoveTime")
+                            }
                             true
                         }
 
                         MotionEvent.ACTION_UP -> {
                             Log.d("Slider", "MotionEvent.ACTION_UP")
                             Log.d("Slider", "isDragging: $isDragging")
-                            Log.d("Slider", "Delta Time: ${System.currentTimeMillis()-initialInteractTime}")
+                            Log.d(
+                                "Slider",
+                                "Delta Time: ${System.currentTimeMillis() - initialInteractTime}"
+                            )
                             if (!isDragging || System.currentTimeMillis() - initialInteractTime < 120) {
                                 // If it wasn't a drag (i.e., it's a tap), update the brightness
                                 val adjustedY = event.y.coerceIn(0f, sliderHeight.toFloat())
-                                val percentage = ((sliderHeight - adjustedY) / sliderHeight * 100).toInt()
+                                val percentage =
+                                    ((sliderHeight - adjustedY) / sliderHeight * 100).toInt()
                                 currentBrightness = percentage
                                 updateThumbPosition(
                                     sliderThumb,
@@ -472,12 +500,16 @@ class MainActivity : AppCompatActivity() {
 
                     // Store Parameter Names and Values
                     modeInfo.parameterNames.forEachIndexed { _, parameterName ->
-                        val parameterValue = modeInfo.parameterValues[parameterName] // Get the value
+                        val parameterValue =
+                            modeInfo.parameterValues[parameterName] // Get the value
 
                         if (parameterValue != null) { // Check if the value exists
                             ledParametersMap[parameterName] = parameterValue // Store name and value
                         } else {
-                            Log.w("RecordMode", "Parameter value not found for: $parameterName in mode: $currentMode")
+                            Log.w(
+                                "RecordMode",
+                                "Parameter value not found for: $parameterName in mode: $currentMode"
+                            )
                             // Handle the case where the value is missing (e.g., use a default value, skip it, or show an error)
                             // Example: ledParametersMap[parameterName] = "" // Store an empty string
                         }
@@ -505,7 +537,7 @@ class MainActivity : AppCompatActivity() {
 
                 if (isConnected && !connectState) {
                     connectState = true
-                } else if (!isConnected && connectState){
+                } else if (!isConnected && connectState) {
                     connectState = false
                     Log.d("MainActivity", "Bluetooth connection is not active")
                 } else {
@@ -565,11 +597,13 @@ class MainActivity : AppCompatActivity() {
         val snackbarView = snackbar.view
 
         // Use Material Components R for snackbars
-        val textView = snackbarView.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)
+        val textView =
+            snackbarView.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)
         textView.setTextColor(Color.WHITE)
 
         // Use your app's R for color references
-        val actionButton = snackbarView.findViewById<Button>(com.google.android.material.R.id.snackbar_action)
+        val actionButton =
+            snackbarView.findViewById<Button>(com.google.android.material.R.id.snackbar_action)
         actionButton.setTextColor(ContextCompat.getColor(this, R.color.light_blue))
 
         snackbar.show()
@@ -602,19 +636,27 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    fun generateLayout(context: Context, parameters: List<Parameter>, flexboxLayout: FlexboxLayout): View {
+    fun generateLayout(
+        context: Context,
+        parameters: List<Parameter>,
+        flexboxLayout: FlexboxLayout
+    ): View {
 
         val configLocked = preferenceUtils.getBoolean(context, "led_config_locked", false)
 
         parameters.forEach { parameter ->
-            Log.d("MainActivity", "Creating view for parameter: ${parameter.name} of type ${parameter.type}")
+            Log.d(
+                "MainActivity",
+                "Creating view for parameter: ${parameter.name} of type ${parameter.type}"
+            )
 
             val parameterView = when (parameter.type) {
                 "PCOLOR", "SCOLOR" -> {
                     val colorBox = CardView(context).apply {
                         tag = parameter.name // Assign tag for visibility control
                         radius = 16f
-                        val colorValue = parameter.value as? Int ?: Color.GRAY // Default to gray if no color value is set
+                        val colorValue = parameter.value as? Int
+                            ?: Color.GRAY // Default to gray if no color value is set
                         setCardBackgroundColor(colorValue)  // Set initial color
 
                         layoutParams = FlexboxLayout.LayoutParams(
@@ -663,10 +705,13 @@ class MainActivity : AppCompatActivity() {
 
                         // Set click listener to show the popup with the slider
                         setOnClickListener {
-                            if (configLocked){
-                                Toast.makeText(context, "LED Config is Locked. Please unlock to change modes.", Toast.LENGTH_SHORT).show()
-                            }
-                            else {
+                            if (configLocked) {
+                                Toast.makeText(
+                                    context,
+                                    "LED Config is Locked. Please unlock to change modes.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
                                 showPopup(
                                     context,
                                     parameter,
@@ -705,17 +750,21 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         // Create a dummy colorPreview view as a placeholder
-                        val colorPreview = View(context) // Dummy View since no color is involved for this type
+                        val colorPreview =
+                            View(context) // Dummy View since no color is involved for this type
 
                         // Add TextView to the CardView
                         addView(textView)
 
                         // Set click listener to show the popup with the slider
                         setOnClickListener {
-                            if (configLocked){
-                                Toast.makeText(context, "LED Config is Locked. Please unlock to change modes.", Toast.LENGTH_SHORT).show()
-                            }
-                            else {
+                            if (configLocked) {
+                                Toast.makeText(
+                                    context,
+                                    "LED Config is Locked. Please unlock to change modes.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
                                 showPopup(
                                     context,
                                     parameter,
@@ -745,7 +794,10 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     textView.visibility = View.VISIBLE
-                    Log.d("MainActivity", "TextView created and visibility set to ${textView.visibility}")
+                    Log.d(
+                        "MainActivity",
+                        "TextView created and visibility set to ${textView.visibility}"
+                    )
                     textView
                 }
 
@@ -756,13 +808,23 @@ class MainActivity : AppCompatActivity() {
             flexboxLayout.addView(parameterView)
 
             // Optionally log the visibility status of the added view
-            Log.d("MainActivity", "Added view for ${parameter.name} with visibility: ${parameterView.visibility}")
+            Log.d(
+                "MainActivity",
+                "Added view for ${parameter.name} with visibility: ${parameterView.visibility}"
+            )
         }
 
         return flexboxLayout
     }
 
-    fun showPopup(context: Context, parameter: Parameter, type: String, textView: TextView, cardView: CardView, colorPreview: View) {
+    fun showPopup(
+        context: Context,
+        parameter: Parameter,
+        type: String,
+        textView: TextView,
+        cardView: CardView,
+        colorPreview: View
+    ) {
         val popup = Dialog(context).apply {
             setContentView(R.layout.parameter_popup) // The updated layout with a SeekBar and Spinner
             window?.setLayout(
@@ -788,7 +850,8 @@ class MainActivity : AppCompatActivity() {
             "PCOLOR", "SCOLOR" -> {
                 val colorDropdown = popup.findViewById<Spinner>(R.id.colorDropdown)
                 colorDropdown.visibility = View.VISIBLE
-                val rgbColorWheel = popup.findViewById<ColorWheel>(R.id.rgbColorWheel) // Cast to ColorWheel
+                val rgbColorWheel =
+                    popup.findViewById<ColorWheel>(R.id.rgbColorWheel) // Cast to ColorWheel
                 rgbColorWheel.visibility = View.GONE // Hide by default
 
                 val colorMap = mapOf(
@@ -813,12 +876,14 @@ class MainActivity : AppCompatActivity() {
                         val matchedColor = colorMap.entries.find { it.value == currentColor }
                         matchedColor?.key ?: "Custom" // If no match, set as "Custom"
                     }
+
                     else -> "Custom" // Default to custom if the value is not a recognized color
                 }
 
                 Log.d("MainActivity", "Current color name: $currentColorName")
 
-                val initialColorIndex = (colorDropdown.adapter as ArrayAdapter<String>).getPosition(currentColorName)
+                val initialColorIndex =
+                    (colorDropdown.adapter as ArrayAdapter<String>).getPosition(currentColorName)
                 colorDropdown.setSelection(initialColorIndex)
 
                 // Set the preview color based on the current value
@@ -831,11 +896,13 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 // Set the listener for the color wheel to notify when a new color is selected
-                rgbColorWheel.setOnColorSelectedListener(object : ColorWheel.OnColorSelectedListener {
+                rgbColorWheel.setOnColorSelectedListener(object :
+                    ColorWheel.OnColorSelectedListener {
                     override fun onColorSelected(color: Int) {
                         colorPreview.setBackgroundColor(color) // Update the preview color
                         parameter.value = color // Update the parameter value
-                        textView.text = "${parameter.name}: #${Integer.toHexString(color)}" // Update the textView
+                        textView.text =
+                            "${parameter.name}: #${Integer.toHexString(color)}" // Update the textView
                         cardView.setCardBackgroundColor(color) // Update the card view background color
                         // Send the new color to the Bluetooth manager
                         val red = Color.red(color)
@@ -849,7 +916,12 @@ class MainActivity : AppCompatActivity() {
                 })
 
                 colorDropdown.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                    override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    override fun onItemSelected(
+                        parent: AdapterView<*>?,
+                        view: View?,
+                        position: Int,
+                        id: Long
+                    ) {
                         val selectedColorName = parent?.getItemAtPosition(position) as? String
                         val selectedColor = colorMap[selectedColorName]
 
@@ -921,22 +993,32 @@ class MainActivity : AppCompatActivity() {
 
                 seekBar.post {
                     val thumbOffset = seekBar.thumb.bounds.left + (seekBar.thumb.bounds.width() / 2)
-                    valueTextView.x = seekBar.left + thumbOffset.toFloat() - (valueTextView.width / 2)
+                    valueTextView.x =
+                        seekBar.left + thumbOffset.toFloat() - (valueTextView.width / 2)
                 }
 
                 // Listen for SeekBar changes
                 seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                    override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                    override fun onProgressChanged(
+                        seekBar: SeekBar,
+                        progress: Int,
+                        fromUser: Boolean
+                    ) {
                         valueTextView.text = progress.toString()
 
                         // Update the position of the value text
-                        val thumbOffset = seekBar.thumb.bounds.left + (seekBar.thumb.bounds.width() / 2)
-                        valueTextView.x = seekBar.left + thumbOffset.toFloat() - (valueTextView.width / 2)
+                        val thumbOffset =
+                            seekBar.thumb.bounds.left + (seekBar.thumb.bounds.width() / 2)
+                        valueTextView.x =
+                            seekBar.left + thumbOffset.toFloat() - (valueTextView.width / 2)
 
                         // Update the parameter value
                         parameter.value = progress
 
-                        Log.d("MainActivity", "Parameter value updated: $progress.toString().split(\",\").map { it.toInt() }")
+                        Log.d(
+                            "MainActivity",
+                            "Parameter value updated: $progress.toString().split(\",\").map { it.toInt() }"
+                        )
 
                         // Update the Bluetooth parameter
                         globalBluetoothManager.setLedParameter(
@@ -984,7 +1066,11 @@ class MainActivity : AppCompatActivity() {
     private fun showModesMenu() {
         val configLocked = preferenceUtils.getBoolean(this, "led_config_locked", false)
         if (configLocked) {
-            Toast.makeText(this, "LED Config is Locked. Please unlock to change modes.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "LED Config is Locked. Please unlock to change modes.",
+                Toast.LENGTH_SHORT
+            ).show()
             return
         } else {
             val intent = Intent(this, ModesActivity::class.java)
@@ -998,6 +1084,7 @@ class MainActivity : AppCompatActivity() {
         // Save variables to SharedPreferences when the activity stops
         saveSharedPreferences()
     }
+
     private fun saveSharedPreferences() {
         Log.d("PowerState", "Saving power state: $powerState")
         preferenceUtils.savePowerState(powerState)
@@ -1018,7 +1105,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkBluetoothPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+            ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) == PackageManager.PERMISSION_GRANTED
         } else {
             true
         }
@@ -1034,13 +1124,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 Log.d("MainActivity", "Bluetooth connect permission granted")
             } else {
-                Toast.makeText(this, "Bluetooth permission is required for app functionality", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    this,
+                    "Bluetooth permission is required for app functionality",
+                    Toast.LENGTH_LONG
+                ).show()
             }
         }
     }
@@ -1112,16 +1210,20 @@ class MainActivity : AppCompatActivity() {
         val modeInfo = globalBluetoothManager.getModeInfo(currentMode)
         if (modeInfo != null) {
             Log.d("MainActivity", "Mode info found for mode: $currentMode")
-            globalBluetoothManager.requestValues("Power","None")
+            // Wrap the suspend call in a coroutine
+            lifecycleScope.launch {
+                globalBluetoothManager.requestValues(this@MainActivity, "Power", "None")
+            }
             updateLayoutWithModeInfo(modeInfo)
         } else {
             Log.w("MainActivity", "Mode info not found for mode: $currentMode")
         }
 
-        // Explicitly request the power state
+        // Explicitly request the power state parameter
         Log.d("MainActivity", "Requesting power state parameter")
-
-        globalBluetoothManager.requestValues("Power","None")
+        lifecycleScope.launch {
+            globalBluetoothManager.requestValues(this@MainActivity, "Power", "None")
+        }
 
         globalBluetoothManager.startConnectionCheck(this)
     }
@@ -1145,7 +1247,11 @@ class MainActivity : AppCompatActivity() {
 
         if (alarmsLocked) {
             // Show a toast to inform the user that the alarms menu is locked
-            Toast.makeText(this, "Alarms menu is locked. Please unlock to proceed.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "Alarms menu is locked. Please unlock to proceed.",
+                Toast.LENGTH_SHORT
+            ).show()
             return // Prevent the activity from launching
         } else {
             // Create an intent for starting the AlarmActivity
@@ -1208,7 +1314,12 @@ class MainActivity : AppCompatActivity() {
 
         val container = findViewById<FrameLayout>(R.id.dynamicLayoutContainer)
 
-        Log.d("MainActivity", "Updating layout for mode: ${modeInfo.name}, Parameters: ${modeInfo.parameterNames.joinToString(", ")}")
+        Log.d(
+            "MainActivity",
+            "Updating layout for mode: ${modeInfo.name}, Parameters: ${
+                modeInfo.parameterNames.joinToString(", ")
+            }"
+        )
 
         flexboxLayout.removeAllViews()
 
@@ -1232,15 +1343,24 @@ class MainActivity : AppCompatActivity() {
         if (dynamicLayout is ViewGroup) { // Check if the layout is a ViewGroup
             for (i in 0 until dynamicLayout.childCount) {
                 val child = dynamicLayout.getChildAt(i)
-                Log.d("MainActivity", "Child $i - Tag: ${child.tag}, Visibility: ${child.visibility}")
+                Log.d(
+                    "MainActivity",
+                    "Child $i - Tag: ${child.tag}, Visibility: ${child.visibility}"
+                )
                 val tag = child.tag
                 if (tag is String && modeInfo.parameterNames.contains(tag)) {
                     child.visibility = View.VISIBLE
-                    Log.d("MainActivity", "Setting visibility for parameter ${tag}: ${child.visibility}")
+                    Log.d(
+                        "MainActivity",
+                        "Setting visibility for parameter ${tag}: ${child.visibility}"
+                    )
                 }
             }
         }
-        Log.d("MainActivity", "Parameters passed to generateLayout: ${parameters.joinToString(", ") { it.name }}")
+        Log.d(
+            "MainActivity",
+            "Parameters passed to generateLayout: ${parameters.joinToString(", ") { it.name }}"
+        )
 
         container.invalidate()
         container.requestLayout()
