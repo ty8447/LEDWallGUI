@@ -34,19 +34,31 @@ import java.util.*  // e.g. for LinkedList if still needed
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 
-
-
-
-// Define your custom response type.
-class RawReadResponse(val value: ByteArray)
-
-
 // A simple data class to hold mode information.
 data class ModeInfo(
     val name: String,
     val parameterNames: List<String>, // List of parameter *names*
     var parameterValues: MutableMap<String, String> = mutableMapOf() // Map of parameter name to value
 )
+
+object BluetoothInstance {
+    var clientBleGatt: ClientBleGatt? = null
+    var cachedBleGattServices: ClientBleGattServices? = null
+    var ledService: ClientBleGattService? = null
+    var ledModeListCharacteristic: ClientBleGattCharacteristic? = null
+    var parameterResponseCharacteristic: ClientBleGattCharacteristic? = null
+    var parameterControlCharacteristic: ClientBleGattCharacteristic? = null
+
+    fun clearCache() {
+        clientBleGatt = null
+        cachedBleGattServices = null
+        ledService = null
+        ledModeListCharacteristic = null
+        parameterResponseCharacteristic = null
+        parameterControlCharacteristic = null
+        Log.d("BluetoothInstance", "Cache cleared")
+    }
+}
 
 class GlobalBluetoothManager(
     private val context: Context,
@@ -67,10 +79,6 @@ class GlobalBluetoothManager(
             UUID.fromString("12345678-1234-5678-1234-56789abcdef3") // LED parameter response
         val PARAMETER_CONTROL_UUID: UUID =
             UUID.fromString("12345678-1234-5678-1234-56789abcdef4") // LED control (e.g. turn on)
-
-        // Standard Client Characteristic Configuration Descriptor UUID
-        val CLIENT_DESCRIPTOR_UUID: UUID =
-            UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }
 
     private var _isConnected: Boolean = false
@@ -78,7 +86,7 @@ class GlobalBluetoothManager(
     var deviceAddress: String? = null
     var deviceName: String? = null
     var shouldLoadSavedStatus: Boolean = false
-    val discoveredUUIDs = CopyOnWriteArrayList<UUID>()
+    private val discoveredUUIDs = CopyOnWriteArrayList<UUID>()
     private var currentGatt: BluetoothGatt? = null
     private val prefs = PreferenceUtils(context)
 
@@ -87,25 +95,17 @@ class GlobalBluetoothManager(
     private var ledModeListCharacteristic: ClientBleGattCharacteristic? = null
     private var parameterResponseCharacteristic: ClientBleGattCharacteristic? = null
     private var parameterControlCharacteristic: ClientBleGattCharacteristic? = null
-
     // Cache the LED service for later use.
     private var ledService: ClientBleGattService? = null
     private var cachedBleGattServices: ClientBleGattServices? = null
 
-    // Additional state fields.
-    private var ledParameters: Map<String, Any> = mutableMapOf()
-    private var isRetrying: Boolean = false
-    private var nrTries: Int = 0
-    private val MAX_TRIES = 5
-
     // List of parsed mode information, maintained for high-level use.
-    val modeInfoList: MutableList<ModeInfo> = mutableListOf()
+    private val modeInfoList: MutableList<ModeInfo> = mutableListOf()
 
     // (Optional) Track the current mode if needed.
     private var currentMode: String? = null
 
     // Logging methods – using Log.VERBOSE for detailed output.
-    private fun getMinLogPriority(): Int = Log.VERBOSE
     private fun log(priority: Int, message: String) {
         Log.println(priority, TAG, message)
     }
@@ -116,69 +116,6 @@ class GlobalBluetoothManager(
         _isConnected = savedIsConnected
         deviceAddress = savedDeviceAddress
         deviceName = savedDeviceName
-    }
-
-    /**
-     * isRequiredServiceSupported should search the discovered services for our LED connection service
-     * and acquire references to its important characteristics. Return true only if all required characteristics
-     * are available.
-     *
-     * (Reference: :contentReference[oaicite:1]{index=1})
-     */
-    suspend fun isRequiredServiceSupported(): Boolean {
-        // Discover services using the Nordic API.
-        val services = clientBleGatt?.discoverServices()
-        val service = services?.findService(LED_CONNECTION_SERVICE)
-
-        if (service != null) {
-            // Use the Nordic findCharacteristic() method.
-            ledModeListCharacteristic = service.findCharacteristic(LED_MODE_LIST_UUID)
-            parameterResponseCharacteristic = service.findCharacteristic(PARAMETER_RESPONSE_UUID)
-            parameterControlCharacteristic = service.findCharacteristic(PARAMETER_CONTROL_UUID)
-
-            log(Log.DEBUG, "Found Service: ${service.uuid}")
-            service.characteristics.forEach { characteristic ->
-                log(Log.DEBUG, "Characteristic Found: ${characteristic.uuid} " +
-                        "Properties: ${characteristic.properties}")
-            }
-        } else {
-            log(Log.WARN, "LED_CONNECTION_SERVICE not found")
-        }
-
-        val supported = (ledModeListCharacteristic != null &&
-                parameterResponseCharacteristic != null &&
-                parameterControlCharacteristic != null)
-        log(Log.DEBUG, "isRequiredServiceSupported: $supported")
-        return supported
-    }
-
-    /**
-     * initialize() is called after services have been discovered.
-     * Here we enable notifications on the parameter response characteristic
-     * and request an increased MTU if needed.
-     *
-     * (Reference: :contentReference[officiate:2]{index=2})
-     */
-    suspend fun initialize() {
-        log(Log.DEBUG, "Initializing device")
-        parameterResponseCharacteristic?.getNotifications()?.onEach { data ->
-            val response = String(data.value, Charsets.UTF_8).trim()
-            log(Log.DEBUG, "Notification received: $response")
-            processParameterResponse(response)
-        }?.launchIn(CoroutineScope(Dispatchers.IO))
-        clientBleGatt?.requestMtu(517)
-    }
-
-    /**
-     * onServicesInvalidated() is called when the device disconnects or services are no longer valid.
-     * Clear the characteristic references and reset internal state.
-     */
-    fun onServicesInvalidated() {
-        log(Log.DEBUG, "Invalidating services")
-        ledModeListCharacteristic = null
-        parameterResponseCharacteristic = null
-        parameterControlCharacteristic = null
-        modeInfoList.clear()
     }
 
     /**
@@ -249,72 +186,230 @@ class GlobalBluetoothManager(
     }
 
     @SuppressLint("MissingPermission")
-    private fun sendDataToDevice(
-        serviceUUID: UUID,
-        characteristicUUID: UUID,
+    private fun sendDataToDevice(data: String, clearBuffer: Boolean = true, appendNullTerminator: Boolean = false) {
+        val (prefsConnected, savedDeviceAddress, _) = prefs.loadConnectionState()
+
+        if (!prefsConnected || BluetoothInstance.cachedBleGattServices == null) {
+            log(Log.WARN, "Not connected or services not discovered. Attempting to connect and discover.")
+
+            CoroutineScope(Dispatchers.IO).launch {
+                val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+                val bluetoothDevice = savedDeviceAddress?.let { bluetoothAdapter?.getRemoteDevice(it) }
+
+                if (bluetoothDevice == null) {
+                    withContext(Dispatchers.Main) {
+                        log(Log.ERROR, "Saved device address not found or invalid. Cannot connect.")
+                    }
+                    return@launch
+                }
+
+                // ***KEY CHANGE: Convert BluetoothDevice to ServerDevice***
+                val serverDevice = bluetoothDevice.toServerDevice() // Implement this conversion function
+
+                if (serverDevice == null) { // Handle conversion failure
+                    withContext(Dispatchers.Main) {
+                        log(Log.ERROR, "Failed to convert BluetoothDevice to ServerDevice.")
+                    }
+                    return@launch
+                }
+
+                val success = reconnectAndDiscoverServices(serverDevice) // Pass the ServerDevice
+
+                withContext(Dispatchers.Main) {
+                    if (success) {
+                        log(Log.DEBUG, "Reconnect and rediscovery successful. Sending data.")
+                        sendDataToDeviceInternal(data, clearBuffer, appendNullTerminator)
+                    } else {
+                        log(Log.ERROR, "Failed to connect and discover services. Cannot send data.")
+                    }
+                }
+            }
+        } else {
+            log(Log.DEBUG, "Already connected and services discovered. Sending data directly.")
+            sendDataToDeviceInternal(data, clearBuffer, appendNullTerminator)
+        }
+    }
+
+
+    // ***IMPLEMENT THIS CONVERSION FUNCTION***
+    fun BluetoothDevice.toServerDevice(): ServerDevice? {
+        return try {
+            // This is how you convert a BluetoothDevice to a RealServerDevice
+            // Make sure you have the correct library imported
+            RealServerDevice(this)
+        } catch (e: Exception) {
+            Log.e("ConversionError", "Error converting BluetoothDevice to ServerDevice: ${e.message}")
+            null
+        }
+    }
+
+    private suspend fun reconnectAndDiscoverServices(device: ServerDevice): Boolean {
+        log(Log.DEBUG, "reconnectAndDiscoverServices called.")
+
+        clientBleGatt?.disconnect()
+        clientBleGatt = null
+        log(Log.DEBUG, "clientBleGatt disconnected and set to null.")
+
+        if (device == null) {
+            log(Log.ERROR, "Device is null. Cannot reconnect.")
+            return false
+        }
+
+        var connectSuccess = false
+        val connectJob = CoroutineScope(Dispatchers.IO).launch { // Launch in IO dispatcher
+            connectSuccess = try {
+                BluetoothInstance.clientBleGatt = ClientBleGatt.connect(context, device, this) // Use ServerDevice and correct scope
+                val result = BluetoothInstance.clientBleGatt != null
+                log(Log.DEBUG, "Connection attempt result: $result")
+                result
+            } catch (e: Exception) {
+                log(Log.ERROR, "Connection error: ${e.message}")
+                false
+            }
+        }
+        connectJob.join()
+
+        if (!connectSuccess) {
+            log(Log.ERROR, "Connection failed.")
+            return false
+        }
+
+        log(Log.DEBUG, "Connection successful. Discovering services.")
+
+        return try {
+            val bleServices = clientBleGatt?.discoverServices()
+            if (bleServices != null) {
+                // Cache the services using the singleton
+                BluetoothInstance.cachedBleGattServices = bleServices
+                log(
+                    Log.DEBUG,
+                    "Services discovered and cached: ${
+                        BluetoothInstance.cachedBleGattServices?.services?.map { service -> service.uuid }
+                    }"
+                )
+
+                val foundService = bleServices.findService(LED_CONNECTION_SERVICE)
+                if (foundService != null) {
+                    // (UUID saving logic would go here)
+                    ledService = foundService // Cache the service
+                    log(Log.DEBUG, "LED Service cached: $ledService")
+                } else {
+                    log(Log.WARN, "LED service NOT found after discovery!")
+                    log(
+                        Log.DEBUG,
+                        "Available Services: ${
+                            bleServices.services.map { service -> service.uuid }
+                        }"
+                    )
+                }
+                true
+            } else {
+                log(Log.ERROR, "Service discovery failed.")
+                false
+            }
+        } catch (e: Exception) {
+            log(Log.ERROR, "Error during service discovery: ${e.message}")
+            false
+        }
+    }
+
+    private fun sendDataToDeviceInternal(
         data: String,
         clearBuffer: Boolean = true,
         appendNullTerminator: Boolean = false
     ) {
-        // Check connection state from PreferenceUtils.
-        val (prefsConnected, _, _) = prefs.loadConnectionState()
-        if (!prefsConnected) {
-            log(Log.WARN, "Not connected (according to preferences). Cannot send data.")
-            return
-        }
+        // Wrap entire function body in a lambda (labeled "sendData") so we can use qualified returns.
+        run sendData@{
+            log(Log.DEBUG, "sendDataToDeviceInternal called.")
 
-        // Attempt to recover the service from the cached services list.
-        val service = cachedBleGattServices?.services?.find { it.uuid == serviceUUID }
-        if (service == null) {
+            val ledServiceUUIDString = prefs.getString("led_service_uuid", null)
+            val parameterControlCharUUIDString = prefs.getString("parameter_control_char_uuid", null)
+
+            log(Log.DEBUG, "Retrieved led_service_uuid: $ledServiceUUIDString")
+            log(Log.DEBUG, "Retrieved parameter_control_char_uuid: $parameterControlCharUUIDString")
+
+            if (ledServiceUUIDString == null || parameterControlCharUUIDString == null) {
+                log(Log.WARN, "LED service or parameter control characteristic UUIDs not found in preferences.")
+                return@sendData
+            }
+
+            val ledServiceUUID = UUID.fromString(ledServiceUUIDString)
+            val parameterControlCharUUID = UUID.fromString(parameterControlCharUUIDString)
+
+            log(Log.DEBUG, "ledServiceUUID: $ledServiceUUID")
+            log(Log.DEBUG, "parameterControlCharUUID: $parameterControlCharUUID")
+
+            val bleServices = BluetoothInstance.cachedBleGattServices // Get the services from the singleton
             log(
-                Log.WARN,
-                "Service $serviceUUID not found among discovered services: ${
-                    cachedBleGattServices?.services?.map { it.uuid }
+                Log.DEBUG,
+                "cachedBleGattServices before use: ${
+                    bleServices?.services?.map { service -> service.uuid }
                 }"
             )
-            return
-        }
 
-        // Look up the desired characteristic.
-        val characteristic = service.findCharacteristic(characteristicUUID)
-        if (characteristic == null) {
-            log(Log.WARN, "Characteristic $characteristicUUID not found in service $serviceUUID")
-            return
-        }
-
-        // Launch on Main dispatcher for UI-safe operations.
-        CoroutineScope(Dispatchers.Main).launch {
-            try {
-                // Optionally clear any previous buffer.
-                if (clearBuffer) {
-                    characteristic.write(DataByteArray.from(*byteArrayOf()))
-                    log(Log.DEBUG, "Buffer cleared for characteristic ${characteristic.uuid}")
+            bleServices?.let { nonNullBleServices ->
+                val service = nonNullBleServices.services.find { svc -> svc.uuid == ledServiceUUID }
+                if (service == null) {
+                    log(
+                        Log.WARN,
+                        "Service $ledServiceUUID not found in cached services. Cached Services: ${
+                            nonNullBleServices.services.map { svc -> svc.uuid }
+                        }"
+                    )
+                    return@sendData
                 }
-                // Prepare the data payload.
-                var messageBytes = data.toByteArray(Charsets.UTF_8)
-                if (appendNullTerminator) messageBytes += 0.toByte()
-                val dataByteArray = DataByteArray.from(*messageBytes)
-                // Write the data.
-                characteristic.write(dataByteArray)
-                log(Log.DEBUG, "Data sent successfully: $data to characteristic ${characteristic.uuid}")
-            } catch (e: Exception) {
-                log(Log.WARN, "Failed to send data: ${e.message}")
+
+                // Assuming an extension function or member function exists:
+                val characteristic = service.findCharacteristic(parameterControlCharUUID)
+                if (characteristic == null) {
+                    log(
+                        Log.WARN,
+                        "Characteristic $parameterControlCharUUID not found in service $ledServiceUUID. Available Characteristics: ${
+                            service.characteristics.map { char -> char.uuid }
+                        }"
+                    )
+                    return@sendData
+                }
+
+                log(Log.DEBUG, "Characteristic found: $characteristic")
+
+                CoroutineScope(Dispatchers.Main).launch {
+                    try {
+                        if (clearBuffer) {
+                            val clearResult = characteristic.write(DataByteArray.from(*byteArrayOf()))
+                            log(
+                                Log.DEBUG,
+                                "Buffer cleared for characteristic ${characteristic.uuid}. Result: $clearResult"
+                            )
+                        }
+                        var messageBytes = data.toByteArray(Charsets.UTF_8)
+                        if (appendNullTerminator) messageBytes += 0.toByte()
+                        val dataByteArray = DataByteArray.from(*messageBytes)
+
+                        val writeResult = characteristic.write(dataByteArray)
+                        log(
+                            Log.DEBUG,
+                            "Data sent. Result: $writeResult"
+                        )
+                        log(
+                            Log.DEBUG,
+                            "Data sent successfully: $data to characteristic ${characteristic.uuid}"
+                        )
+                    } catch (e: Exception) {
+                        log(Log.WARN, "Failed to send data: ${e.message}")
+                    }
+                }
+            } ?: run {
+                log(Log.WARN, "bleServices is null. Cannot send data.")
+                return@sendData
             }
         }
     }
 
-    /**
-     * Generalized function for sending commands to the device.
-     */
-    fun sendCommandToDevice(type: String, name: String, values: String) {
+
+    private fun sendCommandToDevice(type: String, name: String, values: String) {
         val formattedData = "$type:$name:{$values}"
-        sendDataToDevice(
-            LED_CONNECTION_SERVICE,
-            PARAMETER_CONTROL_UUID, // Using the command/control characteristic.
-            formattedData,
-            clearBuffer = true,
-            appendNullTerminator = false
-        )
+        sendDataToDevice(formattedData, clearBuffer = true, appendNullTerminator = false)
     }
 
     /**
@@ -487,126 +582,104 @@ class GlobalBluetoothManager(
     @OptIn(ExperimentalStdlibApi::class)
     fun connectToDevice(
         context: Context,
-        device: ServerDevice, // Now expects a ServerDevice instead of BluetoothDevice
+        device: ServerDevice,
         handler: Handler,
         callback: (Boolean) -> Unit
     ) {
+        val TAG = "connectToDevice"
         Log.d(TAG, "connectToDevice called with device: ${device.name}")
         this.handler = handler
-        discoveredUUIDs.clear() // Reset the discovered UUIDs list
+        val discoveredUUIDs = CopyOnWriteArrayList<UUID>()
 
-        // Launch the connection procedure on a background dispatcher.
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                clientBleGatt = ClientBleGatt.connect(
-                    context = context,
-                    device = device, // device is already a ServerDevice
-                    scope = this // CoroutineScope for the connection.
-                )
+                clientBleGatt = ClientBleGatt.connect(context, device, this)
 
-                clientBleGatt?.apply {
-                    // Request an increased MTU.
-                    requestMtu(517)
-                    log(Log.DEBUG, "MTU request successful, MTU size: $mtu")
+                clientBleGatt?.let { gatt ->
+                    gatt.requestMtu(517)
+                    log(Log.DEBUG, "MTU request successful, MTU size: ${gatt.mtu}")
 
-                    // Discover services.
-                    val bleServices = discoverServices() // Returns ClientBleGattServices
-                    log(Log.DEBUG, "Services discovered: $bleServices")
+                    val bleServices = gatt.discoverServices()
 
-                    cachedBleGattServices = bleServices
+                    // Populate BluetoothInstance Immediately After Successful Discovery
+                    BluetoothInstance.clientBleGatt = gatt
+                    BluetoothInstance.cachedBleGattServices = bleServices
 
-                    // Iterate over all services and their characteristics using for-loops.
-                    for (service in bleServices.services) {
+                    bleServices.services.forEach { service ->  // Log all services and characteristics
                         log(Log.DEBUG, "Discovered Service: ${service.uuid}")
-                        // Add the service's UUID.
                         discoveredUUIDs.add(service.uuid)
-
-                        for (characteristic in service.characteristics) {
-                            log(
-                                Log.DEBUG,
-                                "Characteristic found: ${characteristic.uuid}, properties: ${characteristic.properties}"
-                            )
+                        service.characteristics.forEach { characteristic ->
+                            log(Log.DEBUG, "Characteristic: ${characteristic.uuid}, Properties: ${characteristic.properties}")
                             discoveredUUIDs.add(characteristic.uuid)
-
-                            // Iterate over descriptors if available.
-                            for (descriptor in characteristic.descriptors) {
-                                log(Log.DEBUG, "Descriptor found: ${descriptor.uuid}")
+                            characteristic.descriptors.forEach { descriptor ->
+                                log(Log.DEBUG, "Descriptor: ${descriptor.uuid}")
                                 discoveredUUIDs.add(descriptor.uuid)
                             }
                         }
                     }
 
-                    // When caching the LED service and its characteristics:
-                    val foundService = bleServices.findService(LED_CONNECTION_SERVICE)
-                    if (foundService != null) {
-                        ledService = foundService
-                        log(Log.DEBUG, "Cached LED service: ${foundService.uuid}")
-                        // Save the service UUID in preferences.
-                        prefs.saveUUID("led_service_uuid", foundService.uuid.toString())
+                    val ledService = bleServices.findService(LED_CONNECTION_SERVICE)
 
-                        parameterResponseCharacteristic = foundService.findCharacteristic(PARAMETER_RESPONSE_UUID)
-                        if (parameterResponseCharacteristic != null) {
-                            log(Log.DEBUG, "Cached parameterResponseCharacteristic: ${parameterResponseCharacteristic?.uuid}")
-                            prefs.saveUUID("parameter_response_char_uuid", parameterResponseCharacteristic!!.uuid.toString())
-                        } else {
-                            log(Log.WARN, "Parameter response characteristic with UUID $PARAMETER_RESPONSE_UUID not found")
-                        }
+                    if (ledService != null) {
+                        BluetoothInstance.ledService = ledService
 
-                        ledModeListCharacteristic = foundService.findCharacteristic(LED_MODE_LIST_UUID)
+                        val ledModeListCharacteristic = ledService.findCharacteristic(LED_MODE_LIST_UUID)
                         if (ledModeListCharacteristic != null) {
-                            log(Log.DEBUG, "Cached ledModeListCharacteristic: ${ledModeListCharacteristic?.uuid}")
-                            prefs.saveUUID("led_mode_list_char_uuid", ledModeListCharacteristic!!.uuid.toString())
+                            BluetoothInstance.ledModeListCharacteristic = ledModeListCharacteristic // Cache DIRECTLY
+                            prefs.saveUUID("led_mode_list_char_uuid", ledModeListCharacteristic.uuid.toString())
                         } else {
-                            log(Log.WARN, "LED mode list characteristic with UUID $LED_MODE_LIST_UUID not found")
+                            log(Log.ERROR, "LED Mode List Characteristic NOT FOUND! UUID: $LED_MODE_LIST_UUID")
                         }
+
+                        val parameterResponseCharacteristic = ledService.findCharacteristic(PARAMETER_RESPONSE_UUID)
+                        if (parameterResponseCharacteristic != null) {
+                            BluetoothInstance.parameterResponseCharacteristic = parameterResponseCharacteristic // Cache DIRECTLY
+                            prefs.saveUUID("parameter_response_char_uuid", parameterResponseCharacteristic.uuid.toString())
+                        } else {
+                            log(Log.ERROR, "Parameter Response Characteristic NOT FOUND! UUID: $PARAMETER_RESPONSE_UUID")
+                        }
+
+                        val parameterControlCharacteristic = ledService.findCharacteristic(PARAMETER_CONTROL_UUID)
+                        if (parameterControlCharacteristic != null) {
+                            BluetoothInstance.parameterControlCharacteristic = parameterControlCharacteristic // Cache DIRECTLY
+                            prefs.saveUUID("parameter_control_char_uuid", parameterControlCharacteristic.uuid.toString())
+                        } else {
+                            log(Log.ERROR, "Parameter Control Characteristic NOT FOUND! UUID: $PARAMETER_CONTROL_UUID")
+                        }
+
                     } else {
-                        log(
-                            Log.WARN,
-                            "LED service with UUID $LED_CONNECTION_SERVICE not found among discovered services: ${
-                                bleServices.services.map { it.uuid }
-                            }"
-                        )
+                        log(Log.ERROR, "LED Service NOT FOUND! UUID: $LED_CONNECTION_SERVICE")
                     }
 
                     parameterResponseCharacteristic?.getNotifications()?.onEach { data ->
-                        log(
-                            Log.DEBUG,
-                            "Notification received for parameter response: ${data.value.toHexString()}"
-                        )
-                    }?.launchIn(this@launch) ?: log(Log.WARN, "Parameter response characteristic not found")
+                        log(Log.DEBUG, "Notification received for parameter response: ${data.value.toHexString()}")
+                    }?.launchIn(this) ?: log(Log.WARN, "Parameter response characteristic not found")
 
-                    // Optional delay to allow notifications to settle.
                     delay(2000)
 
-                    // Read LED mode list (assumed to be a suspend function returning Boolean).
-                    val success = readLedModeList(context)
+                    val success = readLedModeList(context) // Assuming this is defined
 
                     withContext(Dispatchers.Main) {
                         if (success) {
-                            if (device is RealServerDevice) {
-                                setConnectionState(true, device.address, device.name, context)
-                                Log.d(TAG, "Setting connection state to true for device: ${device.name}")
-                            } else {
-                                // Fallback in case the device type is different.
-                                setConnectionState(true, null, device.name, context)
-                            }
+                            setConnectionState(true, device.address, device.name, context)
                             Log.d(TAG, "Successfully read and processed LED mode list")
                         } else {
                             Log.e(TAG, "Failed to read LED mode list")
                         }
                         callback(success)
                     }
+
                 } ?: run {
                     log(Log.ERROR, "Failed to connect using ClientBleGatt")
                     withContext(Dispatchers.Main) { callback(false) }
                 }
+
             } catch (e: Exception) {
                 log(Log.ERROR, "Error during connection: ${e.message}")
                 withContext(Dispatchers.Main) { callback(false) }
             }
         }
     }
-
     // Command Queue remains available if you need to serialize GATT operations.
     private val gattQueue = LinkedList<suspend () -> Unit>()
 
@@ -649,6 +722,7 @@ class GlobalBluetoothManager(
     }
 
     private suspend fun readLedModeList(context: Context): Boolean {
+        ledModeListCharacteristic = BluetoothInstance.ledModeListCharacteristic
         return try {
             val ledChar = ledModeListCharacteristic ?: run {
                 log(Log.ERROR, "ledModeListCharacteristic is null!")
