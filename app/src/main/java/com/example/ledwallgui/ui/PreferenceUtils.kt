@@ -95,15 +95,23 @@ class PreferenceUtils(private val context: Context) {
     }
 
     // For saving the PIN dynamically based on actionType
-    fun setString(context: Context, actionType: String, value: String) {
+    fun setPIN(context: Context, actionType: String, value: String) {
         val prefs = context.getSharedPreferences("settings_prefs", Context.MODE_PRIVATE)
         prefs.edit().putString("${actionType}_pin", value).apply()
     }
 
     // For retrieving the PIN dynamically based on actionType
-    fun getString(context: Context, actionType: String, defaultValue: String): String {
+    fun getPIN(context: Context, actionType: String, defaultValue: String): String {
         val prefs = context.getSharedPreferences("settings_prefs", Context.MODE_PRIVATE)
         return prefs.getString("${actionType}_pin", defaultValue) ?: defaultValue
+    }
+
+    fun saveUUID(key: String, value: String?) {
+        sharedPreferences.edit().putString(key, value).apply()
+    }
+
+    fun getString(key: String, default: String? = null): String? {
+        return sharedPreferences.getString(key, default)
     }
 
     // For saving the lock state dynamically based on actionType

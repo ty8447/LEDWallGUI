@@ -399,7 +399,7 @@ class settingsActivity : AppCompatActivity() {
                     // If setting a new PIN for a locked option
                     if (isLockAction) {
                         // Save the new PIN for the button using actionType
-                        preferenceUtils.setString(this, "${actionType}_pin", enteredPin.toString())
+                        preferenceUtils.setPIN(this, "${actionType}_pin", enteredPin.toString())
                         Log.d("SettingsActivity", "$actionType PIN set: ${enteredPin.toString()}")
                         setupButtons()
                         // After setting the PIN, lock the button
@@ -409,7 +409,7 @@ class settingsActivity : AppCompatActivity() {
                         pinDialog.dismiss()
                     } else {
                         // Verify the entered PIN using actionType
-                        val savedPin = preferenceUtils.getString(this, "${actionType}_pin", "")
+                        val savedPin = preferenceUtils.getPIN(this, "${actionType}_pin", "")
                         if (enteredPin.toString() == savedPin) {
                             // If the PIN matches, toggle the lock state
                             val newState = !preferenceUtils.getBoolean(this, "${actionType}_locked", false)
@@ -443,7 +443,7 @@ class settingsActivity : AppCompatActivity() {
             lockUnlockLEDConfigButton.setOnClickListener {
                 val preferenceUtils = PreferenceUtils(this)
                 val isLEDConfigLocked = preferenceUtils.getBoolean(this, "led_config_locked", false)
-                val existingPin = preferenceUtils.getString(this, "led_config_pin", "")
+                val existingPin = preferenceUtils.getPIN(this, "led_config_pin", "")
 
                 if (existingPin.isEmpty()) {
                     // If no PIN exists, allow setting a new PIN
@@ -461,7 +461,7 @@ class settingsActivity : AppCompatActivity() {
             lockUnlockSettingsMenuButton.setOnClickListener {
                 val preferenceUtils = PreferenceUtils(this)
                 val isSettingsMenuLocked = preferenceUtils.getBoolean(this, "settings_menu_locked", false)
-                val existingPin = preferenceUtils.getString(this, "settings_menu_pin", "")
+                val existingPin = preferenceUtils.getPIN(this, "settings_menu_pin", "")
 
                 if (existingPin.isEmpty()) {
                     // If no PIN exists, allow setting a new PIN
@@ -479,7 +479,7 @@ class settingsActivity : AppCompatActivity() {
             lockUnlockAlarmsButton.setOnClickListener {
                 val preferenceUtils = PreferenceUtils(this)
                 val isAlarmsLocked = preferenceUtils.getBoolean(this, "alarms_locked", false)
-                val existingPin = preferenceUtils.getString(this, "alarms_pin", "")
+                val existingPin = preferenceUtils.getPIN(this, "alarms_pin", "")
 
                 if (existingPin.isEmpty()) {
                     // If no PIN exists, allow setting a new PIN

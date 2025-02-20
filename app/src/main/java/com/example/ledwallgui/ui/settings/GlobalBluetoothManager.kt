@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.onEach
 import no.nordicsemi.android.kotlin.ble.client.main.callback.ClientBleGatt
 import no.nordicsemi.android.kotlin.ble.client.main.service.ClientBleGattCharacteristic
 import no.nordicsemi.android.kotlin.ble.client.main.service.ClientBleGattService
+import no.nordicsemi.android.kotlin.ble.client.main.service.ClientBleGattServices
 import no.nordicsemi.android.kotlin.ble.core.RealServerDevice
 import no.nordicsemi.android.kotlin.ble.core.ServerDevice
 import no.nordicsemi.android.kotlin.ble.core.data.BleGattProperty
@@ -89,6 +90,7 @@ class GlobalBluetoothManager(
 
     // Cache the LED service for later use.
     private var ledService: ClientBleGattService? = null
+    private var cachedBleGattServices: ClientBleGattServices? = null
 
     // Additional state fields.
     private var ledParameters: Map<String, Any> = mutableMapOf()
@@ -246,6 +248,7 @@ class GlobalBluetoothManager(
         }
     }
 
+    @SuppressLint("MissingPermission")
     private fun sendDataToDevice(
         serviceUUID: UUID,
         characteristicUUID: UUID,
@@ -253,62 +256,47 @@ class GlobalBluetoothManager(
         clearBuffer: Boolean = true,
         appendNullTerminator: Boolean = false
     ) {
-        // Check the connection state from PreferenceUtils.
+        // Check connection state from PreferenceUtils.
         val (prefsConnected, _, _) = prefs.loadConnectionState()
         if (!prefsConnected) {
             log(Log.WARN, "Not connected (according to preferences). Cannot send data.")
             return
         }
 
-        // Use the cached LED service reference.
-        if (ledService == null) {
-            log(Log.WARN, "LED service is not available. Cannot send data.")
+        // Attempt to recover the service from the cached services list.
+        val service = cachedBleGattServices?.services?.find { it.uuid == serviceUUID }
+        if (service == null) {
+            log(
+                Log.WARN,
+                "Service $serviceUUID not found among discovered services: ${
+                    cachedBleGattServices?.services?.map { it.uuid }
+                }"
+            )
             return
         }
 
-        // Retrieve the Nordic characteristic.
-        val characteristic = ledService?.findCharacteristic(characteristicUUID)
+        // Look up the desired characteristic.
+        val characteristic = service.findCharacteristic(characteristicUUID)
         if (characteristic == null) {
-            log(Log.WARN, "Characteristic not found for UUID: $characteristicUUID")
+            log(Log.WARN, "Characteristic $characteristicUUID not found in service $serviceUUID")
             return
         }
 
-        // Launch a coroutine on the Main dispatcher for UI-safe operations.
+        // Launch on Main dispatcher for UI-safe operations.
         CoroutineScope(Dispatchers.Main).launch {
             try {
-                // Discover services using Nordic's API.
-                val services = clientBleGatt?.discoverServices()
-                val service = services?.findService(serviceUUID)
-                if (service == null) {
-                    log(Log.WARN, "Service not found for UUID: $serviceUUID")
-                    return@launch
-                }
-
-                // Retrieve the Nordic characteristic.
-                val characteristic = service.findCharacteristic(characteristicUUID)
-                if (characteristic == null) {
-                    log(Log.WARN, "Characteristic not found for UUID: $characteristicUUID")
-                    return@launch
-                }
-
-                // (Optional) Clear the characteristic's buffer.
+                // Optionally clear any previous buffer.
                 if (clearBuffer) {
                     characteristic.write(DataByteArray.from(*byteArrayOf()))
-                    log(Log.DEBUG, "Buffer cleared for characteristic.")
+                    log(Log.DEBUG, "Buffer cleared for characteristic ${characteristic.uuid}")
                 }
-
-                // Convert the string data to a byte array.
-                var message = data.toByteArray(Charsets.UTF_8)
-                if (appendNullTerminator) {
-                    message += 0.toByte()
-                }
-
-                // Create a DataByteArray from your message.
-                val dataByteArray = DataByteArray.from(*message)
-
-                // Write the data to the characteristic using its suspend function.
+                // Prepare the data payload.
+                var messageBytes = data.toByteArray(Charsets.UTF_8)
+                if (appendNullTerminator) messageBytes += 0.toByte()
+                val dataByteArray = DataByteArray.from(*messageBytes)
+                // Write the data.
                 characteristic.write(dataByteArray)
-                log(Log.DEBUG, "Data sent successfully: $data")
+                log(Log.DEBUG, "Data sent successfully: $data to characteristic ${characteristic.uuid}")
             } catch (e: Exception) {
                 log(Log.WARN, "Failed to send data: ${e.message}")
             }
@@ -525,6 +513,8 @@ class GlobalBluetoothManager(
                     val bleServices = discoverServices() // Returns ClientBleGattServices
                     log(Log.DEBUG, "Services discovered: $bleServices")
 
+                    cachedBleGattServices = bleServices
+
                     // Iterate over all services and their characteristics using for-loops.
                     for (service in bleServices.services) {
                         log(Log.DEBUG, "Discovered Service: ${service.uuid}")
@@ -546,13 +536,36 @@ class GlobalBluetoothManager(
                         }
                     }
 
-                    // Retrieve required characteristics from the LED connection service.
-                    this.ledService = bleServices.findService(LED_CONNECTION_SERVICE)
-                    if (this.ledService != null) {
-                        parameterResponseCharacteristic = this.ledService?.findCharacteristic(PARAMETER_RESPONSE_UUID)
-                        ledModeListCharacteristic = this.ledService?.findCharacteristic(LED_MODE_LIST_UUID)
+                    // When caching the LED service and its characteristics:
+                    val foundService = bleServices.findService(LED_CONNECTION_SERVICE)
+                    if (foundService != null) {
+                        ledService = foundService
+                        log(Log.DEBUG, "Cached LED service: ${foundService.uuid}")
+                        // Save the service UUID in preferences.
+                        prefs.saveUUID("led_service_uuid", foundService.uuid.toString())
+
+                        parameterResponseCharacteristic = foundService.findCharacteristic(PARAMETER_RESPONSE_UUID)
+                        if (parameterResponseCharacteristic != null) {
+                            log(Log.DEBUG, "Cached parameterResponseCharacteristic: ${parameterResponseCharacteristic?.uuid}")
+                            prefs.saveUUID("parameter_response_char_uuid", parameterResponseCharacteristic!!.uuid.toString())
+                        } else {
+                            log(Log.WARN, "Parameter response characteristic with UUID $PARAMETER_RESPONSE_UUID not found")
+                        }
+
+                        ledModeListCharacteristic = foundService.findCharacteristic(LED_MODE_LIST_UUID)
+                        if (ledModeListCharacteristic != null) {
+                            log(Log.DEBUG, "Cached ledModeListCharacteristic: ${ledModeListCharacteristic?.uuid}")
+                            prefs.saveUUID("led_mode_list_char_uuid", ledModeListCharacteristic!!.uuid.toString())
+                        } else {
+                            log(Log.WARN, "LED mode list characteristic with UUID $LED_MODE_LIST_UUID not found")
+                        }
                     } else {
-                        log(Log.WARN, "LED service not found in discovered services.")
+                        log(
+                            Log.WARN,
+                            "LED service with UUID $LED_CONNECTION_SERVICE not found among discovered services: ${
+                                bleServices.services.map { it.uuid }
+                            }"
+                        )
                     }
 
                     parameterResponseCharacteristic?.getNotifications()?.onEach { data ->
@@ -750,8 +763,8 @@ class GlobalBluetoothManager(
     // Method to synchronize the connection state.
     @SuppressLint("MissingPermission")
     fun synchronizeConnectionState(context: Context) {
-        val bluetoothManager =
-            context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        // Retrieve the BLE-connected devices from the system.
+        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         val connectedDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
 
         // Only check if we have a known device address.
@@ -759,18 +772,37 @@ class GlobalBluetoothManager(
             connectedDevices.any { it.address == address }
         } ?: false
 
-        // Update connection state if there's a change.
-        if (_isConnected != isCurrentlyConnected) {
+        // Load the connection state stored in PreferenceUtils.
+        val (prefsConnected, prefsDeviceAddress, prefsDeviceName) = prefs.loadConnectionState()
+
+        // If the locally maintained connection state (_isConnected) is not the same as the
+        // connection state stored in preferences, update it.
+        if (prefsConnected != _isConnected) {
             setConnectionState(
-                isCurrentlyConnected,
-                if (isCurrentlyConnected) deviceAddress else null,
-                if (isCurrentlyConnected) deviceName else null,
+                prefsConnected,
+                if (prefsConnected) prefsDeviceAddress else null,
+                if (prefsConnected) prefsDeviceName else null,
                 context
             )
+            Log.d(TAG, "Synchronized connection state: local _isConnected=$_isConnected, " +
+                    "prefsConnected=$prefsConnected, system-connected=$isCurrentlyConnected")
         }
+    }
+}
 
-        Log.d(TAG, "Synchronized connection state: $_isConnected")
+@SuppressLint("StaticFieldLeak")
+object GlobalBluetoothManagerSingleton {
+    @Volatile
+    private var instance: GlobalBluetoothManager? = null
+
+    fun getInstance(context: Context): GlobalBluetoothManager {
+        val appContext = context.applicationContext
+        return instance ?: synchronized(this) {
+            instance ?: GlobalBluetoothManager(appContext).also { instance = it }
+        }
     }
 
-    // Additional high-level methods (e.g. turnLedOff(), setLedColor(), etc.) can be added here.
+    fun reset() {
+        instance = null
+    }
 }
