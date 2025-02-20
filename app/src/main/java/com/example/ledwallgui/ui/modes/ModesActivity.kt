@@ -16,6 +16,7 @@ import androidx.appcompat.widget.AppCompatButton
 import android.content.Intent
 import android.view.View
 import android.widget.Button
+import com.example.ledwallgui.PreferenceUtils
 import com.example.ledwallgui.R
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 import com.google.gson.Gson
@@ -36,6 +37,7 @@ object ModeManager {
 
 class ModesActivity : AppCompatActivity() {
     private lateinit var globalBluetoothManager: GlobalBluetoothManager
+    private lateinit var prefs: PreferenceUtils
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +47,7 @@ class ModesActivity : AppCompatActivity() {
             WindowManager.LayoutParams.FLAG_FULLSCREEN
         )
         setContentView(R.layout.activity_mode_menu)
+        prefs = PreferenceUtils(this)
         globalBluetoothManager = GlobalBluetoothManager(this)
         hideSystemUI()
 
@@ -62,7 +65,7 @@ class ModesActivity : AppCompatActivity() {
             recordDoneButton.visibility = View.VISIBLE
 
             // Hide navigation buttons to avoid loops.
-            backButton.visibility = android.view.View.GONE
+            backButton.visibility = View.GONE
 
             // Set the done button click listener.
             recordDoneButton.setOnClickListener {
@@ -76,15 +79,13 @@ class ModesActivity : AppCompatActivity() {
                     ledParametersMap["Name"] = currentMode
 
                     // Store Parameter Names and Values
-                    modeInfo.parameterNames.forEachIndexed { _, parameterName ->
+                    modeInfo.parameterNames.forEach { parameterName ->
                         val parameterValue = modeInfo.parameterValues[parameterName] // Get the value
 
                         if (parameterValue != null) { // Check if the value exists
                             ledParametersMap[parameterName] = parameterValue // Store name and value
                         } else {
                             Log.w("RecordMode", "Parameter value not found for: $parameterName in mode: $currentMode")
-                            // Handle the case where the value is missing (e.g., use a default value, skip it, or show an error)
-                            // Example: ledParametersMap[parameterName] = "" // Store an empty string
                         }
                     }
 
@@ -100,16 +101,15 @@ class ModesActivity : AppCompatActivity() {
                     Toast.makeText(this, "No LED parameters available", Toast.LENGTH_SHORT).show()
                 }
             }
-
         } else {
             Log.d("ModesActivity", "onCreate: recordLedState is false")
-
         }
 
-        val modeInfoList = globalBluetoothManager.modeInfoList // Fetch from GlobalBluetoothManager
+        // Retrieve mode info list from SharedPreferences
+        val modeInfoList = prefs.getModeInfoList()
 
         if (modeInfoList.isEmpty()) {
-            Log.w("ModesActivity", "No modes available in GlobalBluetoothManager")
+            Log.w("ModesActivity", "No modes available in SharedPreferences")
         } else {
             Log.d("ModesActivity", "Mode Names: ${modeInfoList.joinToString(", ") { it.name }}")
         }
@@ -123,6 +123,14 @@ class ModesActivity : AppCompatActivity() {
                 background = ContextCompat.getDrawable(this@ModesActivity, R.drawable.mode_button_shape)
                 setPadding(16, 16, 16, 16)
                 setOnClickListener {
+                    // Log the parameters that will be made visible.
+                    Log.d(
+                        "ModesActivity",
+                        "Mode button clicked for '${modeInfo.name}'. " +
+                                "Parameter Names: ${modeInfo.parameterNames.joinToString(", ")}. " +
+                                "Current Values: ${modeInfo.parameterValues}"
+                    )
+
                     ModeManager.currentMode = modeInfo.name
                     globalBluetoothManager.setLedMode(modeInfo.name)
                     Toast.makeText(this@ModesActivity, "Mode changed to ${modeInfo.name}", Toast.LENGTH_SHORT).show()

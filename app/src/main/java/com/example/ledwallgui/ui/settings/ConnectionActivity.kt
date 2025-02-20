@@ -314,7 +314,7 @@ class ConnectionActivity : AppCompatActivity() {
         Toast.makeText(this, "Disconnecting from Device...", Toast.LENGTH_SHORT).show()
 
         // Call the GlobalBluetoothManager to disconnect
-        globalBluetoothManager.disconnect(this)  // Pass context here
+//        globalBluetoothManager.disconnect(this)  // Pass context here
 
         // Update UI to reflect disconnection
         updateConnectionStatus("", false)  // Assume updateConnectionStatus can handle this
@@ -343,33 +343,23 @@ class ConnectionActivity : AppCompatActivity() {
                     globalBluetoothManager.deviceName = device.name ?: "Unknown Device"
                     stopBluetoothScan()
 
-                    Toast.makeText(this, "Connected to ${device.name ?: "Unknown Device"}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        this,
+                        "Connected to ${device.name ?: "Unknown Device"}",
+                        Toast.LENGTH_SHORT
+                    ).show()
 
-                    // Now safely fetch discovered UUIDs AFTER connection is confirmed
-                    val uuids = globalBluetoothManager.getDiscoveredUUIDs()
-                    Log.d("ConnectionActivity", "UUIDs from GlobalBluetoothManager: $uuids")
-
-                    if (uuids.isNotEmpty()) {
-                        for (uuid in uuids) {
-                            Log.d("ConnectionActivity", "UUID from connected device: $uuid")
-                        }
-
-                        val targetUUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef1")
-                        if (uuids.contains(targetUUID)) {
-                            Log.d("ConnectionActivity", "Target UUID found!")
-                        } else {
-                            Log.d("ConnectionActivity", "Target UUID not found.")
-                        }
-                    } else {
-                        Log.w("ConnectionActivity", "No UUIDs found on the connected device.")
-                    }
+                    // Since GlobalBluetoothManager already validates the device via required characteristics,
+                    // there's no need to further check for discovered UUIDs here.
+                    // You can update your UI or save the connection state as needed.
                 } else {
                     Toast.makeText(this, "Failed to connect", Toast.LENGTH_SHORT).show()
-                    Log.e("ConnectionActivity", "Device connection failed or UUIDs not found.")
+                    Log.e("ConnectionActivity", "Device connection failed or validation unsuccessful.")
                 }
             }
         }
     }
+
 
     private fun checkPermissionsAndStartScan() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

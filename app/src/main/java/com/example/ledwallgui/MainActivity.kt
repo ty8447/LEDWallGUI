@@ -143,10 +143,17 @@ class MainActivity : AppCompatActivity() {
         modesActivityResultLauncher =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
                 if (result.resultCode == RESULT_OK) {
-                    // Handle the result here
+                    Log.d("MainActivity", "Mode selected result received.")
+                    val ledParametersJson = result.data?.getStringExtra("led_parameters")
+                    Log.d("MainActivity", "Received LED parameters: $ledParametersJson")
+                    // Call a helper function to update the display based on the selected mode.
+                    updateModeDisplay()
                     Toast.makeText(this, "Mode selected", Toast.LENGTH_SHORT).show()
+                } else {
+                    Log.w("MainActivity", "No mode result received.")
                 }
             }
+
 
         settingsActivityResultLauncher =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
@@ -554,6 +561,78 @@ class MainActivity : AppCompatActivity() {
         connectionCheckHandler.removeCallbacksAndMessages(null)
     }
 
+    private fun updateModeDisplay() {
+        val currentMode = ModeManager.currentMode
+        Log.d("MainActivity", "Updating display for mode: $currentMode")
+
+        // Try to get mode info from GlobalBluetoothManager.
+        var modeInfo = globalBluetoothManager.getModeInfo(currentMode)
+        if (modeInfo == null) {
+            // Fallback: retrieve persisted mode info from preferences.
+            val persistedModes = preferenceUtils.getModeInfoList() // returns List<ModeInfo>
+            modeInfo = persistedModes.find { it.name == currentMode }
+            if (modeInfo != null) {
+                Log.d("MainActivity", "Loaded mode info from preferences: ${modeInfo.parameterValues}")
+            } else {
+                Log.w("MainActivity", "No mode info found for mode: $currentMode")
+                return
+            }
+        } else {
+            Log.d("MainActivity", "Mode info from Bluetooth: ${modeInfo.parameterValues}")
+        }
+
+        // If parameter values are empty, fill in default values.
+        if (modeInfo.parameterValues.isEmpty()) {
+            Log.d("MainActivity", "Parameter values are empty. Setting default values for mode: $currentMode")
+            modeInfo.parameterNames.forEach { param ->
+                modeInfo.parameterValues[param] = getDefaultForParameter(currentMode, param)
+            }
+            Log.d("MainActivity", "Mode info after setting defaults: ${modeInfo.parameterValues}")
+        }
+
+        // Convert the mode's parameter info into a list of Parameter objects.
+        val parameterList = modeInfo.parameterNames.map { paramName ->
+            Parameter(
+                name = paramName,
+                value = modeInfo.parameterValues[paramName] ?: "",
+                type = getParameterTypeFromName(paramName)
+            )
+        }
+
+        Log.d("MainActivity", "Constructed Parameter List: $parameterList")
+
+        // Regenerate the layout using your generateLayout() method.
+        val layout = generateLayout(this, parameterList, flexboxLayout)
+        dynamicLayoutContainer.removeAllViews()
+        dynamicLayoutContainer.addView(layout)
+        Log.d("MainActivity", "Dynamic layout updated for mode: $currentMode")
+    }
+
+    private fun getParameterTypeFromName(name: String): String {
+        return when (name.lowercase()) {
+            "color" -> "PCOLOR"      // or "SCOLOR" if that’s more appropriate
+            "scolor" -> "SCOLOR"
+            "speed" -> "SPEED"
+            "frequency" -> "FREQUENCY"
+            "division" -> "DIVISION"
+            else -> "TEXT"
+        }
+    }
+
+    // Helper function to provide default values for a given mode and parameter.
+    private fun getDefaultForParameter(mode: String, parameter: String): String {
+        return when (mode) {
+            "Rainbow" -> {
+                if (parameter == "Speed") "50" else ""
+            }
+            "Color" -> {
+                if (parameter == "Color") Color.RED.toString() else ""
+            }
+            // Add defaults for other modes as needed.
+            else -> ""
+        }
+    }
+
     private fun updateThumbPosition(sliderThumb: View, brightness: Int, isDragged: Boolean) {
         Log.d("Slider", "brightness: $brightness")
 
@@ -641,7 +720,7 @@ class MainActivity : AppCompatActivity() {
         parameters: List<Parameter>,
         flexboxLayout: FlexboxLayout
     ): View {
-
+        flexboxLayout.removeAllViews()
         val configLocked = preferenceUtils.getBoolean(context, "led_config_locked", false)
 
         parameters.forEach { parameter ->

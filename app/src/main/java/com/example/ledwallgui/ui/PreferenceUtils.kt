@@ -3,7 +3,9 @@ package com.example.ledwallgui
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import com.example.ledwallgui.ui.settings.ModeInfo
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 class PreferenceUtils(private val context: Context) {
     private val PREFS_NAME = "MyPrefs"
@@ -56,6 +58,21 @@ class PreferenceUtils(private val context: Context) {
     fun getIs12HourTimeFormat(): Boolean {
         Log.d("PreferenceUtils", "getIs12HourTimeFormat called: ${sharedPreferences.getBoolean("is_12_hour_time", true)}")
         return sharedPreferences.getBoolean("is_12_hour_time", true)
+    }
+
+    fun saveModeInfoList(modeInfoList: List<ModeInfo>) {
+        val json = gson.toJson(modeInfoList)
+        sharedPreferences.edit().putString("mode_info_list", json).apply()
+    }
+
+    fun getModeInfoList(): List<ModeInfo> {
+        val json = sharedPreferences.getString("mode_info_list", null)
+        return if (json.isNullOrEmpty()) {
+            emptyList()
+        } else {
+            val type = object : TypeToken<List<ModeInfo>>() {}.type
+            gson.fromJson(json, type)
+        }
     }
 
     // Save connection state (isConnected, deviceAddress, deviceName)

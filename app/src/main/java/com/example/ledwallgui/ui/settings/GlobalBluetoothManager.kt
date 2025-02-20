@@ -5,7 +5,6 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
-import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
@@ -25,12 +24,13 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import no.nordicsemi.android.kotlin.ble.client.main.callback.ClientBleGatt
 import no.nordicsemi.android.kotlin.ble.client.main.service.ClientBleGattCharacteristic
+import no.nordicsemi.android.kotlin.ble.client.main.service.ClientBleGattService
+import no.nordicsemi.android.kotlin.ble.core.RealServerDevice
 import no.nordicsemi.android.kotlin.ble.core.ServerDevice
 import no.nordicsemi.android.kotlin.ble.core.data.BleGattProperty
 import no.nordicsemi.android.kotlin.ble.core.data.util.DataByteArray
 import java.util.*  // e.g. for LinkedList if still needed
 import java.util.UUID
-import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
 
 
@@ -87,6 +87,9 @@ class GlobalBluetoothManager(
     private var parameterResponseCharacteristic: ClientBleGattCharacteristic? = null
     private var parameterControlCharacteristic: ClientBleGattCharacteristic? = null
 
+    // Cache the LED service for later use.
+    private var ledService: ClientBleGattService? = null
+
     // Additional state fields.
     private var ledParameters: Map<String, Any> = mutableMapOf()
     private var isRetrying: Boolean = false
@@ -126,14 +129,15 @@ class GlobalBluetoothManager(
         val service = services?.findService(LED_CONNECTION_SERVICE)
 
         if (service != null) {
-            // Use the Nordic findCharacteristic() method which returns a ClientBleGattCharacteristic.
+            // Use the Nordic findCharacteristic() method.
             ledModeListCharacteristic = service.findCharacteristic(LED_MODE_LIST_UUID)
             parameterResponseCharacteristic = service.findCharacteristic(PARAMETER_RESPONSE_UUID)
             parameterControlCharacteristic = service.findCharacteristic(PARAMETER_CONTROL_UUID)
 
             log(Log.DEBUG, "Found Service: ${service.uuid}")
             service.characteristics.forEach { characteristic ->
-                log(Log.DEBUG, "Characteristic Found: ${characteristic.uuid}")
+                log(Log.DEBUG, "Characteristic Found: ${characteristic.uuid} " +
+                        "Properties: ${characteristic.properties}")
             }
         } else {
             log(Log.WARN, "LED_CONNECTION_SERVICE not found")
@@ -160,7 +164,6 @@ class GlobalBluetoothManager(
             log(Log.DEBUG, "Notification received: $response")
             processParameterResponse(response)
         }?.launchIn(CoroutineScope(Dispatchers.IO))
-        // Request an MTU update if needed. (Assuming requestMtu() is a suspend function.)
         clientBleGatt?.requestMtu(517)
     }
 
@@ -188,29 +191,14 @@ class GlobalBluetoothManager(
         }
 
         val modeData = rawData.split(";").filter { it.isNotBlank() }
-        log(Log.DEBUG, "Split mode data: $modeData")
-
         for (mode in modeData) {
-            log(Log.DEBUG, "Processing mode entry: $mode")
-
             val modeParts = mode.split(":")
             if (modeParts.size >= 2) {
                 val modeName = modeParts[0].trim()
                 val parametersString = modeParts[1].trim()
-
-                log(Log.DEBUG, "Extracted Mode Name: $modeName")
-                log(Log.DEBUG, "Raw Parameters String: $parametersString")
-
-                val parameterNames = parametersString.split(",")
-                    .map { it.trim() }
-                    .filter { it.isNotEmpty() }
-
-                log(Log.DEBUG, "Extracted Parameters: $parameterNames")
-
-                val parameterValues = mutableMapOf<String, String>()
-                val modeInfo = ModeInfo(modeName, parameterNames, parameterValues)
+                val parameterNames = parametersString.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                val modeInfo = ModeInfo(modeName, parameterNames, mutableMapOf())
                 modeInfoList.add(modeInfo)
-
                 log(Log.DEBUG, "Successfully parsed mode: $modeInfo")
             } else {
                 log(Log.ERROR, "Invalid mode format: $mode")
@@ -219,7 +207,11 @@ class GlobalBluetoothManager(
 
         val modeNames = modeInfoList.map { it.name }
         log(Log.DEBUG, "Final Parsed Mode Names: ${modeNames.joinToString(", ")}")
+
+        // Persist the mode list
+        prefs.saveModeInfoList(modeInfoList)
     }
+
 
     /**
      * Processes parameter response notifications.
@@ -261,8 +253,23 @@ class GlobalBluetoothManager(
         clearBuffer: Boolean = true,
         appendNullTerminator: Boolean = false
     ) {
-        if (!_isConnected) {
-            log(Log.WARN, "Not connected. Cannot send data.")
+        // Check the connection state from PreferenceUtils.
+        val (prefsConnected, _, _) = prefs.loadConnectionState()
+        if (!prefsConnected) {
+            log(Log.WARN, "Not connected (according to preferences). Cannot send data.")
+            return
+        }
+
+        // Use the cached LED service reference.
+        if (ledService == null) {
+            log(Log.WARN, "LED service is not available. Cannot send data.")
+            return
+        }
+
+        // Retrieve the Nordic characteristic.
+        val characteristic = ledService?.findCharacteristic(characteristicUUID)
+        if (characteristic == null) {
+            log(Log.WARN, "Characteristic not found for UUID: $characteristicUUID")
             return
         }
 
@@ -277,7 +284,7 @@ class GlobalBluetoothManager(
                     return@launch
                 }
 
-                // Retrieve the Nordic characteristic (of type ClientBleGattCharacteristic).
+                // Retrieve the Nordic characteristic.
                 val characteristic = service.findCharacteristic(characteristicUUID)
                 if (characteristic == null) {
                     log(Log.WARN, "Characteristic not found for UUID: $characteristicUUID")
@@ -286,8 +293,6 @@ class GlobalBluetoothManager(
 
                 // (Optional) Clear the characteristic's buffer.
                 if (clearBuffer) {
-                    // The Nordic library manages characteristic values internally.
-                    // If needed, you could write an empty DataByteArray.
                     characteristic.write(DataByteArray.from(*byteArrayOf()))
                     log(Log.DEBUG, "Buffer cleared for characteristic.")
                 }
@@ -309,7 +314,6 @@ class GlobalBluetoothManager(
             }
         }
     }
-
 
     /**
      * Generalized function for sending commands to the device.
@@ -382,8 +386,9 @@ class GlobalBluetoothManager(
      * Requests current values from the device.
      */
     suspend fun requestValues(context: Context, type: String, modeName: String) {
-        if (!_isConnected) {
-            log(Log.WARN, "Not connected to device")
+        val (prefsConnected, _, _) = prefs.loadConnectionState()
+        if (!prefsConnected) {
+            log(Log.WARN, "Not connected (according to preferences). Cannot send data.")
             return
         }
 
@@ -416,29 +421,56 @@ class GlobalBluetoothManager(
         }
     }
 
+//    private fun sendDisconnectCommand() {
+//        // Assuming you have defined a UUID for a disconnect command characteristic
+//        val disconnectCommand = "disconnect".toByteArray(Charsets.UTF_8)
+//        val disconnectCharacteristic = clientBleGatt?.getService(LED_CONNECTION_SERVICE)
+//            ?.findCharacteristic(DISCONNECT_UUID) // Define DISCONNECT_UUID accordingly
+//        disconnectCharacteristic?.let {
+//            it.value = disconnectCommand
+//            clientBleGatt?.writeCharacteristic(it)
+//        }
+//    }
+//
+//
+//    /**
+//     * Disconnects from the device.
+//     */
+//    @SuppressLint("MissingPermission")
+//    fun disconnect(context: Context) {
+//        log(Log.DEBUG, "disconnect called")
+//        try {
+//            // Step 1: Disable notifications
+//            clientBleGatt?.let { gatt ->
+//                ledModeListCharacteristic?.let { gatt.setCharacteristicNotification(it, false) }
+//                parameterResponseCharacteristic?.let { gatt.setCharacteristicNotification(it, false) }
+//            }
+//
+//            // Step 2: Optionally send a disconnect command to the Arduino
+//            sendDisconnectCommand()
+//
+//            // Step 3: Disconnect the BLE connection
+//            clientBleGatt?.disconnect()
+//
+//            // Depending on your BLE library, you may want to wait for the onConnectionStateChange callback
+//            // before calling close(). If needed, implement a callback that calls clientBleGatt?.close().
+//            clientBleGatt?.close()
+//
+//            // Clear local state
+//            currentGatt = null
+//            deviceAddress = null
+//            deviceName = null
+//            modeInfoList.clear()
+//            setConnectionState(false, null, null, context)
+//            prefs.saveDeviceAddress("")
+//        } catch (e: IOException) {
+//            log(Log.ERROR, "Error during disconnect: ${e.message}")
+//        } finally {
+//            shouldLoadSavedStatus = false
+//            log(Log.DEBUG, "Disconnected and resources cleared")
+//        }
+//    }
 
-    /**
-     * Disconnects from the device.
-     */
-    @SuppressLint("MissingPermission")
-    fun disconnect(context: Context) {
-        log(Log.DEBUG, "disconnect called")
-        try {
-            clientBleGatt?.disconnect()
-            clientBleGatt?.close()
-            currentGatt = null
-            deviceAddress = null
-            deviceName = null
-            modeInfoList.clear()
-            setConnectionState(false, null, null, context)
-            prefs.saveDeviceAddress("")
-        } catch (e: IOException) {
-            log(Log.ERROR, "Error during disconnect: ${e.message}")
-        } finally {
-            shouldLoadSavedStatus = false
-            log(Log.DEBUG, "Disconnected and resources cleared")
-        }
-    }
 
     /**
      * Helper: Retrieves a BluetoothDevice from an address.
@@ -490,19 +522,47 @@ class GlobalBluetoothManager(
                     log(Log.DEBUG, "MTU request successful, MTU size: $mtu")
 
                     // Discover services.
-                    val services = discoverServices()
-                    log(Log.DEBUG, "Services discovered: $services")
+                    val bleServices = discoverServices() // Returns ClientBleGattServices
+                    log(Log.DEBUG, "Services discovered: $bleServices")
+
+                    // Iterate over all services and their characteristics using for-loops.
+                    for (service in bleServices.services) {
+                        log(Log.DEBUG, "Discovered Service: ${service.uuid}")
+                        // Add the service's UUID.
+                        discoveredUUIDs.add(service.uuid)
+
+                        for (characteristic in service.characteristics) {
+                            log(
+                                Log.DEBUG,
+                                "Characteristic found: ${characteristic.uuid}, properties: ${characteristic.properties}"
+                            )
+                            discoveredUUIDs.add(characteristic.uuid)
+
+                            // Iterate over descriptors if available.
+                            for (descriptor in characteristic.descriptors) {
+                                log(Log.DEBUG, "Descriptor found: ${descriptor.uuid}")
+                                discoveredUUIDs.add(descriptor.uuid)
+                            }
+                        }
+                    }
 
                     // Retrieve required characteristics from the LED connection service.
-                    val service = services.findService(LED_CONNECTION_SERVICE)
-                    parameterResponseCharacteristic = service?.findCharacteristic(PARAMETER_RESPONSE_UUID)
-                    ledModeListCharacteristic = service?.findCharacteristic(LED_MODE_LIST_UUID)
+                    this.ledService = bleServices.findService(LED_CONNECTION_SERVICE)
+                    if (this.ledService != null) {
+                        parameterResponseCharacteristic = this.ledService?.findCharacteristic(PARAMETER_RESPONSE_UUID)
+                        ledModeListCharacteristic = this.ledService?.findCharacteristic(LED_MODE_LIST_UUID)
+                    } else {
+                        log(Log.WARN, "LED service not found in discovered services.")
+                    }
 
                     parameterResponseCharacteristic?.getNotifications()?.onEach { data ->
-                        log(Log.DEBUG, "Notification received for parameter response: ${data.value.toHexString()}")
+                        log(
+                            Log.DEBUG,
+                            "Notification received for parameter response: ${data.value.toHexString()}"
+                        )
                     }?.launchIn(this@launch) ?: log(Log.WARN, "Parameter response characteristic not found")
 
-                    // Optionally delay to allow notifications to settle.
+                    // Optional delay to allow notifications to settle.
                     delay(2000)
 
                     // Read LED mode list (assumed to be a suspend function returning Boolean).
@@ -510,6 +570,13 @@ class GlobalBluetoothManager(
 
                     withContext(Dispatchers.Main) {
                         if (success) {
+                            if (device is RealServerDevice) {
+                                setConnectionState(true, device.address, device.name, context)
+                                Log.d(TAG, "Setting connection state to true for device: ${device.name}")
+                            } else {
+                                // Fallback in case the device type is different.
+                                setConnectionState(true, null, device.name, context)
+                            }
                             Log.d(TAG, "Successfully read and processed LED mode list")
                         } else {
                             Log.e(TAG, "Failed to read LED mode list")
@@ -526,7 +593,6 @@ class GlobalBluetoothManager(
             }
         }
     }
-
 
     // Command Queue remains available if you need to serialize GATT operations.
     private val gattQueue = LinkedList<suspend () -> Unit>()
