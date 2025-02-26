@@ -313,15 +313,16 @@ class ConnectionActivity : AppCompatActivity() {
     private fun disconnectFromDevice() {
         Toast.makeText(this, "Disconnecting from Device...", Toast.LENGTH_SHORT).show()
 
-        // Call the GlobalBluetoothManager to disconnect
-//        globalBluetoothManager.disconnect(this)  // Pass context here
+        // Call the GlobalBluetoothManager to release the connection resources.
+        globalBluetoothManager.release(this)  // Pass context as needed
 
-        // Update UI to reflect disconnection
-        updateConnectionStatus("", false)  // Assume updateConnectionStatus can handle this
+        // Update UI to reflect disconnection.
+        updateConnectionStatus("", false)  // Assume updateConnectionStatus can handle disconnection state
 
-        // Optionally, show a toast or update the UI
+        // Optionally, show a toast or update additional UI elements.
         Toast.makeText(this, "Disconnected", Toast.LENGTH_SHORT).show()
     }
+
 
 
     @SuppressLint("MissingPermission")
