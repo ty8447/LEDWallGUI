@@ -5,14 +5,12 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -22,6 +20,8 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.widget.ImageButton
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -29,28 +29,34 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import androidx.core.app.ActivityCompat.requestPermissions
 import androidx.core.content.ContextCompat
-import androidx.core.content.ContextCompat.registerReceiver
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.ledwallgui.PreferenceUtils
 import com.example.ledwallgui.R
-import com.example.ledwallgui.ui.settings.GlobalBluetoothManager.deviceAddress
-import com.example.ledwallgui.ui.settings.GlobalBluetoothManager.isConnected
+import no.nordicsemi.android.kotlin.ble.core.RealServerDevice
 import java.util.UUID
 
 
 class ConnectionActivity : AppCompatActivity() {
-
+    private lateinit var globalBluetoothManager: GlobalBluetoothManager
     private lateinit var bluetoothAdapter: BluetoothAdapter
     private lateinit var deviceRecyclerView: RecyclerView
+    private lateinit var preferenceUtils: PreferenceUtils
+    private var connectState = false
     private lateinit var adapter: BluetoothDeviceAdapter
     private val handler = Handler(Looper.getMainLooper())
+    private val connectionCheckHandler = Handler(Looper.getMainLooper())
+    private val connectionCheckInterval = 15000L // Check every 5 seconds
     private var isScanning = false
     private lateinit var stateTextView: TextView
+    private lateinit var toggleUnnamedDevices: TextView
     private lateinit var statusTextView: TextView
     private lateinit var rescanButton: ImageButton
     private lateinit var scanProgressBar: ProgressBar
+    private var showUnnamedDevices = false
+    private var currentConnectionStatus = false
+    private var deviceAddress: String? = null
 
     companion object {
         private const val SCAN_PERIOD: Long = 30000 // 1 minute timeout
@@ -61,15 +67,19 @@ class ConnectionActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_connection_menu)
+        globalBluetoothManager = GlobalBluetoothManager(this)
         hideSystemUI()
-
+        preferenceUtils = PreferenceUtils(this)
         rescanButton = findViewById(R.id.rescanButton)
         scanProgressBar = findViewById(R.id.scanProgressBar)
+        toggleUnnamedDevices = findViewById(R.id.textView2)
         stateTextView = findViewById(R.id.textView4)
         statusTextView = findViewById(R.id.textView3)
+        currentConnectionStatus = connectState
+        deviceAddress = globalBluetoothManager.deviceAddress
 
         Log.d("ConnectionActivity0", "Current stateTextView value: $stateTextView")
-        Log.d("ConnectionActivity0", "Current isConnected value: $isConnected")
+        Log.d("ConnectionActivity0", "Current isConnected value: $currentConnectionStatus")
         Log.d("ConnectionActivity0", "Current deviceAddress value: $deviceAddress")
 
         // Initialize Bluetooth Adapter
@@ -88,9 +98,9 @@ class ConnectionActivity : AppCompatActivity() {
 
         if (isFirstRun) {
             // Reset variables
-            isConnected = false
+            currentConnectionStatus = false
             deviceAddress = null
-            GlobalBluetoothManager.deviceName = null
+            globalBluetoothManager.deviceName = null
 
             // Set isFirstRun to false
             with(sharedPreferences.edit()) {
@@ -115,12 +125,10 @@ class ConnectionActivity : AppCompatActivity() {
         registerReceiver(uuidReceiver, filter)
 
         Log.d("ConnectionActivity1", "Current stateTextView value: $stateTextView")
-        Log.d("ConnectionActivity1", "Current isConnected value: $isConnected")
+        Log.d("ConnectionActivity1", "Current isConnected value: $currentConnectionStatus")
         Log.d("ConnectionActivity1", "Current deviceAddress value: $deviceAddress")
 
-        // Load saved connection status and update UI
-        val (deviceAddress, isConnected) = loadBluetoothConnection(this)
-        updateConnectionStatus(deviceAddress, isConnected)
+        startConnectionCheck()
 
         rescanButton.setOnClickListener {
             if(isScanning){
@@ -129,6 +137,18 @@ class ConnectionActivity : AppCompatActivity() {
             startBluetoothScan()
             }
         }
+
+        toggleUnnamedDevices.setOnLongClickListener {
+            // Toggle the state of the variable
+            showUnnamedDevices = !showUnnamedDevices
+
+            // Show a toast notification with the updated state
+            val status = if (showUnnamedDevices) "ON" else "OFF"
+            Toast.makeText(this, "Toggled Unnamed Devices to $status", Toast.LENGTH_SHORT).show()
+
+            true // Indicate the event has been handled
+        }
+
 
         // Initialize statusTextView here
         statusTextView =
@@ -140,7 +160,7 @@ class ConnectionActivity : AppCompatActivity() {
             findViewById(R.id.textView4) // Assuming textView3 is the ID of your status TextView
         stateTextView.text = "Disconnected" // Set initial text
         Log.d("ConnectionActivity2", "Current stateTextView value: $stateTextView")
-        Log.d("ConnectionActivity2", "Current isConnected value: $isConnected")
+        Log.d("ConnectionActivity2", "Current isConnected value: $connectState")
         Log.d("ConnectionActivity2", "Current deviceAddress value: $deviceAddress")
 
         // Now you can safely access bluetoothAdapter
@@ -176,7 +196,7 @@ class ConnectionActivity : AppCompatActivity() {
 
         stateTextView.setOnClickListener {
             Log.d("ConnectionActivity", "stateTextView clicked")
-            if (GlobalBluetoothManager.isConnected) {
+            if (connectState) {
                 Log.d("ConnectionActivity", "Disconnecting from device")
                 disconnectFromDevice()
             }
@@ -203,14 +223,15 @@ class ConnectionActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         unregisterReceiver(uuidReceiver)
+        stopConnectionCheck()
     }
 
     fun updateConnectionStatus(deviceAddress: String?, isConnected: Boolean) {
         Log.d("ConnectionActivity3", "Current stateTextView value: $stateTextView")
-        Log.d("ConnectionActivity3", "Current isConnected value: $isConnected")
+        Log.d("ConnectionActivity3", "Current isConnected value: $connectState")
         Log.d("ConnectionActivity3", "Current deviceAddress value: $deviceAddress")
         if (isConnected && deviceAddress != null) {
-            val deviceName = GlobalBluetoothManager.deviceName ?: deviceAddress
+            val deviceName = globalBluetoothManager.deviceName ?: deviceAddress
             Log.d("ConnectionActivity", "Updating connection status for device: $deviceName")
             stateTextView.text = "Connected to $deviceName"
             stateTextView.setTextColor(ContextCompat.getColor(this, R.color.green))
@@ -220,37 +241,69 @@ class ConnectionActivity : AppCompatActivity() {
         }
     }
 
-
     override fun onResume() {
         super.onResume()
         Log.d("ConnectionActivity4", "Current stateTextView value: $stateTextView")
-        Log.d("ConnectionActivity4", "Current isConnected value: $isConnected")
+        Log.d("ConnectionActivity4", "Current isConnected value: $currentConnectionStatus")
         Log.d("ConnectionActivity4", "Current deviceAddress value: $deviceAddress")
-        val (deviceAddress, isConnected) = loadBluetoothConnection(this)
-        GlobalBluetoothManager.isConnected = isConnected
-        GlobalBluetoothManager.deviceAddress = deviceAddress
+        val (deviceAddress, connectState) = loadBluetoothConnection(this)
+        currentConnectionStatus = connectState
+        globalBluetoothManager.deviceAddress = deviceAddress
+        startConnectionCheck()
+        updateConnectionStatus(deviceAddress, connectState)
+    }
 
-        updateConnectionStatus(deviceAddress, isConnected)
+    override fun onPause() {
+        super.onPause()
+        stopConnectionCheck()
+    }
+
+    private fun startConnectionCheck() {
+        connectionCheckHandler.post(object : Runnable {
+            override fun run() {
+                val (isConnected, deviceAddress, deviceName) = preferenceUtils.loadConnectionState()
+
+                Log.d("MainActivity", "Saved connection state: isConnected=$isConnected, deviceAddress=$deviceAddress, deviceName=$deviceName")
+
+                if (isConnected && !connectState && deviceAddress != null) {
+                    connectState = true
+                    val deviceName = globalBluetoothManager.deviceName ?: deviceAddress
+                    updateConnectionStatus(deviceName, true)
+                    Log.d("ConnectionActivity", "Updating connection status for device: $deviceName")
+                } else if (!isConnected && connectState){
+                    connectState = false
+                    updateConnectionStatus("", false)
+                    Log.d("MainActivity", "Bluetooth connection is not active")
+                } else {
+                    //Nothing Happens
+                }
+
+                connectionCheckHandler.postDelayed(this, connectionCheckInterval)
+            }
+        })
+    }
+
+    private fun stopConnectionCheck() {
+        connectionCheckHandler.removeCallbacksAndMessages(null)
     }
 
     fun loadBluetoothConnection(context: Context): Pair<String?, Boolean> {
         Log.d("ConnectionActivity5", "Current stateTextView value: $stateTextView")
-        Log.d("ConnectionActivity5", "Current isConnected value: $isConnected")
+        Log.d("ConnectionActivity5", "Current isConnected value: $currentConnectionStatus")
         Log.d("ConnectionActivity5", "Current deviceAddress value: $deviceAddress")
         val sharedPreferences = context.getSharedPreferences("BluetoothConnectionPrefs", Context.MODE_PRIVATE)
-        val shouldLoadSavedStatus = GlobalBluetoothManager.shouldLoadSavedStatus
+        val shouldLoadSavedStatus = globalBluetoothManager.shouldLoadSavedStatus
         if (shouldLoadSavedStatus) { // Check the condition
             // Load saved connection status
-            val deviceAddress = sharedPreferences.getString("deviceAddress", null)
-            val isConnected = sharedPreferences.getBoolean("isConnected", false)
+            deviceAddress = sharedPreferences.getString("deviceAddress", null)
             Log.d("ConnectionActivity5.1", "Current stateTextView value: $stateTextView")
-            Log.d("ConnectionActivity5.1", "Current isConnected value: $isConnected")
+            Log.d("ConnectionActivity5.1", "Current isConnected value: $connectState")
             Log.d("ConnectionActivity5.1", "Current deviceAddress value: $deviceAddress")
-            return Pair(deviceAddress, isConnected)
+            return Pair(deviceAddress, connectState)
         } else {
             // Return default values
             Log.d("ConnectionActivity5.2", "Current stateTextView value: $stateTextView")
-            Log.d("ConnectionActivity5.2", "Current isConnected value: $isConnected")
+            Log.d("ConnectionActivity5.2", "Current isConnected value: $currentConnectionStatus")
             Log.d("ConnectionActivity5.2", "Current deviceAddress value: $deviceAddress")
             return Pair(null, false)
         }
@@ -261,7 +314,7 @@ class ConnectionActivity : AppCompatActivity() {
         Toast.makeText(this, "Disconnecting from Device...", Toast.LENGTH_SHORT).show()
 
         // Call the GlobalBluetoothManager to disconnect
-        GlobalBluetoothManager.disconnect()
+//        globalBluetoothManager.disconnect(this)  // Pass context here
 
         // Update UI to reflect disconnection
         updateConnectionStatus("", false)  // Assume updateConnectionStatus can handle this
@@ -270,52 +323,43 @@ class ConnectionActivity : AppCompatActivity() {
         Toast.makeText(this, "Disconnected", Toast.LENGTH_SHORT).show()
     }
 
+
     @SuppressLint("MissingPermission")
     private fun connectAndValidateDevice(device: BluetoothDevice) {
-        Toast.makeText(this, "Connecting to Device...", Toast.LENGTH_SHORT).show() // Connecting message
+        Toast.makeText(this, "Connecting to Device...", Toast.LENGTH_SHORT).show()
         Log.d("ConnectionActivity6", "Current stateTextView value: $stateTextView")
-        Log.d("ConnectionActivity6", "Current isConnected value: $isConnected")
+        Log.d("ConnectionActivity6", "Current isConnected value: $currentConnectionStatus")
         Log.d("ConnectionActivity6", "Current deviceAddress value: $deviceAddress")
-        // Call the existing connection logic
-        GlobalBluetoothManager.connectToDevice(applicationContext, device, handler) { isConnected ->
-            runOnUiThread { // Run the following code on the main thread
-                if (isConnected) {
+
+        // Wrap the BluetoothDevice into a ServerDevice using RealServerDevice.
+        val serverDevice = RealServerDevice(device)
+
+        globalBluetoothManager.connectToDevice(applicationContext, serverDevice, handler) { success ->
+            runOnUiThread {
+                if (success) {
                     updateConnectionStatus(device.address, true)
-                    GlobalBluetoothManager.isConnected = true
+                    currentConnectionStatus = true
                     deviceAddress = device.address
-                    GlobalBluetoothManager.deviceName = device.name ?: "Unknown Device"
+                    globalBluetoothManager.deviceName = device.name ?: "Unknown Device"
+                    stopBluetoothScan()
 
-                    Toast.makeText(this, "Connected to ${device.name ?: "Unknown Device"}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        this,
+                        "Connected to ${device.name ?: "Unknown Device"}",
+                        Toast.LENGTH_SHORT
+                    ).show()
 
-                    // Get UUIDs from GlobalBluetoothManager
-                    val uuids = GlobalBluetoothManager.getDiscoveredUUIDs()
-                    Log.d("ConnectionActivity", "UUIDs from GlobalBluetoothManager: $uuids")
-                    if (uuids.isNotEmpty()) {
-                        for (uuid in uuids) {
-                            Log.d("ConnectionActivity", "UUID from connected device: $uuid")
-                        }
-
-                        // Check if a specific UUID is present
-                        val targetUUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef1") // Replace with your target UUID
-                        if (uuids.contains(targetUUID)) {
-                            Log.d("ConnectionActivity", "Target UUID found!")
-                            // Perform actions if the target UUID is found
-                        } else {
-                            Log.d("ConnectionActivity", "Target UUID not found.")
-                            // Perform actions if the target UUID is not found
-                        }
-                    } else {
-                        Log.w("ConnectionActivity", "No UUIDs found on the connected device.")
-                    }
+                    // Since GlobalBluetoothManager already validates the device via required characteristics,
+                    // there's no need to further check for discovered UUIDs here.
+                    // You can update your UI or save the connection state as needed.
                 } else {
                     Toast.makeText(this, "Failed to connect", Toast.LENGTH_SHORT).show()
+                    Log.e("ConnectionActivity", "Device connection failed or validation unsuccessful.")
                 }
             }
         }
-        Log.d("ConnectionActivity7", "Current stateTextView value: $stateTextView")
-        Log.d("ConnectionActivity7", "Current isConnected value: $isConnected")
-        Log.d("ConnectionActivity7", "Current deviceAddress value: $deviceAddress")
     }
+
 
     private fun checkPermissionsAndStartScan() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -379,7 +423,7 @@ class ConnectionActivity : AppCompatActivity() {
     @SuppressLint("MissingPermission")
     private fun startBluetoothScan() {
         Log.d("ConnectionActivity8", "Current stateTextView value: $stateTextView")
-        Log.d("ConnectionActivity8", "Current isConnected value: $isConnected")
+        Log.d("ConnectionActivity8", "Current isConnected value: $currentConnectionStatus")
         Log.d("ConnectionActivity8", "Current deviceAddress value: $deviceAddress")
         if (isScanning) return // If already scanning, do nothing
         Log.d("ConnectionActivity", "Starting Bluetooth scan...")
@@ -423,11 +467,14 @@ class ConnectionActivity : AppCompatActivity() {
                 val device: BluetoothDevice? =
                     intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                 device?.let {
-                    Log.d(
-                        "ConnectionActivity",
-                        "Device found: ${it.name ?: "Unknown Device"} - ${it.address}"
-                    )
-                    adapter.addDevice(it)
+                    if (showUnnamedDevices || !it.name.isNullOrEmpty()) {
+                        adapter.addDevice(it) // Add to the adapter if it matches the filter
+                        adapter.notifyDataSetChanged()
+                        Log.d(
+                            "ConnectionActivity",
+                            "Device found: ${it.name ?: "Unknown Device"} - ${it.address}"
+                        )
+                    }
                 }
             }
         }
@@ -453,12 +500,12 @@ class ConnectionActivity : AppCompatActivity() {
     }
 
     private fun hideSystemUI() {
-        window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE
-                or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                or View.SYSTEM_UI_FLAG_FULLSCREEN)
+        // Use WindowInsetsController for Android 11+
+        window.insetsController?.let { controller ->
+            controller.hide(WindowInsets.Type.systemBars()) // Hides status and navigation bars
+            controller.systemBarsBehavior =
+                WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE // Allows bars to reappear with a swipe
+        }
     }
 
     // Bluetooth Device Adapter
@@ -510,8 +557,8 @@ class ConnectionActivity : AppCompatActivity() {
         inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             private val deviceNameTextView: TextView =
                 itemView.findViewById(R.id.deviceNameTextView)
-            private val connectionStatusTextView: TextView =
-                itemView.findViewById(R.id.connectionStatusTextView)
+//            private val connectionStatusTextView: TextView =
+//                itemView.findViewById(R.id.connectionStatusTextView)
 //            private val deviceLayout: View = itemView.findViewById(R.id.deviceLayout)
 
             fun bind(device: BluetoothDevice) {
@@ -524,11 +571,11 @@ class ConnectionActivity : AppCompatActivity() {
                     }
 
                 // Update connection status text and color
-                val isConnected = deviceConnectionStatus[device.address] ?: false
-                connectionStatusTextView.text = if (isConnected) "Connected" else "Disconnected"
-                connectionStatusTextView.setTextColor(
-                    if (isConnected) Color.parseColor("#00FFFF") else Color.parseColor("#000000") // Aqua color for connected
-                )
+//                val isConnected = deviceConnectionStatus[device.address] ?: false
+//                connectionStatusTextView.text = if (isConnected) "Connected" else "Disconnected"
+//                connectionStatusTextView.setTextColor(
+//                    if (isConnected) Color.parseColor("#00FFFF") else Color.parseColor("#000000") // Aqua color for connected
+//                )
             }
 
             init {

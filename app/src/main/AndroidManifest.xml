@@ -2,24 +2,32 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature
         android:name="android.hardware.camera"
         android:required="false" />
 
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-
-
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:allowBackup="true"
@@ -31,17 +39,19 @@
         android:supportsRtl="true"
         android:theme="@style/DarkAppTheme"
         tools:targetApi="31">
+
         <activity
             android:name=".ui.SplashScreenActivity"
             android:exported="true"
-            android:theme="@style/Theme.Splash">
+            android:theme="@style/Theme.App.Starting"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <activity
+    <activity
             android:name="com.example.ledwallgui.ui.settings.settingsActivity"
             android:exported="false" />
         <activity
@@ -52,13 +62,12 @@
             android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen" />
 
         <activity
-            android:name="com.example.ledwallgui.ui.modes.modesActivity"
+            android:name="com.example.ledwallgui.ui.modes.ModesActivity"
             android:exported="false"
             android:label="@string/title_activity_modes"
-            android:theme="@style/Theme.LEDWallGUI"
-            android:screenOrientation="landscape" />
+            android:theme="@style/Theme.LEDWallGUI" />
         <activity
-            android:name="com.example.ledwallgui.ui.alarm.alarmEditorActivity"
+            android:name="com.example.ledwallgui.ui.alarm.AlarmEditorActivity"
             android:exported="false" />
         <activity
             android:name="com.example.ledwallgui.ui.settings.ConnectionActivity"
@@ -71,18 +80,28 @@
             android:exported="true"
             android:configChanges="keyboardHidden|orientation|screenSize"
             android:label="@string/app_name"
-            android:theme="@style/DarkAppTheme"
-            android:screenOrientation="landscape">
+            android:theme="@style/DarkAppTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <service
-            android:name="com.example.ledwallgui.TimeMonitoringService"
-            android:exported="false" />
         <service android:name=".ui.MotionDetectionService" />
+
+        <service
+            android:name=".services.BluetoothReconnectionService"
+            android:foregroundServiceType="connectedDevice"
+            android:exported="true" />
+
+        <service
+            android:name=".TimeMonitoringService"
+            android:exported="false" />
+
+        <receiver android:name=".ui.alarm.AlarmReceiver" />
+
+
+
     </application>
 
 </manifest>

@@ -1,125 +1,79 @@
 package com.example.ledwallgui
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
-import kotlinx.coroutines.*
-import java.time.Clock
-import java.time.Instant
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import java.util.Calendar
 
 class TimeMonitoringService : Service() {
-    private val clock: Clock = Clock.systemDefaultZone()
-    private var previousInstant: Instant = clock.instant()
+    private val handler = Handler(Looper.getMainLooper())
+    private var firstRun = true
 
-    private val serviceScope = CoroutineScope(Dispatchers.Default)
+    private val timeUpdateRunnable = object : Runnable {
+        override fun run() {
+            val currentTime = System.currentTimeMillis()
+            //Log.d("TimeMonitoringService", "Running timeUpdateRunnable at $currentTime")
 
-    override fun onBind(intent: Intent?): IBinder? {
-        return null
+            sendTimeUpdate()
+
+            val nextInterval = if (firstRun) {
+                firstRun = false
+                //Log.d("TimeMonitoringService", "First run complete. Switching to 15-second interval.")
+                15_000L // Set future updates to 15 seconds
+            } else {
+                15_000L
+            }
+
+            //Log.d("TimeMonitoringService", "Next update scheduled in ${nextInterval / 1000} seconds")
+            handler.postDelayed(this, nextInterval)
+        }
     }
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "TimeMonitoringService onCreate")
+        //Log.d("TimeMonitoringService", "Service Created.")
+
+        val initialDelay = calculateInitialDelay()
+        //Log.d("TimeMonitoringService", "Initial delay calculated: $initialDelay ms before first broadcast.")
+
+        // Start the first execution with the calculated delay
+        handler.postDelayed(timeUpdateRunnable, initialDelay)
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Check if the device is running Android Q or higher
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val hasForegroundServicePermission = checkForegroundServicePermission()
+    private fun sendTimeUpdate() {
+        val currentTime = System.currentTimeMillis()
+        //Log.d("TimeMonitoringService", "Sending time update broadcast: $currentTime")
 
-            if (!hasForegroundServicePermission) {
-                // Request the FOREGROUND_SERVICE permission
-                requestForegroundServicePermission()
-                // Return START_NOT_STICKY or other appropriate value
-                return START_NOT_STICKY
-            }
-        }
+        val intent = Intent("com.example.ledwallgui.TIME_UPDATE")
+        intent.putExtra("current_time", currentTime)
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
 
-        createNotificationChannel() // Create notification channel
-        val notification = createNotification()
-        startForeground(NOTIFICATION_ID, notification)
-        startMonitoringTimeChanges()
-        return START_STICKY
+        //Log.d("TimeMonitoringService", "Broadcast sent successfully.")
     }
 
-    private fun checkForegroundServicePermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            this,
-            android.Manifest.permission.FOREGROUND_SERVICE
-        ) == PackageManager.PERMISSION_GRANTED
-    }
+    private fun calculateInitialDelay(): Long {
+        val calendar = Calendar.getInstance()
+        val seconds = calendar.get(Calendar.SECOND)
+        val milliseconds = calendar.get(Calendar.MILLISECOND)
+        val remainingMillis = ((60 - seconds) * 1000L) - milliseconds
 
-    private fun requestForegroundServicePermission() {
-        val permissionIntent = Intent(this, PermissionRequestActivity::class.java)
-        permissionIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        startActivity(permissionIntent)
+        //Log.d("TimeMonitoringService", "Current time: ${calendar.time}")
+        //Log.d("TimeMonitoringService", "Current seconds: $seconds, Remaining milliseconds until next minute: $remainingMillis")
+
+        return remainingMillis
     }
 
     override fun onDestroy() {
+        //Log.d("TimeMonitoringService", "Service is being destroyed. Removing callbacks.")
+        handler.removeCallbacks(timeUpdateRunnable)
         super.onDestroy()
-        serviceScope.cancel()
-        Log.d(TAG, "TimeMonitoringService onDestroy")
     }
 
-    private fun startMonitoringTimeChanges() {
-        serviceScope.launch {
-            while (true) {
-                val currentInstant = clock.instant()
-                if (currentInstant != previousInstant) {
-                    updateUI()
-                    // Update previousInstant
-                    previousInstant = currentInstant
-                }
-                delay(5000) // Adjust the delay as needed
-            }
-        }
-    }
-
-    private fun updateUI() {
-        // Update UI logic here, e.g., send a broadcast or update a LiveData value
-        // You can use LocalBroadcastManager or ViewModel for UI updates
-        Log.d(TAG, "TimeMonitoringService updateUI")
-        val intent = Intent(ACTION_TIME_CHANGED)
-        sendBroadcast(intent)
-    }
-
-    private fun createNotification(): Notification {
-        // Create and return a foreground notification
-        // Customize the notification content based on your requirements
-        // Make sure to set a valid notification channel for Android 8.0+
-        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("Foreground Service")
-            .setContentText("Monitoring Time Changes")
-            .setSmallIcon(R.drawable.icon) // Replace with your notification icon
-            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE) // Add visibility setting
-            .build()
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID,
-                "Time Monitoring Channel",
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager?.createNotificationChannel(channel)
-        }
-    }
-
-    companion object {
-        private const val TAG = "TimeMonitoringService"
-        private const val NOTIFICATION_ID = 1
-        private const val NOTIFICATION_CHANNEL_ID = "TimeMonitoringChannel"
-        const val ACTION_TIME_CHANGED = "com.example.ledwallgui.ui.alarm.ACTION_TIME_CHANGED"
+    override fun onBind(intent: Intent?): IBinder? {
+        return null
     }
 }

@@ -1,749 +1,828 @@
 package com.example.ledwallgui.ui.alarm
 
-import com.example.ledwallgui.TimeMonitoringService
+import android.Manifest
+import android.animation.ObjectAnimator
 import android.app.Activity
+import android.app.ActivityManager
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.text.Html
+import android.provider.Settings
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.view.WindowManager
-import android.view.animation.AnimationUtils
 import android.widget.Button
-import android.widget.CheckBox
+import android.widget.FrameLayout
 import android.widget.ImageButton
-import android.widget.Switch
 import android.widget.TextView
-import androidx.activity.result.launch
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import android.widget.Switch
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.semantics.text
+import androidx.core.app.ActivityCompat
 import androidx.core.app.ActivityCompat.startActivityForResult
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.DiffUtil
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.example.ledwallgui.MainActivity
+import com.example.ledwallgui.PreferenceUtils
 import com.example.ledwallgui.R
-import com.example.ledwallgui.ui.AlarmAlertActivity
-import jp.wasabeef.recyclerview.animators.SlideInUpAnimator
+import com.example.ledwallgui.TimeMonitoringService
+import com.example.ledwallgui.ui.alarm.AlarmActivity.Companion.REQUEST_CODE_ADD_ALARM
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
-import java.time.Clock
-import java.time.Instant
-import java.util.concurrent.CopyOnWriteArrayList
-
+import com.google.gson.Gson
+import com.google.gson.JsonSyntaxException
+import com.google.gson.reflect.TypeToken
 
 class AlarmActivity : AppCompatActivity() {
+
     private lateinit var alarmAdapter: AlarmAdapter
     private lateinit var cancelButton: Button
     private lateinit var offButton: Button
     private lateinit var deleteButton: Button
+    private lateinit var addAlarmButton: Button
     private lateinit var emptyTextView: TextView
-    private var shouldUpdateList =
-        intent?.getBooleanExtra("updatelist", false) ?: false // Retrieve the updatelist value
-    private val selectedAlarmIndices = mutableListOf<Int>() // Array to store selected alarm indices
-    private var use12HourTimeFormat = false // Initialize with default value
-    private val daysOfWeek = mutableListOf<String>()
-    private val mondayStart = true
     private lateinit var alarmsRecyclerView: RecyclerView
-    val clock: Clock = Clock.systemDefaultZone()
-    private var previousInstant: Instant = clock.instant()
-    private val alarms: MutableList<Alarm> = mutableListOf()
-    private val updateIntervalMillis: Long = 30000 // Update every minute
-    private val handler = Handler()
     private lateinit var timeTillNext: TextView
     private lateinit var currentTime: TextView
-    private val timeChangeReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == TimeMonitoringService.ACTION_TIME_CHANGED) {
-                // Update the UI or perform any necessary actions
-                updateCurrentTime()
-                findNextAlarm()
-            }
-        }
+    private lateinit var doneButton: Button
+    private val PERMISSIONREQUESTCODE = 1001
+
+    private lateinit var preferenceUtils: PreferenceUtils // Declare preferenceUtils
+
+    private val sharedPreferencesName = "alarm_prefs"
+    private val alarmsKey = "alarms_list"
+    private val snoozedAlarmsKey = "snoozedAlarms"
+    private lateinit var gson: Gson
+
+    private lateinit var serviceIntent: Intent
+
+    private val alarms = mutableListOf<Alarm>()
+    private var isDeleteMode = false // Track delete mode
+
+    private var use12HourTimeFormat: Boolean = false
+
+    companion object {
+        const val REQUEST_CODE_ADD_ALARM = 101
+        const val EDIT_ALARM_REQUEST_CODE = 1001
     }
 
-    private fun onAlarmToggle(position: Int) {
-        if (!alarmAdapter.isToggling) {
-            alarms[position].isEnabled = !alarms[position].isEnabled
-            if (alarms.isNotEmpty()) {
-                alarmAdapter.submitList(alarms.toList()) {
-                    Log.d("AlarmActivity", "Adapter updated in onCreate lifecycleScope")
+    // Broadcast receiver to receive time updates
+    private val timeUpdateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            //Log.d("AlarmActivity", "onReceive called via LocalBroadcastManager")
+            if (intent?.action == "com.example.ledwallgui.TIME_UPDATE") {
+                val currentTimeMillis = intent.getLongExtra("current_time", 0L)
+                //Log.d("AlarmActivity", "Received time update: $currentTimeMillis")
+                runOnUiThread {
+                    updateCurrentTime()
                 }
             }
-            findNextAlarm()
         }
-    }
-
-    private fun loadData(): Collection<Alarm> {
-        // Your data loading logic here (e.g., from database)
-        // ...
-        return listOf<Alarm>(/* ... your alarm data ... */)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        requestWindowFeature(Window.FEATURE_NO_TITLE) // Hide the title bar
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_FULLSCREEN, // Hide the status bar
-            WindowManager.LayoutParams.FLAG_FULLSCREEN
-        )
-        setContentView(R.layout.activity_alarm_menu)
-        Log.d("AlarmActivity", "onCreate: Activity started")
-        alarmsRecyclerView = findViewById(R.id.alarmsRecyclerView)
-        hideSystemUI()
-        timeTillNext = findViewById(R.id.timeTillNext)
-        currentTime = findViewById(R.id.currentTime)
-        updateCurrentTime()
+        Log.d("AlarmActivity", "onCreate called")
+        gson = Gson() // Initialize Gson
+        preferenceUtils = PreferenceUtils(this) // Initialize preferenceUtils here
+        use12HourTimeFormat = preferenceUtils.getIs12HourTimeFormat() // Load preference
+        setupUI()
+        configureSharedPreferences()
 
-        val sharedPreferences = getSharedPreferences("settings_prefs", Context.MODE_PRIVATE)
+        // Check and request permission for foreground service data sync
+        checkAndRequestPermission()
 
-// Get time format option
-        val timeFormatOption =
-            sharedPreferences.getInt("time_format_option", 0) // Default to 0 if not found
+        // Load alarms on activity start
+        val loadedAlarms = loadAlarms()
+        alarms.clear() // Clear the current alarms list
+        alarms.addAll(loadedAlarms) // Add loaded alarms
+        alarmAdapter.notifyDataSetChanged() // Notify the adapter that the data has changed
+        //Log.d("AlarmActivity", "time format: $use12HourTimeFormat")
+        updateEmptyState()
 
-// Set use12HourTimeFormat based on time format option
-        use12HourTimeFormat = when (timeFormatOption) {
-            0 -> { // Match Device
-                !android.text.format.DateFormat.is24HourFormat(this)
-            }
+        val filter = IntentFilter("com.example.ledwallgui.TIME_UPDATE")
+        LocalBroadcastManager.getInstance(this).registerReceiver(timeUpdateReceiver, filter)
+        removeExpiredSnoozedAlarms()
+    }
 
-            1 -> { // 12 Hour
-                true
-            }
+    private fun removeExpiredSnoozedAlarms() {
+        val sharedPreferences = getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)
+        val snoozedAlarmsJson = sharedPreferences.getString(snoozedAlarmsKey, "[]")
+        val snoozedAlarms: MutableList<SnoozedAlarm> = try {
+            gson.fromJson(snoozedAlarmsJson, object : TypeToken<MutableList<SnoozedAlarm>>() {}.type)
+        } catch (e: JsonSyntaxException) {
+            mutableListOf()
+        }
 
-            2 -> { // 24 Hour
-                false
-            }
+        val currentTimeMillis = System.currentTimeMillis()
+        val iterator = snoozedAlarms.iterator()
 
-            else -> { // Default to Match Device
-                !android.text.format.DateFormat.is24HourFormat(this)
+        while (iterator.hasNext()) {
+            val snoozedAlarm = iterator.next()
+            if (currentTimeMillis - snoozedAlarm.snoozeTime >= 5 * 60 * 1000) { // 5 minutes in milliseconds
+                Log.d("AlarmActivity", "Removing expired snoozed alarm with ID: ${snoozedAlarm.id}")
+                iterator.remove()
             }
         }
 
-        val backButton: ImageButton = findViewById(R.id.aBackButton)
-        cancelButton = findViewById(R.id.cancelButton)
-        offButton = findViewById(R.id.offButton)
-        deleteButton = findViewById(R.id.deleteButton)
-        emptyTextView = findViewById(R.id.emptyTextView)
-        val addAlarm: Button = findViewById(R.id.addAlarm)
-        val alarmsRecyclerView = findViewById<RecyclerView>(R.id.alarmsRecyclerView)
-        alarmAdapter = AlarmAdapter(
-            alarms,
-            ::viewAlarmDetails,
-            use12HourTimeFormat,
-            //shouldUpdateList,
-            cancelButton,
-            offButton,
-            deleteButton,
-            selectedAlarmIndices,
-            daysOfWeek,
-            ::findNextAlarm,
-            ::toggleAlarmEnabled,
-            this::onAlarmToggle
-        )
-
-        alarmsRecyclerView.adapter = alarmAdapter
-
-        // Log initial alarms setup
-        val initialList = intent.getParcelableArrayListExtra<Alarm>("alarmsList")
-        Log.d("AlarmActivity", "Initial list received: ${initialList?.size} items")
-        if (initialList != null) {
-            alarmAdapter.submitList(initialList)
-            Log.d("AlarmActivity", "Adapter initialized with initial list")
-        } else {
-            Log.d("AlarmActivity", "Initial list is null or empty")
-        }
-
-        alarmsRecyclerView.itemAnimator = SlideInUpAnimator()
-        alarmsRecyclerView.layoutManager = LinearLayoutManager(this)
-        alarmsRecyclerView.post {
-            lifecycleScope.launch {
-                val loadedAlarms = withContext(Dispatchers.IO) {
-                    loadData() // Your data loading logic
-                }
-                alarms.addAll(loadedAlarms)
-                if (alarms.isNotEmpty()) {
-                    alarmAdapter.submitList(alarms.toList()) {
-                        Log.d("AlarmActivity", "Adapter updated in onCreate lifecycleScope")
-                    }
-                }
-            }
-        }
-
-        updateEmptyTextViewVisibility()
-        Log.d("ALARM UPDATER", "List Updated? 68: $shouldUpdateList")
-
-        backButton.setOnClickListener {
-            returnHome()
-        }
-
-
-
-        if (mondayStart) {
-            daysOfWeek.addAll(listOf("M", "T", "W", "T", "F", "S", "S"))
-        } else {
-            daysOfWeek.addAll(listOf("S", "M", "T", "W", "T", "F", "S"))
-        }
-
-        Log.d("Days of Week Order", "$daysOfWeek")
-        cancelButton.setOnClickListener {
-            offButton.visibility = View.GONE
-            cancelButton.visibility = View.GONE
-            deleteButton.visibility = View.GONE
-            alarms.forEach { it.showCheckbox = false }
-            Log.d("Array Notif", "List of Selected Items: $selectedAlarmIndices")
-            //  selectedAlarmIndices.clear() // Clear the list of selected indice
-            updateEmptyTextViewVisibility()
-            Log.d("ALARM UPDATER", "List Updated? 83: $shouldUpdateList")
-        }
-        offButton.setOnClickListener {
-            alarms.forEachIndexed { index, alarm ->
-                if (alarm.isSelected) {
-                    alarm.isEnabled = false
-                }
-            }
-            offButton.visibility = View.GONE
-            cancelButton.visibility = View.GONE
-            deleteButton.visibility = View.GONE
-            alarms.forEach { it.showCheckbox = false }
-            Log.d("ALARM UPDATER", "List Updated? 91: $shouldUpdateList")
-            Log.d("ALARM UPDATER", "List Size? 92: $alarms.size")
-            if (alarms.isNotEmpty()) {
-                alarmAdapter.submitList(alarms.toList()) {
-                    Log.d("AlarmActivity", "Adapter updated in onCreate lifecycleScope")
-                }
-            }
-        }
-        deleteButton.setOnClickListener {
-            selectedAlarmIndices.sortedDescending().forEach { index ->
-                alarms.removeAt(index)
-            }
-
-            // Adjust indices in the selectedAlarmIndices list after removing alarms
-            selectedAlarmIndices.clear()
-            alarms.forEachIndexed { index, alarm ->
-                if (alarm.isSelected) {
-                    selectedAlarmIndices.add(index)
-                }
-            }
-
-            offButton.visibility = View.GONE
-            cancelButton.visibility = View.GONE
-            deleteButton.visibility = View.GONE
-            alarms.forEach { it.showCheckbox = false }
-            Log.d("ALARM UPDATER", "List Updated? 116: $shouldUpdateList")
-            updateEmptyTextViewVisibility()
-            findNextAlarm()
-        }
-        addAlarm.setOnClickListener {
-            val intent = Intent(this, alarmEditorActivity::class.java)
-            intent.putParcelableArrayListExtra(
-                "alarmsList",
-                ArrayList(alarms)
-            ) // Pass the alarms list
-            intent.putExtra("use12HourTimeFormat", use12HourTimeFormat)
-            intent.putExtra("isEditMode", false) // Indicate it's for creating a new alarm
-            intent.putExtra(
-                "editorNameText",
-                "Create Alarm"
-            ) // Pass the text to display in the editor
-            Log.d("AlarmActivity", "Add Alarm Button Pressed")
-            offButton.visibility = View.GONE
-            cancelButton.visibility = View.GONE
-            deleteButton.visibility = View.GONE
-            alarms.forEach { it.showCheckbox = false }
-            startActivityForResult(intent, EDIT_ALARM_REQUEST_CODE)
-            if (alarms.isNotEmpty()) {
-                alarmAdapter.submitList(alarms.toList()) {
-                    Log.d("AlarmActivity", "Adapter updated after adding alarm")
-                }
-            }
-            Log.d("ALARM UPDATER", "List Updated? 132: $shouldUpdateList")
-            updateEmptyTextViewVisibility()
-        }
-        val filter = IntentFilter(TimeMonitoringService.ACTION_TIME_CHANGED)
-        registerReceiver(timeChangeReceiver, filter)
-        startService()
+        // Save updated snoozed alarms list
+        val updatedSnoozedAlarmsJson = gson.toJson(snoozedAlarms)
+        sharedPreferences.edit().putString(snoozedAlarmsKey, updatedSnoozedAlarmsJson).apply()
     }
 
 
-    private fun startService() {
-        val serviceIntent = Intent(this, TimeMonitoringService::class.java)
-        startService(serviceIntent)
+    private fun checkAndRequestPermission() {
+        //Log.d("AlarmActivity", "Checking permissions...")
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.FOREGROUND_SERVICE_DATA_SYNC
+            ) == PackageManager.PERMISSION_GRANTED) {
+            //Log.d("AlarmActivity", "Permission granted.")
+        } else {
+            // Permission is not granted, so request it
+            //Log.d("AlarmActivity", "Permission not granted. Requesting...")
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.FOREGROUND_SERVICE_DATA_SYNC),
+                PERMISSIONREQUESTCODE
+            )
+        }
+    }
+
+    // Handle permission request result
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        when (requestCode) {
+            PERMISSIONREQUESTCODE -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // Permission granted
+                    //Log.d("AlarmActivity", "Permission granted for foreground service data sync.")
+                } else {
+                    // Permission denied
+                    //Log.d("AlarmActivity", "Permission denied for foreground service data sync.")
+                }
+            }
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        val intentFilter = IntentFilter(TimeMonitoringService.ACTION_TIME_CHANGED)
-        registerReceiver(updateUIReceiver, intentFilter)
-        // Update the adapter and any other necessary UI updates
-        if (alarms.isNotEmpty()) {
-            alarmAdapter.submitList(alarms.toList()) {
-                Log.d("AlarmActivity", "Adapter refreshed in onResume")
-            }
+        Log.d("AlarmActivity", "onResume called")
+        val filter = IntentFilter("com.example.ledwallgui.TIME_UPDATE")
+        LocalBroadcastManager.getInstance(this).registerReceiver(timeUpdateReceiver, filter)
+        use12HourTimeFormat = preferenceUtils.getIs12HourTimeFormat() // Reload preference
+        alarmAdapter.use12HourTimeFormat = use12HourTimeFormat // Update adapter
+        // Check and request permission for foreground service data sync
+        checkAndRequestPermission()
+        refreshAlarms()
+        updateCurrentTime()
+        updateEmptyState()
+        updateTimeTillNextAlarm()
+
+        // Always start the time monitoring service when the activity is visible.
+        startTimeMonitoringService()
+
+        // Log the list of snoozed alarms
+        val sharedPreferences = getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)
+        val snoozedAlarmsJson = sharedPreferences.getString(snoozedAlarmsKey, "[]")
+        val snoozedAlarms: MutableList<SnoozedAlarm> = try {
+            gson.fromJson(snoozedAlarmsJson, object : TypeToken<MutableList<SnoozedAlarm>>() {}.type)
+        } catch (e: JsonSyntaxException) {
+            Log.e("AlarmActivity", "Error parsing snoozed alarms JSON", e)
+            mutableListOf()
         }
+
+        Log.d("AlarmActivity", "Snoozed Alarms List: ${snoozedAlarms.map { "ID: ${it.id}, Snooze Time: ${it.snoozeTime}" }}")
+
     }
 
     override fun onPause() {
         super.onPause()
-        // Unregister the BroadcastReceiver when the activity is paused
-        unregisterReceiver(updateUIReceiver)
+        Log.d("AlarmActivity", "onPause called")
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(timeUpdateReceiver)
+        if (alarms.isEmpty()) {
+            stopTimeMonitoringService()
+        }
+    }
+
+    private fun startTimeMonitoringService() {
+        serviceIntent = Intent(this, TimeMonitoringService::class.java)
+                if (!isServiceRunning(TimeMonitoringService::class.java)) {
+            Log.d("MainActivity", "TimeMonitoringService is not running, starting it now.")
+            serviceIntent = Intent(this, TimeMonitoringService::class.java)
+            startService(serviceIntent)
+        } else {
+            Log.d("MainActivity", "TimeMonitoringService is already running.")
+        }
+    }
+
+    private fun isServiceRunning(serviceClass: Class<*>): Boolean {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        for (service in activityManager.getRunningServices(Int.MAX_VALUE)) {
+            if (serviceClass.name == service.service.className) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun stopTimeMonitoringService() {
+        serviceIntent = Intent(this, TimeMonitoringService::class.java)
+        stopService(serviceIntent)
+        Log.d("AlarmActivity", "TimeMonitoringService stopped")
+    }
+
+    private fun refreshAlarms() {
+        lifecycleScope.launch {
+            val loadedAlarms = withContext(Dispatchers.IO) { loadAlarms() }
+            alarms.clear() // Clear the existing list
+            alarms.addAll(loadedAlarms) // Add the new alarms
+            alarmAdapter.notifyDataSetChanged() // Notify the adapter
+        }
+    }
+
+    private fun setupUI() {
+        requestWindowFeature(Window.FEATURE_NO_TITLE)
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_FULLSCREEN,
+            WindowManager.LayoutParams.FLAG_FULLSCREEN
+        )
+        setContentView(R.layout.activity_alarm_menu)
+
+        alarmsRecyclerView = findViewById(R.id.alarmsRecyclerView)
+        timeTillNext = findViewById(R.id.timeTillNext)
+        currentTime = findViewById(R.id.currentTime)
+        cancelButton = findViewById(R.id.cancelButton)
+        offButton = findViewById(R.id.offButton)
+        deleteButton = findViewById(R.id.deleteButton)
+        emptyTextView = findViewById(R.id.emptyTextView)
+        addAlarmButton = findViewById(R.id.addAlarmButton)
+        doneButton = findViewById(R.id.doneButton)
+        val backButton: ImageButton = findViewById(R.id.aBackButton) // Find the button
+
+        hideSystemUI()
+        updateCurrentTime()
+
+        // Slide in animation
+        val slideIn = ObjectAnimator.ofFloat(doneButton, "translationY", 1000f, 0f)
+        slideIn.duration = 500 // Duration of animation (in milliseconds)
+        slideIn.start()
+
+        alarmAdapter = AlarmAdapter(
+            alarms,
+            { clickedAlarm -> viewAlarmDetails(clickedAlarm) },
+            use12HourTimeFormat,
+            { saveAlarms() },
+            isDeleteMode,
+            { updateEmptyState() }, // Pass the updateEmptyState method
+            { saveAlarms() }, // Pass the saveAlarms method
+            { updateTimeTillNextAlarm()}, //Pass the updateTimeTillNextAlarm method
+            { alarm, context -> scheduleAlarm(alarm, context) }
+        )
+
+        alarmsRecyclerView.adapter = alarmAdapter
+        alarmsRecyclerView.layoutManager = LinearLayoutManager(this)
+
+        alarmAdapter.setOnItemLongClickListener { position ->
+            enableDeleteMode(position)
+        }
+        addAlarmButton.setOnClickListener { addNewAlarm() }
+
+        // Set the back button click listener
+        backButton.setOnClickListener {
+            finish() // End the activity and go back
+        }
+
+        doneButton.setOnClickListener {
+            doneButton()
+        }
+    }
+
+    private fun doneButton() {
+        isDeleteMode = false
+        alarmAdapter.isDeleteMode = isDeleteMode // Update delete mode in the adapter
+        alarmAdapter.notifyDataSetChanged() // Refresh the RecyclerView
+        doneButton.visibility = View.GONE // Hide Done button after exiting delete mode
+    }
+
+    private fun updateTimeTillNextAlarm() {
+//        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Starting updateTimeTillNextAlarm")
+        val currentTime = Calendar.getInstance()
+//        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Current time: ${currentTime.time}")
+        val allAlarms = mutableListOf<Pair<Calendar, String>>() // List to hold alarm times and names
+
+        // Function to process alarms and add them to the list
+        fun processAlarms(alarms: List<Alarm>, isSnoozed: Boolean = false) {
+//            Log.d("AlarmActivity", "processAlarms: Processing ${if (isSnoozed) "snoozed" else "regular"} alarms")
+            alarms.filter { it.isEnabled }.forEach { alarm ->
+//                Log.d("AlarmActivity", "processAlarms: Processing alarm: ${alarm.alarmName}, isEnabled: ${alarm.isEnabled}")
+                val alarmTime = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, alarm.hours)
+                    set(Calendar.MINUTE, alarm.minutes)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+//                Log.d("AlarmActivity", "processAlarms: Initial alarm time for ${alarm.alarmName}: ${alarmTime.time}")
+
+                val currentDayIndex = currentTime.get(Calendar.DAY_OF_WEEK) - 1
+//                Log.d("AlarmActivity", "processAlarms: Current day index: $currentDayIndex")
+                val selectedDays = alarm.selectedDays
+//                Log.d("AlarmActivity", "processAlarms: Selected days for ${alarm.alarmName}: ${selectedDays.joinToString()}")
+
+                if (!selectedDays.contains(true)) {
+//                    Log.d("AlarmActivity", "processAlarms: No repeating days selected for ${alarm.alarmName}")
+                    if (alarmTime.before(currentTime)) {
+//                        Log.d("AlarmActivity", "processAlarms: Alarm time for ${alarm.alarmName} is before current time, adding 1 day")
+                        alarmTime.add(Calendar.DAY_OF_YEAR, 1)
+                    }
+//                    Log.d("AlarmActivity", "processAlarms: Adding ${alarm.alarmName} to allAlarms with time: ${alarmTime.time}")
+                    allAlarms.add(Pair(alarmTime, alarm.alarmName))
+                    return@forEach
+                }
+
+                var daysToAdd = 0
+                while (!selectedDays[(currentDayIndex + daysToAdd) % 7]) {
+//                    Log.d("AlarmActivity", "processAlarms: Incrementing daysToAdd for ${alarm.alarmName}: $daysToAdd")
+                    daysToAdd++
+                    if (daysToAdd > 7) {
+//                        Log.d("AlarmActivity", "processAlarms: No valid day found for ${alarm.alarmName}, skipping")
+                        return@forEach
+                    }
+                }
+
+                if (daysToAdd == 0 && alarmTime.before(currentTime)) {
+//                    Log.d("AlarmActivity", "processAlarms: ${alarm.alarmName} is for today, but the time has passed")
+                    daysToAdd = 1
+                    while (!selectedDays[(currentDayIndex + daysToAdd) % 7]) {
+//                        Log.d("AlarmActivity", "processAlarms: Incrementing daysToAdd for passed time on ${alarm.alarmName}: $daysToAdd")
+                        daysToAdd++
+                        if (daysToAdd > 7) {
+//                            Log.d("AlarmActivity", "processAlarms: No valid future day found for ${alarm.alarmName}, skipping")
+                            return@forEach
+                        }
+                    }
+                }
+
+//                Log.d("AlarmActivity", "processAlarms: Final daysToAdd for ${alarm.alarmName}: $daysToAdd")
+                alarmTime.add(Calendar.DAY_OF_YEAR, daysToAdd)
+//                Log.d("AlarmActivity", "processAlarms: Adjusted alarm time for ${alarm.alarmName}: ${alarmTime.time}")
+                allAlarms.add(Pair(alarmTime, alarm.alarmName))
+            }
+        }
+
+        // Process regular alarms
+//        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Processing regular alarms")
+        processAlarms(alarms)
+
+        // Retrieve existing snoozed alarms
+//        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Retrieving snoozed alarms")
+        val sharedPreferences = getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)
+        val snoozedAlarmsJson = sharedPreferences.getString(snoozedAlarmsKey, "[]")
+        val snoozedAlarms: MutableList<SnoozedAlarm> = try {
+            gson.fromJson(snoozedAlarmsJson, object : TypeToken<MutableList<SnoozedAlarm>>() {}.type)
+        } catch (e: JsonSyntaxException) {
+//            Log.e("AlarmActivity", "updateTimeTillNextAlarm: Error parsing snoozed alarms JSON", e)
+            mutableListOf()
+        }
+
+        // Process snoozed alarms
+//        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Processing snoozed alarms")
+        snoozedAlarms.forEach { snoozedAlarm ->
+//            Log.d("AlarmActivity", "updateTimeTillNextAlarm: Processing snoozed alarm: ${snoozedAlarm.id}, snoozeTime: ${snoozedAlarm.snoozeTime}")
+            val snoozeTime = Calendar.getInstance().apply {
+                timeInMillis = snoozedAlarm.snoozeTime
+            }
+//            Log.d("AlarmActivity", "updateTimeTillNextAlarm: Snooze time for ${snoozedAlarm.id}: ${snoozeTime.time}")
+            allAlarms.add(Pair(snoozeTime, "Snoozed: ${snoozedAlarm.id}"))
+        }
+
+        // Find the next alarm
+//        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Finding next alarm from allAlarms: ${allAlarms.map { "${it.second} at ${it.first.time}" }}")
+        val nextAlarmPair = allAlarms.minByOrNull { it.first.timeInMillis }
+
+        // Update the TextView with the time difference
+        if (nextAlarmPair != null) {
+            val (nextAlarm, alarmName) = nextAlarmPair
+//            Log.d("AlarmActivity", "updateTimeTillNextAlarm: Next alarm: $alarmName at ${nextAlarm.time}")
+            var timeDifference = nextAlarm.timeInMillis - currentTime.timeInMillis
+            timeDifference += 59_000
+            val hours = timeDifference / (1000 * 60 * 60)
+            val minutes = (timeDifference / (1000 * 60)) % 60
+//            Log.d("AlarmActivity", "updateTimeTillNextAlarm: Time difference: $hours hours and $minutes minutes")
+            val timeText = when {
+                hours > 0 && minutes > 0 -> "Next Alarm in $hours ${if (hours.toInt() == 1) "hour" else "hours"} and $minutes ${if (minutes.toInt() == 1) "minute" else "minutes"}"
+                hours > 0 -> "Next Alarm in $hours ${if (hours.toInt() == 1) "hour" else "hours"}"
+                minutes > 0 -> "Next Alarm in $minutes ${if (minutes.toInt() == 1) "minute" else "minutes"}"
+                else -> ""
+            }
+
+            if (alarmName.startsWith("Snoozed:")) {
+                val snoozeText = when {
+                    minutes > 0 -> "Snoozed for $minutes ${if (minutes.toInt() == 1) "minute" else "minutes"}"
+                    else -> ""
+                }
+                timeTillNext.text = snoozeText
+            } else {
+                timeTillNext.text = timeText
+            }
+        } else {
+//            Log.d("AlarmActivity", "updateTimeTillNextAlarm: No upcoming alarms found")
+            timeTillNext.text = getString(R.string.no_upcoming_alarms)
+        }
+//        Log.d("AlarmActivity", "updateTimeTillNextAlarm: Finished updateTimeTillNextAlarm")
+    }
+
+    private fun configureSharedPreferences() {
+        val preferenceUtils = PreferenceUtils(this)
+        use12HourTimeFormat = preferenceUtils.getIs12HourTimeFormat() // Retrieve time format preference
+        //Log.d("AlarmActivity", "time format1: $use12HourTimeFormat")
+    }
+
+    private fun loadAlarms(): List<Alarm> {
+        val sharedPreferences = getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)
+        val alarmsJson = sharedPreferences.getString(alarmsKey, null)
+
+        return if (!alarmsJson.isNullOrEmpty()) {
+            val alarmType = object : TypeToken<List<Alarm>>() {}.type
+            val loadedAlarms: List<Alarm> = gson.fromJson(alarmsJson, alarmType)
+            loadedAlarms // Return the loaded alarms
+        } else {
+            emptyList() // Return empty if no alarms are found
+        }
+    }
+
+    private fun saveAlarms() {
+        val sharedPreferences = getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)
+        val editor = sharedPreferences.edit()
+
+        // Convert the list of alarms to JSON
+        val alarmsJson = gson.toJson(alarms)
+        editor.putString(alarmsKey, alarmsJson)
+        editor.apply() // Save the JSON to SharedPreferences
+    }
+
+    private fun hideSystemUI() {
+        window.insetsController?.let {
+            it.hide(WindowInsets.Type.systemBars())
+            it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
     }
 
     fun updateCurrentTime() {
         val calendar = Calendar.getInstance()
-        val hour = calendar.get(Calendar.HOUR_OF_DAY)
-        val minute = calendar.get(Calendar.MINUTE)
-        // Log.d("Time:","Current Time Updated")
-        if (use12HourTimeFormat) {
-            // Format time as 12-hour format with AM/PM
-            val formattedTime = SimpleDateFormat("hh:mm", Locale.US).format(calendar.time)
-            val amPm = SimpleDateFormat("a", Locale.US).format(calendar.time)
-
-            val formattedText = "$formattedTime <small><small>$amPm</small></small>"
-            currentTime.text = Html.fromHtml(formattedText, Html.FROM_HTML_MODE_COMPACT)
-        } else {
-            // Format time as 24-hour format
-            val formattedTime = String.format("%02d:%02d", hour, minute)
-            currentTime.text = formattedTime
-        }
-        findNextAlarm()
-    }
-
-    fun findNextAlarm() {
-        val currentTimeInMillis = System.currentTimeMillis()
-        val oneDayInMillis = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
-        val oneWeekInMillis = 7 * oneDayInMillis // One week in milliseconds
-        var currentDayOfWeek = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
-        var nextEnabledAlarm: Alarm? = null
-        var nextTimeDifference: Long = Long.MAX_VALUE
-        var anyEnabledAlarm = false // Flag to check if any enabled alarms are found
-        if (mondayStart == true) {
-            currentDayOfWeek--
-        }
-        //Log.d("Alarm Day:","$currentDayOfWeek")
-        for (alarm in alarms) {
-            if (alarm.isEnabled) {
-                var alarmTimeInMillis = alarm.getTimeAsCalendar().timeInMillis
-
-                val firstTrueDayIndex = alarm.selectedDays.indexOfFirst { it } + 1
-                val allFalseSelectedDays = alarm.selectedDays.all { !it }
-                if (firstTrueDayIndex != -1 && !allFalseSelectedDays) {
-                    if (currentDayOfWeek > firstTrueDayIndex) {
-                        alarmTimeInMillis += oneWeekInMillis
-                        alarmTimeInMillis += oneDayInMillis * (firstTrueDayIndex - currentDayOfWeek + 7)
-                        // Log.d("Adding Time 1", "Add time to $alarm")
-                    } else if (currentDayOfWeek < firstTrueDayIndex) {
-                        alarmTimeInMillis += oneDayInMillis * (firstTrueDayIndex - currentDayOfWeek)
-                        //Log.d("Adding Time 2", "Add time to $alarm")
-                    } else if (alarmTimeInMillis <= currentTimeInMillis) {
-                        alarmTimeInMillis += oneDayInMillis
-                        //Log.d("Adding Time 3", "Add time to $alarm")
-                    }
-                } else if (allFalseSelectedDays && alarmTimeInMillis <= currentTimeInMillis) {
-                    alarmTimeInMillis += oneDayInMillis
-                    //Log.d("Adding Time 4", "Add time to $alarm")
-                }
-
-                val timeDifference = alarmTimeInMillis - currentTimeInMillis
-
-                if (timeDifference in 1 until nextTimeDifference) {
-                    nextTimeDifference = timeDifference
-                    nextEnabledAlarm = alarm
-                }
-                anyEnabledAlarm = true
-            }
-        }
-
-        if (anyEnabledAlarm) {
-            nextEnabledAlarm?.let {
-                val nextAlarmTime = it.getTimeAsCalendar()
-                val formattedTime = if (use12HourTimeFormat) {
-                    SimpleDateFormat("hh:mm a", Locale.US).format(nextAlarmTime.time)
-                } else {
-                    SimpleDateFormat("HH:mm", Locale.US).format(nextAlarmTime.time)
-                }
-                timeTillNext.text = "Next Alarm: $formattedTime"
-                timeTillNext.visibility = View.VISIBLE
-
-                // Check if the next alarm's time matches the current time
-                val currentTimeMillis = System.currentTimeMillis()
-                if (nextTimeDifference < updateIntervalMillis && nextTimeDifference > 0) {
-                    // Start AlarmAlertActivity here
-                    triggerAlarm(formattedTime, it.alarmName, alarms.indexOf(it))
-                }
-            }
-        } else {
-            timeTillNext.visibility = View.GONE
-        }
-
-
-    }
-
-    private val updateUIReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            // Update the time in your UI here
-            updateCurrentTime()
-            // ...
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        // Remove the update Runnable when the activity is destroyed to prevent memory leaks
-        // handler.removeCallbacks(updateRunnable)
-        unregisterReceiver(timeChangeReceiver)
-        handler.removeCallbacksAndMessages(null)
-    }
-
-    private fun updateEmptyTextViewVisibility() {
-        if (alarms.isEmpty()) {
-            emptyTextView.visibility = View.VISIBLE
-            Log.d("AlarmActivity", "Empty text view is visible")
-        } else {
-            emptyTextView.visibility = View.GONE
-            Log.d("AlarmActivity", "Empty text view is hidden")
-        }
-        // Re-submit the updated list to the adapter
-//        if (alarms.isNotEmpty()) {
-//        alarmAdapter.submitList(alarms.toList()) {
-//            Log.d("AlarmActivity", "Adapter updated with alarms list")
-//        }
-//    }
-    }
-
-    private fun returnHome() {
-        startActivity(Intent(this, MainActivity::class.java))
+        //Log.d("AlarmActivity", "Updating time... format: $use12HourTimeFormat")
+        val timeFormat = if (use12HourTimeFormat) "hh:mm aaa" else "HH:mm" // Change "KK" to "hh"
+        //Log.d("AlarmActivity", "Time format: $timeFormat")
+        val formattedTime = SimpleDateFormat(timeFormat, Locale.getDefault()).format(calendar.time)
+        currentTime.text = formattedTime
+        updateTimeTillNextAlarm()
     }
 
     private fun viewAlarmDetails(clickedAlarm: Alarm) {
-        Log.d("AlarmActivity", "Alarms before update: $alarms")
-
-        val alarmIndex = alarms.indexOf(clickedAlarm)
-        val intent = Intent(this, alarmEditorActivity::class.java)
-        intent.putExtra("clickedAlarmIndex", alarmIndex)
-        intent.putExtra("use12HourTimeFormat", use12HourTimeFormat)
-        intent.putExtra("isEditMode", true) // Set isEditMode to true for editing
-        intent.putExtra("editorNameText", "Edit Alarm") // Pass the text to display in the editor
-        intent.putParcelableArrayListExtra("alarmsList", ArrayList(alarms)) // Pass the alarms list
+        // Instead of getting the index, pass the actual ID
+        Log.d("AlarmActivity", "viewAlarmDetails: Selected alarm with id ${clickedAlarm.id}")
+        val intent = Intent(this, AlarmEditorActivity::class.java).apply {
+            putExtra("isEditMode", true) // Make sure to indicate edit mode
+            putExtra("clickedAlarmId", clickedAlarm.id) // Pass the alarm's actual id
+            putParcelableArrayListExtra("alarmsList", ArrayList(alarms))
+            putExtra("use12HourTimeFormat", use12HourTimeFormat)
+        }
         startActivityForResult(intent, EDIT_ALARM_REQUEST_CODE)
     }
 
-    private fun hideSystemUI() {
-        // Enables regular immersive mode.
-        // For "lean back" mode, remove SYSTEM_UI_FLAG_IMMERSIVE.
-        // Or for "sticky immersive," replace it with SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-        window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE
-                or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                or View.SYSTEM_UI_FLAG_FULLSCREEN)
+    private fun addNewAlarm() {
+        val intent = Intent(this, AlarmEditorActivity::class.java).apply {
+            putExtra("isEditMode", false)
+            putParcelableArrayListExtra("alarmsList", ArrayList(alarms))
+            putExtra("use12HourTimeFormat", use12HourTimeFormat)
+        }
+        startActivityForResult(intent, REQUEST_CODE_ADD_ALARM)
+        updateEmptyState()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        Log.d("AlarmActivity", "onActivityResult called")
         super.onActivityResult(requestCode, resultCode, data)
-        Log.d(
-            "AlarmActivity",
-            "onActivityResult: Request code $requestCode, Result code $resultCode"
-        )
+        if ((requestCode == REQUEST_CODE_ADD_ALARM || requestCode == EDIT_ALARM_REQUEST_CODE) && resultCode == Activity.RESULT_OK) {
+            data?.let {
+                val updatedList = it.getParcelableArrayListExtra<Alarm>("alarmsList")
+                if (updatedList != null) {
+                    alarms.clear() // Clear existing alarms list
+                    alarms.addAll(updatedList) // Add the updated list
+                    alarmAdapter.notifyDataSetChanged() // Refresh the RecyclerView
+                    saveAlarms() // Save the updated alarms to SharedPreferences
 
-        if (requestCode == EDIT_ALARM_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
-            val updatedList = data?.getParcelableArrayListExtra<Alarm>("alarmsList")
-            Log.d("AlarmActivity", "Received updated list: ${updatedList?.size} items")
-            if (updatedList != null) {
-                alarms.clear() // Clear existing list
-                alarms.addAll(updatedList) // Update with new data
-                Log.d("AlarmActivity", "Updated alarms list: ${alarms.size} items")
-
-                updateEmptyTextViewVisibility() // Ensure adapter is updated after alarms is populated
-            } else {
-                Log.e("AlarmActivity", "Updated list is null or empty")
-            }
-            val updatedAlarm = data?.getParcelableExtra<Alarm>("updatedAlarm")
-            val updatedAlarmIndex = data?.getIntExtra("alarmIndex", -1)
-            val newAlarm = data?.getParcelableExtra<Alarm>("newAlarm")
-            shouldUpdateList =
-                data?.getBooleanExtra("updatelist", false) ?: false // Retrieve the updatelist value
-            Log.d("ALARM UPDATER", "List Updated? 197: $shouldUpdateList")
-
-            if (updatedAlarm != null && updatedAlarmIndex != -1) {
-                updatedAlarmIndex?.let { index -> // Use safe call operator
-                    alarms[index] = updatedAlarm // Access using non-nullable index
-                    Log.d("AlarmActivity", "Updated alarm at index $index: $updatedAlarm")
-                }
-            } else if (newAlarm != null) {
-                alarms.add(newAlarm)
-                if (alarms.isNotEmpty()) {
-                    alarmAdapter.submitList(alarms.toList()) {
-                        Log.d("AlarmActivity", "Adapter updated in onCreate lifecycleScope")
+                    // Schedule alarms only if enabled
+                    for (alarm in alarms) {
+                        if (alarm.isEnabled) {  // Check if the alarm is enabled
+                            scheduleAlarm(alarm, this) // Call scheduleAlarm here
+                        } else {
+                            Log.d("AlarmActivity", "Alarm is disabled, not scheduling: ${alarm.alarmName}")
+                        }
                     }
                 }
-                Log.d("AlarmActivity", "Added new alarm: $newAlarm")
             }
+        }
+    }
 
-            if (alarms.isNotEmpty()) {
-                alarmAdapter.submitList(alarms.toList()) {
-                    Log.d("AlarmActivity", "Adapter updated in onCreate lifecycleScope")
+    private fun scheduleAlarm(alarm: Alarm, context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        Log.d("AlarmAdapter1", "Attempting to schedule alarm: ${alarm.alarmName} at ${alarm.hours}:${alarm.minutes}")
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+            Log.w("AlarmAdapter1", "Exact alarm permission is missing! Requesting permission.")
+            requestExactAlarmPermission(context)
+            return
+        }
+
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            putExtra("alarmTime", "${alarm.hours}:${alarm.minutes}")
+            putExtra("alarmName", alarm.alarmName)
+            putExtra("alarmId", alarm.id)
+        }
+
+        // Compute a unique request code using a non-commutative formula.
+        val requestCode = alarm.id * 10000 + alarm.hours * 100 + alarm.minutes
+
+        val pendingIntent = PendingIntent.getBroadcast(
+            context, requestCode, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val now = Calendar.getInstance()
+        val alarmTime = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, alarm.hours)
+            set(Calendar.MINUTE, alarm.minutes)
+            set(Calendar.SECOND, 0)
+        }
+
+        val selectedDays = alarm.selectedDays
+        val today = now.get(Calendar.DAY_OF_WEEK)
+        Log.d("AlarmAdapter1", "Today: $today")
+
+        if (selectedDays.any { it }) {
+            var closestDay: Int? = null
+            var minDiff = Long.MAX_VALUE
+
+            for (i in selectedDays.indices) {
+                if (selectedDays[i]) {
+                    Log.d("AlarmAdapter1", "Checking TRUE day: $i")
+                    val dayOfWeek = i + 1 // Adjust for Calendar.DAY_OF_WEEK (Sunday=1, Saturday=7)
+                    Log.d("AlarmAdapter1", "Day of week: $dayOfWeek")
+
+                    val tempCalendar = alarmTime.clone() as Calendar
+                    tempCalendar.set(Calendar.DAY_OF_WEEK, dayOfWeek)
+
+                    if (dayOfWeek == today && tempCalendar.timeInMillis <= now.timeInMillis) {
+                        tempCalendar.add(Calendar.WEEK_OF_YEAR, 1) // Move to next week if today and time has passed
+                    } else if (dayOfWeek < today) {
+                        tempCalendar.add(Calendar.WEEK_OF_YEAR, 1) // Move past to next week
+                    }
+
+                    val diff = tempCalendar.timeInMillis - now.timeInMillis
+                    if (diff < minDiff) {
+                        minDiff = diff
+                        closestDay = dayOfWeek
+                    }
                 }
             }
-            Log.d("AlarmActivity", "Alarms list after update: $alarms")
 
-            if (shouldUpdateList) {
-                findNextAlarm()
-                updateEmptyTextViewVisibility()
-            }
-            Log.d("AlarmActivity", "Request Codes Good")
-//            if (shouldUpdateList) {
-//                // Run your function here to update the list
-//                updateEmptyTextViewVisibility()
-//        }
-        }
-//           else {
-//            Log.d("AlarmActivity", "No valid data received or result not OK")
-//        }
-
-        else if (requestCode == ALARM_ALERT_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
-            val dismissedAlarmIndex = data?.getIntExtra("alarmIndex", -1)
-            Log.d("Alert", "$dismissedAlarmIndex")
-            if (dismissedAlarmIndex != -1) {
-                Log.d("AlarmAlert", "Updating Dismissed Alarm")
-                alarms[dismissedAlarmIndex!!].isEnabled = false
-                Log.d("AlarmAlert", "Second Thing for Alarm")
-                alarmAdapter.notifyItemChanged(dismissedAlarmIndex)
-                Log.d("AlarmAlert", "Done")
+            if (closestDay != null) {
+                alarmTime.timeInMillis = now.timeInMillis + minDiff // Correctly adjust time based on closest day
+                Log.d("AlarmAdapter1", "Scheduled repeating alarm for: ${alarmTime.time}")
             }
         } else {
-            Log.d("AlarmActivity", "Nope")
-        }
-    }
-
-    private fun triggerAlarm(alarmTime: String, alarmName: String, alarmIndex: Int) {
-        val intent = Intent(this, AlarmAlertActivity::class.java)
-        alarms[alarmIndex].isEnabled = false
-        intent.putExtra("alarmTime", alarmTime)
-        intent.putExtra("alarmName", alarmName)
-        intent.putExtra("dismissedAlarmIndex", alarmIndex) // Pass the index of the alarm
-        startActivityForResult(intent, ALARM_ALERT_REQUEST_CODE)
-    }
-
-    private fun toggleAlarmEnabled(position: Int) {
-        // Add your logic to toggle the alarm's enabled state
-        alarms[position].isEnabled = !alarms[position].isEnabled
-
-        // Notify the adapter that the item has changed
-        if (alarms.isNotEmpty()) {
-            alarmAdapter.submitList(alarms.toList()) {
-                Log.d("AlarmActivity", "Adapter updated in onCreate lifecycleScope")
+            if (alarmTime.timeInMillis <= now.timeInMillis) {
+                alarmTime.add(Calendar.DAY_OF_YEAR, 1) // Move to the next day if time has passed
+                Log.d("AlarmAdapter1", "No repeat days selected. Scheduling for the next available day.")
             }
         }
 
-        // After updating the alarm state, find the next alarm
-        findNextAlarm()
+        Log.d("AlarmAdapter1", "Final scheduled time: ${alarmTime.time}")
+
+        try {
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, alarmTime.timeInMillis, pendingIntent)
+            Log.d("AlarmAdapter1", "Alarm successfully scheduled.")
+        } catch (e: SecurityException) {
+            Log.e("AlarmAdapter1", "Failed to schedule exact alarm: ${e.message}")
+            Toast.makeText(context, "Permission required to schedule exact alarms.", Toast.LENGTH_LONG).show()
+            requestExactAlarmPermission(context)
+        }
     }
 
-
-    companion object {
-        const val EDIT_ALARM_REQUEST_CODE = 1
-        const val ALARM_ALERT_REQUEST_CODE = 2
+    private fun requestExactAlarmPermission(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Log.w("AlarmAdapter2", "Redirecting user to grant exact alarm permission.")
+            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                data = Uri.parse("package:${context.packageName}")
+            }
+            context.startActivity(intent)
+        }
     }
+
+    private fun enableDeleteMode(position: Int) {
+        isDeleteMode = true
+        alarmAdapter.isDeleteMode = isDeleteMode  // Update delete mode in adapter
+        alarmAdapter.notifyDataSetChanged()
+        doneButton.visibility = View.VISIBLE
+    }
+
+    private fun updateEmptyState() {
+        if (alarms.isEmpty()) {
+            emptyTextView.visibility = View.VISIBLE
+            doneButton()
+        } else {
+            emptyTextView.visibility = View.GONE
+        }
+    }
+
 }
 
 class AlarmAdapter(
-    var alarms: MutableList<Alarm>,
-    private val clickListener: (Alarm) -> Unit,
-    private val use12HourTimeFormat: Boolean,
-    private val cancelButton: Button,
-    private val offButton: Button,
-    private val deleteButton: Button,
-    private val selectedAlarmIndices: MutableList<Int>,
-    private val daysOfWeek: List<String>,
-    private val findNextAlarm: () -> Unit,
-    private val toggleAlarmEnabled: (Int) -> Unit,
-    private val onAlarmToggle: (position: Int) -> Unit
-) : ListAdapter<Alarm, AlarmAdapter.AlarmViewHolder>(AlarmDiffCallback()) {
-    private var lastClickedPosition = RecyclerView.NO_POSITION
-    private val handler = Handler()
-    private var selectedAlarmIndex = RecyclerView.NO_POSITION
-    var isToggling = false
+    private val alarms: MutableList<Alarm>,  // Use MutableList for modification
+    private val onAlarmClick: (Alarm) -> Unit,
+    var use12HourTimeFormat: Boolean,
+    private val onAlarmStateChanged: () -> Unit,
+    var isDeleteMode: Boolean = false,  // Accept isDeleteMode as a parameter
+    private val updateEmptyState: () -> Unit,  // Reference to updateEmptyState()
+    private val saveAlarms: () -> Unit,  // Reference to saveAlarms()
+    private val updateTimeTillNextAlarm: () -> Unit, // Add the updateTimeTillNextAlarm function as a parameter
+    private val scheduleAlarm: (Alarm, Context) -> Unit
+) : RecyclerView.Adapter<AlarmAdapter.AlarmViewHolder>() {
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AlarmViewHolder {
-        val itemView = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_alarm, parent, false)
-        return AlarmViewHolder(itemView)
-    }
+    private var onItemLongClickListener: ((Int) -> Unit)? = null
 
-    override fun onBindViewHolder(holder: AlarmViewHolder, position: Int) {
-//        if (alarms.isNotEmpty()) {
-//            val currentAlarm = getItem(position)
-//            holder.bind(currentAlarm)
-//            holder.circularCheckbox.visibility =
-//                if (currentAlarm.showCheckbox) View.VISIBLE else View.GONE
-//            holder.circularCheckbox.isChecked = currentAlarm.isSelected
-//            holder.itemView.isSelected = position == selectedAlarmIndex
-//            holder.switchAlarmEnabled.setOnCheckedChangeListener { _, isChecked ->
-//                toggleAlarmEnabled(position)
-//            }
-//        }
-        if (position >= 0 && position < itemCount) {
-            val alarm = getItem(position)
-            if (alarm != null) {
-                holder.bind(alarm)
-            } else {
-                Log.e("AlarmAdapter", "Null alarm at position $position")
-            }
-        } else {
-            Log.e("AlarmAdapter", "Invalid position: $position, itemCount: $itemCount")
-        }
-    }
-
-    override fun getItemCount(): Int {
-        return alarms.size
-    }
-
-    fun notifyAdapterItemClicked(position: Int) {
-        selectedAlarmIndex = position
-        lastClickedPosition = position
-        notifyItemChanged(selectedAlarmIndex)
+    // Set long press listener
+    fun setOnItemLongClickListener(listener: (Int) -> Unit) {
+        onItemLongClickListener = listener
     }
 
     inner class AlarmViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val alarmTimeTextView: TextView = itemView.findViewById(R.id.textViewAlarmTime)
-        val alarmSwitch: Switch = itemView.findViewById(R.id.toggleAlarm)
-        val circularCheckbox: CheckBox =
-            itemView.findViewById(R.id.circularCheckbox) // Add this line
-        val alarmName: TextView = itemView.findViewById(R.id.alarmName)
-        val alarmDay0: TextView = itemView.findViewById(R.id.alarmDay0)
-        val alarmDay1: TextView = itemView.findViewById(R.id.alarmDay1)
-        val alarmDay2: TextView = itemView.findViewById(R.id.alarmDay2)
-        val alarmDay3: TextView = itemView.findViewById(R.id.alarmDay3)
-        val alarmDay4: TextView = itemView.findViewById(R.id.alarmDay4)
-        val alarmDay5: TextView = itemView.findViewById(R.id.alarmDay5)
-        val alarmDay6: TextView = itemView.findViewById(R.id.alarmDay6)
-        val switchAlarmEnabled: Switch = itemView.findViewById(R.id.toggleAlarm)
-
-        init {
-            // Set the background selector for the item view
-            val dayTextViews = List(7) { index ->
-                itemView.findViewById<TextView>(
-                    itemView.resources.getIdentifier(
-                        "alarmDay$index",
-                        "id",
-                        itemView.context.packageName
-                    )
-                )
-                alarmSwitch.setOnCheckedChangeListener { _, isChecked ->
-                    if (!isToggling) {
-                        isToggling = true
-                        onAlarmToggle(adapterPosition)
-                        isToggling = false
-                    }
-                }
-            }
-            itemView.setBackgroundResource(R.drawable.item_alarm_selector)
-
-            itemView.setOnLongClickListener {
-                val clickedAlarm = alarms[adapterPosition]
-                if (!offButton.isShown) {
-                    alarms.forEach { it.isSelected = false }
-                    clickedAlarm.isSelected = !clickedAlarm.isSelected
-                    alarms.forEach { it.showCheckbox = true }
-                    offButton.visibility = View.VISIBLE
-                    cancelButton.visibility = View.VISIBLE
-                    deleteButton.visibility = View.VISIBLE
-                    notifyDataSetChanged()
-                    val slideUpAnimation =
-                        AnimationUtils.loadAnimation(itemView.context, R.anim.slide_up)
-                    cancelButton.startAnimation(slideUpAnimation)
-                    offButton.startAnimation(slideUpAnimation)
-                    deleteButton.startAnimation(slideUpAnimation)
-                }
-                true // Consume the long press event
-            }
-
-            circularCheckbox.setOnCheckedChangeListener { _, isChecked ->
-                if (isChecked) {
-                    selectedAlarmIndices.add(adapterPosition)
-                } else {
-                    selectedAlarmIndices.remove(adapterPosition)
-                }
-                handler.post {
-                    notifyDataSetChanged()
-                }
-            }
-        }
+        private val alarmTime: TextView = itemView.findViewById(R.id.alarmTimeTextView)
+        private val alarmName: TextView = itemView.findViewById(R.id.alarmNameTextView)
+        private val deleteButton: ImageButton = itemView.findViewById(R.id.deleteButton)
+        private val deleteButtonContainer: FrameLayout = itemView.findViewById(R.id.deleteButtonContainer)
+        private val alarmParametersContainer: ViewGroup = itemView.findViewById(R.id.alarmParametersContainer)
+        private val alarmToggleContainer: ViewGroup = itemView.findViewById(R.id.alarmToggleContainer)
+        private val repeatDaysTextView: TextView = itemView.findViewById(R.id.repeatDaysTextView)
+        private val alarmSwitch: Switch = itemView.findViewById(R.id.alarmSwitch)
 
         fun bind(alarm: Alarm) {
-            if (use12HourTimeFormat) {
-                // Format time as 12-hour format with AM/PM
-                val formattedTime =
-                    SimpleDateFormat("hh:mm", Locale.US).format(alarm.getTimeAsCalendar().time)
-                val amPm = SimpleDateFormat("a", Locale.US).format(alarm.getTimeAsCalendar().time)
+            // Define text colors for enabled and disabled states.
+            // You can also use ContextCompat.getColor if you have defined colors in your resources.
+            val enabledColor = Color.WHITE
+            val disabledColor = Color.GRAY
 
-                val formattedText = "$formattedTime <small><small>$amPm</small></small>"
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                    alarmTimeTextView.text =
-                        Html.fromHtml(formattedText, Html.FROM_HTML_MODE_COMPACT)
-                } else {
-                    @Suppress("DEPRECATION")
-                    alarmTimeTextView.text = Html.fromHtml(formattedText)
-                }
-            } else {
-                // Format time as 24-hour format
-                val formattedTime = String.format("%02d:%02d", alarm.hours, alarm.minutes)
-                alarmTimeTextView.text = formattedTime
+            // Format time based on the 12-hour or 24-hour preference.
+            val calendar = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, alarm.hours)
+                set(Calendar.MINUTE, alarm.minutes)
             }
+            val timeFormat = if (use12HourTimeFormat) "hh:mm aaa" else "HH:mm"
+            val formattedTime = SimpleDateFormat(timeFormat, Locale.getDefault()).format(calendar.time)
 
+            alarmTime.text = formattedTime
             alarmName.text = alarm.alarmName
-            circularCheckbox.visibility = if (alarm.showCheckbox) View.VISIBLE else View.GONE
-            circularCheckbox.isChecked = alarm.isSelected
-            alarmSwitch.isChecked = alarm.isEnabled
-            val dayTextViews = arrayOf(
-                alarmDay0, alarmDay1, alarmDay2,
-                alarmDay3, alarmDay4, alarmDay5, alarmDay6
-            )
-            var removableDays = alarm.selectedDays
-            for (i in dayTextViews.indices) {
-                dayTextViews[i].text = daysOfWeek[i]
-                dayTextViews[i].setTextColor(
-                    if (removableDays[i]) Color.parseColor("#03dac6") else Color.WHITE
-                )
-            }
-            itemView.isSelected = adapterPosition == lastClickedPosition
 
-            itemView.setOnClickListener {
-                if (!offButton.isShown) {
-                    clickListener(alarm)
+            // Set the text color based on the alarm's enabled state.
+            val textColor = if (alarm.isEnabled) enabledColor else disabledColor
+            alarmTime.setTextColor(textColor)
+            alarmName.setTextColor(textColor)
+
+            // Set the repeat days text (if any) and update its color.
+            val daysOfWeek = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+            val selectedDaysList = alarm.selectedDays.toList() // Convert BooleanArray to List<Boolean>
+            val selectedDaysText = if (selectedDaysList.all { it }) {
+                "Everyday"
+            } else {
+                selectedDaysList
+                    .mapIndexedNotNull { index, isSelected -> if (isSelected) daysOfWeek[index] else null }
+                    .joinToString(" ")
+            }
+            if (selectedDaysText.isNotEmpty()) {
+                repeatDaysTextView.text = selectedDaysText
+                repeatDaysTextView.visibility = View.VISIBLE
+                repeatDaysTextView.setTextColor(textColor)
+            } else {
+                repeatDaysTextView.visibility = View.GONE
+            }
+
+            // Set the switch state based on alarm.isEnabled.
+            alarmSwitch.isChecked = alarm.isEnabled
+
+            // Show delete button if in delete mode.
+            deleteButtonContainer.visibility = if (isDeleteMode) View.VISIBLE else View.GONE
+
+            // Dynamically hide alarm parameters if space is insufficient.
+            itemView.post {
+                val layoutWidth = itemView.measuredWidth
+                val containerWidth = alarmParametersContainer.measuredWidth
+                val toggleWidth = alarmToggleContainer.measuredWidth
+
+                if (layoutWidth < containerWidth + toggleWidth) {
+                    alarmParametersContainer.visibility = View.GONE
                 } else {
-                    circularCheckbox.isChecked = !circularCheckbox.isChecked
+                    alarmParametersContainer.visibility = View.VISIBLE
                 }
             }
+
+            // Listen for toggle changes to update the alarm's enabled state.
+            alarmSwitch.setOnCheckedChangeListener { _, isChecked ->
+                alarm.isEnabled = isChecked
+                Log.d("AlarmAdapter", "Switch state changed: $isChecked for alarm: ${alarm.alarmName}")
+                // Update the text color when the enabled state changes.
+                val newTextColor = if (isChecked) enabledColor else disabledColor
+                alarmTime.setTextColor(newTextColor)
+                alarmName.setTextColor(newTextColor)
+                repeatDaysTextView.setTextColor(newTextColor)
+
+                if (isChecked) {
+                    scheduleAlarm(alarm, itemView.context)
+                } else {
+                    cancelAlarm(alarm, itemView.context)
+                }
+                updateTimeTillNextAlarm()
+                onAlarmStateChanged()
+            }
+
+            // Show delete button only in delete mode.
+            deleteButton.visibility = if (isDeleteMode) View.VISIBLE else View.GONE
+
+            // Ensure the item view fills the width.
+            itemView.layoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+
+            // Handle delete button click.
+            deleteButton.setOnClickListener {
+                onDeleteClicked(adapterPosition)
+                updateTimeTillNextAlarm()
+            }
+
+            // Handle long click to enable delete mode.
+            itemView.setOnLongClickListener {
+                onItemLongClickListener?.invoke(adapterPosition)
+                true
+            }
+
+            // Handle click.
+            itemView.setOnClickListener { onAlarmClick(alarm) }
         }
     }
 
-    class AlarmDiffCallback : DiffUtil.ItemCallback<Alarm>() {
-        override fun areItemsTheSame(oldItem: Alarm, newItem: Alarm): Boolean {
-            return oldItem.id == newItem.id
-        }
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AlarmViewHolder {
+        val view = LayoutInflater.from(parent.context).inflate(R.layout.alarm_item, parent, false)
+        return AlarmViewHolder(view)
+    }
 
-        override fun areContentsTheSame(oldItem: Alarm, newItem: Alarm): Boolean {
-            return oldItem == newItem
-        }
+    private fun cancelAlarm(alarm: Alarm, context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, AlarmReceiver::class.java)
+        // Use the same unique request code formula as scheduleAlarm().
+        val requestCode = alarm.id * 10000 + alarm.hours * 100 + alarm.minutes
+
+        val pendingIntent = PendingIntent.getBroadcast(
+            context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pendingIntent)
+        Log.d("AlarmAdapter", "Canceled alarm: ${alarm.alarmName}")
+    }
+
+    override fun onBindViewHolder(holder: AlarmViewHolder, position: Int) {
+        holder.bind(alarms[position])
+    }
+
+    override fun getItemCount(): Int = alarms.size
+
+    // Handle delete button click.
+    private fun onDeleteClicked(position: Int) {
+        alarms.removeAt(position) // Remove alarm from the list.
+        notifyItemRemoved(position) // Notify adapter.
+        updateEmptyState() // Check if the list is empty.
+        saveAlarms() // Save the updated alarms list to SharedPreferences.
     }
 }
-
 

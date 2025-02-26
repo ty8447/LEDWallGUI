@@ -2,20 +2,24 @@ package com.example.ledwallgui.ui.settings
 
 import android.app.Activity
 import android.Manifest
-import android.content.BroadcastReceiver
+import android.app.ActivityManager
+import android.app.Dialog
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
-import android.os.Process
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
-import android.view.View
+import android.view.ViewGroup
 import android.view.Window
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.ImageButton
@@ -28,9 +32,13 @@ import androidx.core.content.ContextCompat
 import com.example.ledwallgui.R
 import androidx.appcompat.app.AlertDialog
 import androidx.camera.core.CameraSelector
+import com.example.ledwallgui.PreferenceUtils
 import com.example.ledwallgui.TimeMonitoringService
 import com.example.ledwallgui.ui.MotionDetectionService
 import com.google.android.material.snackbar.Snackbar
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class settingsActivity : AppCompatActivity() {
     private lateinit var micButton: AppCompatButton
@@ -148,6 +156,80 @@ class settingsActivity : AppCompatActivity() {
             }
         )
     }
+    override fun onResume(){
+        super.onResume()
+        setupButtons()
+    }
+
+    private fun showDevInfoPopup() {
+        val dialog = Dialog(this)
+        dialog.setContentView(R.layout.popup_dev_info)
+        dialog.setCancelable(true)
+
+        // Set dialog width to 60% of the screen width
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.6).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT)) // Rounded corners
+
+        // Get UI elements
+        val versionText = dialog.findViewById<TextView>(R.id.versionText)
+        val permissionsText = dialog.findViewById<TextView>(R.id.permissionsText)
+        val servicesText = dialog.findViewById<TextView>(R.id.servicesText)
+        val dateTimeText = dialog.findViewById<TextView>(R.id.currentDateTime)
+        val closeButton = dialog.findViewById<Button>(R.id.closeButton)
+
+        // Get app version info
+        val packageInfo = packageManager.getPackageInfo(packageName, 0)
+        val versionName = packageInfo.versionName
+        versionText.text = "App Version: $versionName"
+
+        // Get granted permissions
+        val grantedPermissions = packageManager.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS)
+            .requestedPermissions
+            ?.filter { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
+            ?.joinToString("\n") ?: "None"
+        permissionsText.text = "Granted Permissions:\n$grantedPermissions"
+
+        // Get running services
+        servicesText.text = "Running Services:\n" + getRunningServices()
+
+        // Auto-update system time every second
+        val handler = Handler(Looper.getMainLooper())
+        val updateTimeRunnable = object : Runnable {
+            override fun run() {
+                dateTimeText.text = "System Time: ${getCurrentTime()}"
+                handler.postDelayed(this, 1000) // Update every second
+            }
+        }
+        handler.post(updateTimeRunnable)
+
+        // Close button listener
+        closeButton.setOnClickListener {
+            handler.removeCallbacks(updateTimeRunnable)
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
+    // Get current system time
+    private fun getCurrentTime(): String {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        return dateFormat.format(Date())
+    }
+
+    // Get list of running services
+    private fun getRunningServices(): String {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val services = activityManager.getRunningServices(Int.MAX_VALUE)
+        return if (services.isNotEmpty()) {
+            services.joinToString("\n") { it.service.className }
+        } else {
+            "No active services"
+        }
+    }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -199,9 +281,11 @@ class settingsActivity : AppCompatActivity() {
         val lockConfigButton = findViewById<AppCompatButton>(R.id.lockConfigButton)
         val motionButton = findViewById<AppCompatButton>(R.id.motionButton)
         val locationButton = findViewById<AppCompatButton>(R.id.locationButton)
-        val timeButton: Button = findViewById(R.id.timebutton)
+        val timeButton: Button = findViewById(R.id.timeButton)
+        val syncButton: Button = findViewById(R.id.syncButton)
         val connectButton = findViewById<AppCompatButton>(R.id.connectButton)
         val resetButton: Button = findViewById(R.id.resetButton)
+        val textView2: TextView = findViewById(R.id.textView2)
         val prefs = getSharedPreferences()
         micEnabled = prefs.getBoolean("mic_enabled", false)
         lockConfigEnabled = prefs.getBoolean("lock_config_enabled", false)
@@ -216,80 +300,203 @@ class settingsActivity : AppCompatActivity() {
 
         updateTimeButtonState()
 
-        fun showRevokeSuccessSnackBar() {
-            snackBar?.dismiss()
-            snackBar = Snackbar.make(
-                findViewById<View>(android.R.id.content).rootView,
-                "App has been reset! Restart app to see the change.",
-                Snackbar.LENGTH_INDEFINITE,
-            ).apply {
-                setAction("Quit App") {
-                    finishAffinity()
-                    Process.killProcess(Process.myPid())
-                }
-                // Get the Snackbar's TextView
-                val textView = view.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)
-                // Set the text color to white
-                textView.setTextColor(Color.WHITE)
-            }
-            snackBar?.show()
+        setupButtons()
+
+        textView2.setOnLongClickListener {
+            showDevInfoPopup()
+            true // Consume the event
         }
 
-        resetButton.setOnClickListener {
-            // Create confirmation popup
-            val builder = AlertDialog.Builder(this)
-            builder.setTitle("Reset Application")
-            builder.setMessage("Are you sure you want to reset the application? This will wipe all data and settings.")
-            builder.setPositiveButton("Yes, Reset Application") { dialog: DialogInterface, which: Int ->
-                // Wipe data
-                val prefs = getSharedPreferences()
-                prefs.edit().clear().apply() // Clear Shared Preferences
-                // Perform other necessary data wiping actions (e.g., clear databases, delete files)
+        lockConfigButton.setOnClickListener {
+            // Create a dialog for the popup
+            val popupDialog = Dialog(this)
+            popupDialog.setContentView(R.layout.popup_lock_config) // Use a custom layout
+            popupDialog.setCancelable(true) // Allow dismissing by clicking outside
 
-                // Stop the TimeMonitoringService
-                val serviceIntent = Intent(this, TimeMonitoringService::class.java)
-                stopService(serviceIntent)
+            // Access the buttons from the dialog layout
+            val lockUnlockLEDConfigButton = popupDialog.findViewById<Button>(R.id.lockUnlockLEDConfigButton)
+            val lockUnlockSettingsMenuButton = popupDialog.findViewById<Button>(R.id.lockUnlockSettingsMenuButton)
+            val lockUnlockAlarmsButton = popupDialog.findViewById<Button>(R.id.lockUnlockAlarmsButton)
 
-                // Revoke all granted permissions
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                    val packageManager = packageManager
-                    val packageInfo = packageManager.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS)
-                    val requestedPermissions = packageInfo.requestedPermissions
+            // Function to update the button text based on the state
+            fun updateButtonText() {
+                val preferenceUtils = PreferenceUtils(this)
+                val isLEDConfigLocked = preferenceUtils.getBoolean(this, "led_config_locked", false)
+                val isSettingsMenuLocked = preferenceUtils.getBoolean(this, "settings_menu_locked", false)
+                val isAlarmsLocked = preferenceUtils.getBoolean(this, "alarms_locked", false)
 
-                    if (requestedPermissions != null) {
-                        val permissionsToRevoke = requestedPermissions.filter { permission ->
-                            // Exclude permissions that cannot be revoked using revokeSelfPermissionsOnKill()
-                            val permissionInfo = packageManager.getPermissionInfo(permission, 0)
-                            permissionInfo.group != null && // Check if permission belongs to a group
-                                    permission != Manifest.permission.BLUETOOTH && // Exclude Bluetooth
-                                    permission != Manifest.permission.BLUETOOTH_ADMIN && // Exclude Bluetooth Admin
-                                    permission != Manifest.permission.FOREGROUND_SERVICE // Exclude Foreground Service
-                        }.toList()
+                lockUnlockLEDConfigButton.text = if (isLEDConfigLocked) "Unlock LED Config" else "Lock LED Config"
+                lockUnlockSettingsMenuButton.text = if (isSettingsMenuLocked) "Unlock Settings Menu" else "Lock Settings Menu"
+                lockUnlockAlarmsButton.text = if (isAlarmsLocked) "Unlock Alarms" else "Lock Alarms"
+            }
 
-                        try {
-                            revokeSelfPermissionsOnKill(permissionsToRevoke)
-                            showRevokeSuccessSnackBar()
-                        } catch (e: SecurityException) {
-                            // Permission revocation failed
-                            Toast.makeText(this, "Failed to remove permissions", Toast.LENGTH_SHORT).show()
-                        }
-                    } else {
-                        // App has no requested permissions
-                        // Handle this case as needed
-                    }
+            // Initially update button text
+            updateButtonText()
+
+            // Function to show PIN dialog
+            fun showPinDialog(isLockAction: Boolean, actionType: String) {
+                val pinDialog = Dialog(this)
+                val preferenceUtils = PreferenceUtils(this)
+                pinDialog.setContentView(R.layout.popup_pin_entry)
+                pinDialog.window?.setLayout(
+                    (resources.displayMetrics.widthPixels * 0.8).toInt(),  // 80% of the screen width
+                    (resources.displayMetrics.heightPixels * 0.8).toInt()  // 25% of the screen height
+                )
+                pinDialog.setCancelable(true)
+
+                val enteredPin = StringBuilder() // To store the entered PIN
+
+                // Access the pinDisplayText TextView to display the PIN
+                val pinDisplayText = pinDialog.findViewById<TextView>(R.id.pinDisplayText)
+
+                // Set the default text for pinDisplayText
+                if (isLockAction) {
+                    pinDisplayText.text = "Set New 4-Digit Pin"
+                    Log.d("SettingsActivity", "Setting a new PIN for $actionType")
                 } else {
-                    // Android version is not high enough
-                    Toast.makeText(this, "Android version is too low to remove permissions automatically", Toast.LENGTH_SHORT).show()
+                    pinDisplayText.text = "Enter Set 4-Digit Pin"
+                    Log.d("SettingsActivity", "Unlocking $actionType")
                 }
 
-            }
-            builder.setNegativeButton("No, Go Back") { dialog: DialogInterface, which: Int ->
-                // Dismiss the popup
-                dialog.dismiss()
-            }
-            builder.show()
-        }
+                // Set up the keypad buttons
+                val numButtons = arrayOf(
+                    pinDialog.findViewById<Button>(R.id.num1),
+                    pinDialog.findViewById<Button>(R.id.num2),
+                    pinDialog.findViewById<Button>(R.id.num3),
+                    pinDialog.findViewById<Button>(R.id.num4),
+                    pinDialog.findViewById<Button>(R.id.num5),
+                    pinDialog.findViewById<Button>(R.id.num6),
+                    pinDialog.findViewById<Button>(R.id.num7),
+                    pinDialog.findViewById<Button>(R.id.num8),
+                    pinDialog.findViewById<Button>(R.id.num9),
+                    pinDialog.findViewById<Button>(R.id.num0)
+                )
 
+                // Add listeners for each button
+                numButtons.forEach { button ->
+                    button.setOnClickListener {
+                        if (enteredPin.length < 4) { // Limit to 4 digits
+                            enteredPin.append(button.text)
+                            pinDisplayText.text = enteredPin.toString() // Update the TextView with the entered PIN
+                        }
+                    }
+                }
+
+                // Clear button functionality
+                pinDialog.findViewById<Button>(R.id.clearButton).setOnClickListener {
+                    enteredPin.clear() // Reset the PIN input
+                    pinDisplayText.text = "" // Clear the displayed PIN
+                }
+
+                // Submit button functionality
+                pinDialog.findViewById<Button>(R.id.pinSubmitButton).setOnClickListener {
+
+                    // Check if the entered PIN is blank
+                    if (enteredPin.isNullOrEmpty()) {
+                        Toast.makeText(this, "PIN cannot be blank. Please enter a valid PIN.", Toast.LENGTH_SHORT).show()
+                        return@setOnClickListener
+                    }
+                    // If setting a new PIN for a locked option
+                    if (isLockAction) {
+                        // Save the new PIN for the button using actionType
+                        preferenceUtils.setPIN(this, "${actionType}_pin", enteredPin.toString())
+                        Log.d("SettingsActivity", "$actionType PIN set: ${enteredPin.toString()}")
+                        setupButtons()
+                        // After setting the PIN, lock the button
+                        preferenceUtils.setBoolean(this, "${actionType}_locked", true)
+                        updateButtonText()  // Update button text to reflect the locked state
+
+                        pinDialog.dismiss()
+                    } else {
+                        // Verify the entered PIN using actionType
+                        val savedPin = preferenceUtils.getPIN(this, "${actionType}_pin", "")
+                        if (enteredPin.toString() == savedPin) {
+                            // If the PIN matches, toggle the lock state
+                            val newState = !preferenceUtils.getBoolean(this, "${actionType}_locked", false)
+                            preferenceUtils.setBoolean(this, "${actionType}_locked", newState)
+
+                            // If unlocking, delete the saved PIN
+                            if (!newState) {
+                                preferenceUtils.remove(this, "${actionType}_pin")
+                                Log.d("SettingsActivity", "$actionType PIN removed as it's unlocked.")
+                            }
+
+                            // Update the button text immediately
+                            updateButtonText()
+
+                            // Force UI refresh
+                            lockUnlockLEDConfigButton.invalidate()  // Refresh button view
+                            Log.d("SettingsActivity", "$actionType Lock state changed to: $newState")
+                            pinDialog.dismiss()
+                        } else {
+                            // If the PIN does not match, show an error
+                            Toast.makeText(this, "Incorrect PIN. Please try again.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    setupButtons()
+                }
+
+                pinDialog.show()
+            }
+
+            // Set up button click listeners to toggle states and update preferences
+            lockUnlockLEDConfigButton.setOnClickListener {
+                val preferenceUtils = PreferenceUtils(this)
+                val isLEDConfigLocked = preferenceUtils.getBoolean(this, "led_config_locked", false)
+                val existingPin = preferenceUtils.getPIN(this, "led_config_pin", "")
+
+                if (existingPin.isEmpty()) {
+                    // If no PIN exists, allow setting a new PIN
+                    showPinDialog(isLockAction = true, actionType = "led_config")
+                } else {
+                    // If a PIN exists, show the PIN entry to unlock
+                    if (isLEDConfigLocked) {
+                        showPinDialog(isLockAction = false, actionType = "led_config")
+                    } else {
+                        showPinDialog(isLockAction = true, actionType = "led_config")
+                    }
+                }
+            }
+
+            lockUnlockSettingsMenuButton.setOnClickListener {
+                val preferenceUtils = PreferenceUtils(this)
+                val isSettingsMenuLocked = preferenceUtils.getBoolean(this, "settings_menu_locked", false)
+                val existingPin = preferenceUtils.getPIN(this, "settings_menu_pin", "")
+
+                if (existingPin.isEmpty()) {
+                    // If no PIN exists, allow setting a new PIN
+                    showPinDialog(isLockAction = true, actionType = "settings_menu")
+                } else {
+                    // If a PIN exists, show the PIN entry to unlock
+                    if (isSettingsMenuLocked) {
+                        showPinDialog(isLockAction = false, actionType = "settings_menu")
+                    } else {
+                        showPinDialog(isLockAction = true, actionType = "settings_menu")
+                    }
+                }
+            }
+
+            lockUnlockAlarmsButton.setOnClickListener {
+                val preferenceUtils = PreferenceUtils(this)
+                val isAlarmsLocked = preferenceUtils.getBoolean(this, "alarms_locked", false)
+                val existingPin = preferenceUtils.getPIN(this, "alarms_pin", "")
+
+                if (existingPin.isEmpty()) {
+                    // If no PIN exists, allow setting a new PIN
+                    showPinDialog(isLockAction = true, actionType = "alarms")
+                } else {
+                    // If a PIN exists, show the PIN entry to unlock
+                    if (isAlarmsLocked) {
+                        showPinDialog(isLockAction = false, actionType = "alarms")
+                    } else {
+                        showPinDialog(isLockAction = true, actionType = "alarms")
+                    }
+                }
+            }
+
+            // Show the dialog
+            popupDialog.show()
+        }
 
         if (!checkMicrophonePermission()) {
             micButton.text = "Mic\n\nRequest Permission"
@@ -299,60 +506,6 @@ class settingsActivity : AppCompatActivity() {
             } else {
                 "Mic\n\nOff"
             }
-        }
-
-        micButton.setOnClickListener {
-            if (!checkMicrophonePermission()) {
-                requestMicrophonePermission() // Request permission if not granted
-            } else {
-                toggleMicrophone() // Toggle microphone if permission is granted
-            }
-            val editor = prefs.edit()
-            editor.putBoolean("mic_enabled", micEnabled)
-            editor.apply()
-        }
-
-        lockConfigButton.text = if (lockConfigEnabled) {
-            "Lock Config\n\nOn"
-        } else {
-            "Lock Config\n\nOff"
-        }
-
-        connectButton.setOnClickListener{
-            val intent = Intent(this, ConnectionActivity::class.java)
-            Log.d("Settings Activity", "Connection Button Pressed")
-            startActivity(intent)
-        }
-
-        timeButton.setOnClickListener {
-            timeFormatOption = (timeFormatOption + 1) % timeFormatOptions.size
-            updateTimeButtonState()
-            val intent = Intent()
-            intent.putExtra("timeFormatOption", timeFormatOption)
-            setResult(Activity.RESULT_OK, intent)
-
-            val editor = prefs.edit()
-            editor.putInt("time_format_option", timeFormatOption)
-            editor.apply()
-        }
-
-        lockConfigButton.setOnClickListener {
-            lockConfigEnabled = !lockConfigEnabled
-            lockConfigButton.text = if (lockConfigEnabled) {
-                "Lock Config\n\nOn"
-            } else {
-                "Lock Config\n\nOff"
-            }
-            lockConfigButton.setBackgroundResource(
-            if (lockConfigEnabled){
-                R.drawable.settings_button_background_enabled
-            } else {
-                R.drawable.settings_button_background
-            }
-            )
-            val editor = prefs.edit()
-            editor.putBoolean("lock_config_enabled", lockConfigEnabled)
-            editor.apply()
         }
 
         if (!checkCameraPermission()) {
@@ -365,46 +518,6 @@ class settingsActivity : AppCompatActivity() {
             }
         }
 
-        motionButton.setOnClickListener {
-            if (!checkCameraPermission()) {
-                requestCameraPermission() // Request permission if not granted
-            } else {
-                toggleMotionDetection() // Toggle motion detection if permission is granted
-            }
-            val editor = prefs.edit()
-            editor.putBoolean("motion_detection_enabled", motionDetectionEnabled)
-            editor.apply()
-        }
-
-        motionButton.setOnLongClickListener {
-            Log.d("Settings Activity", "Flip Camera")
-            val intent = Intent(actionFlipCamera)
-
-            // Retrieve the current camera selector from shared preferences
-            val prefs = getSharedPreferences("camera_prefs", Context.MODE_PRIVATE)
-            val currentCameraLensFacing = prefs.getInt("currentCameraSelector", CameraSelector.LENS_FACING_BACK)
-
-            // Determine which camera it will switch to
-            val newCameraFacing = if (currentCameraLensFacing == CameraSelector.LENS_FACING_BACK) {
-                CameraSelector.LENS_FACING_FRONT
-            } else {
-                CameraSelector.LENS_FACING_BACK
-            }
-            Log.d("Settings Activity", "Current camera lens facing: $currentCameraLensFacing")
-            Log.d("Settings Activity", "New camera facing after flip: $newCameraFacing")
-
-            // Display the new camera facing in the toast message
-            val cameraFacingString = if (newCameraFacing == CameraSelector.LENS_FACING_FRONT) {
-                "Front"
-            } else {
-                "Back"
-            }
-
-            Toast.makeText(this, "Flipped Motion Camera to $cameraFacingString", Toast.LENGTH_SHORT).show()
-            sendBroadcast(intent)
-            true // Consume the long click event
-        }
-
         if (!checkLocationPermission()) {
             locationButton.text = "Location\n\nRequest Permission"
         } else {
@@ -415,37 +528,238 @@ class settingsActivity : AppCompatActivity() {
             }
         }
 
-        locationButton.setOnClickListener {
-            if (!checkLocationPermission()) {
-                requestLocationPermission() // Request permission if not granted
-            } else {
-                toggleLocation() // Toggle location if permission is granted
-            }
-            val editor = prefs.edit()
-            editor.putBoolean("location_enabled", locationEnabled)
-            editor.apply()
-        }
-
         backButton.setOnClickListener {
             finish()
         }
     }
 
+    private fun setupButtons() {
+        val motionButton = findViewById<AppCompatButton>(R.id.motionButton)
+        val locationButton = findViewById<AppCompatButton>(R.id.locationButton)
+        val timeButton: Button = findViewById(R.id.timeButton)
+        val syncButton: Button = findViewById(R.id.syncButton)
+        val connectButton = findViewById<AppCompatButton>(R.id.connectButton)
+        val resetButton: Button = findViewById(R.id.resetButton)
+        val preferenceUtils = PreferenceUtils(this)
+        val prefs = getSharedPreferences()
+
+        val isSettingsMenuLocked = preferenceUtils.getBoolean(this, "settings_menu_locked", false)
+        if (isSettingsMenuLocked) {
+            connectButton.setTextColor(ContextCompat.getColor(this, R.color.dark_gray))
+            connectButton.setOnClickListener(null)
+            micButton.setTextColor(ContextCompat.getColor(this, R.color.dark_gray))
+            micButton.setOnClickListener(null)
+            timeButton.setTextColor(ContextCompat.getColor(this, R.color.dark_gray))
+            timeButton.setOnClickListener(null)
+            locationButton.setTextColor(ContextCompat.getColor(this, R.color.dark_gray))
+            locationButton.setOnClickListener(null)
+            syncButton.setTextColor(ContextCompat.getColor(this, R.color.dark_gray))
+            syncButton.setOnClickListener(null)
+            motionButton.setTextColor(ContextCompat.getColor(this, R.color.dark_gray))
+            motionButton.setOnClickListener(null)
+            motionButton.setOnLongClickListener(null)
+            resetButton.setTextColor(ContextCompat.getColor(this, R.color.dark_gray))
+            resetButton.setOnClickListener(null)
+            Toast.makeText(this, "Settings Menu is locked. Please unlock to access other settings.", Toast.LENGTH_SHORT).show()
+        } else {
+            connectButton.setTextColor(ContextCompat.getColor(this, R.color.white))
+            connectButton.setOnClickListener{
+                val intent = Intent(this, ConnectionActivity::class.java)
+                Log.d("Settings Activity", "Connection Button Pressed")
+                startActivity(intent)
+            }
+            micButton.setTextColor(ContextCompat.getColor(this, R.color.white))
+            micButton.setOnClickListener {
+                if (!checkMicrophonePermission()) {
+                    requestMicrophonePermission() // Request permission if not granted
+                } else {
+                    toggleMicrophone() // Toggle microphone if permission is granted
+                }
+                val editor = prefs.edit()
+                editor.putBoolean("mic_enabled", micEnabled)
+                editor.apply()
+            }
+            timeButton.setTextColor(ContextCompat.getColor(this, R.color.white))
+            timeButton.setOnClickListener {
+                // Log the current time format before changing
+                Log.d(
+                    "Settings Activity",
+                    "Current time format option before change: $timeFormatOption"
+                )
+
+                // Switch the time format option
+                timeFormatOption = (timeFormatOption + 1) % timeFormatOptions.size
+
+                // Log the new time format after change
+                Log.d("Settings Activity", "New time format option after change: $timeFormatOption")
+
+                // Update the button text
+                updateTimeButtonState()
+                updateTimeFormatSetting()
+
+                // Pass the new option to the parent activity
+                val intent = Intent()
+                intent.putExtra("timeFormatOption", timeFormatOption)
+                setResult(Activity.RESULT_OK, intent)
+
+                // Save the new time format setting in SharedPreferences
+                val editor = prefs.edit()
+                editor.putInt("time_format_option", timeFormatOption)
+                editor.apply()
+
+                // Log the SharedPreferences update
+                Log.d(
+                    "Settings Activity",
+                    "Time format option saved to SharedPreferences: $timeFormatOption"
+                )
+            }
+            locationButton.setTextColor(ContextCompat.getColor(this, R.color.white))
+            locationButton.setOnClickListener {
+                if (!checkLocationPermission()) {
+                    requestLocationPermission() // Request permission if not granted
+                } else {
+                    toggleLocation() // Toggle location if permission is granted
+                }
+                val editor = prefs.edit()
+                editor.putBoolean("location_enabled", locationEnabled)
+                editor.apply()
+            }
+            syncButton.setTextColor(ContextCompat.getColor(this, R.color.white))
+            syncButton.setOnClickListener {
+                // Add the normal behavior for the button here
+            }
+            motionButton.setTextColor(ContextCompat.getColor(this, R.color.white))
+            motionButton.setOnClickListener {
+                if (!checkCameraPermission()) {
+                    requestCameraPermission() // Request permission if not granted
+                } else {
+                    toggleMotionDetection() // Toggle motion detection if permission is granted
+                }
+                val editor = prefs.edit()
+                editor.putBoolean("motion_detection_enabled", motionDetectionEnabled)
+                editor.apply()
+            }
+            motionButton.setOnLongClickListener {
+                Log.d("Settings Activity", "Flip Camera")
+                val intent = Intent(actionFlipCamera)
+
+                // Retrieve the current camera selector from shared preferences
+                val prefs = getSharedPreferences("camera_prefs", Context.MODE_PRIVATE)
+                val currentCameraLensFacing = prefs.getInt("currentCameraSelector", CameraSelector.LENS_FACING_BACK)
+
+                // Determine which camera it will switch to
+                val newCameraFacing = if (currentCameraLensFacing == CameraSelector.LENS_FACING_BACK) {
+                    CameraSelector.LENS_FACING_FRONT
+                } else {
+                    CameraSelector.LENS_FACING_BACK
+                }
+                Log.d("Settings Activity", "Current camera lens facing: $currentCameraLensFacing")
+                Log.d("Settings Activity", "New camera facing after flip: $newCameraFacing")
+
+                // Display the new camera facing in the toast message
+                val cameraFacingString = if (newCameraFacing == CameraSelector.LENS_FACING_FRONT) {
+                    "Front"
+                } else {
+                    "Back"
+                }
+
+                Toast.makeText(this, "Flipped Motion Camera to $cameraFacingString", Toast.LENGTH_SHORT).show()
+                sendBroadcast(intent)
+                true // Consume the long click event
+            }
+            resetButton.setTextColor(ContextCompat.getColor(this, R.color.white))
+            resetButton.setOnClickListener {
+                // Create confirmation popup
+                val builder = AlertDialog.Builder(this)
+                builder.setTitle("Reset Application")
+                builder.setMessage("Are you sure you want to reset the application? This will wipe all data and settings.")
+                builder.setPositiveButton("Yes, Reset Application") { dialog: DialogInterface, which: Int ->
+                    // Wipe data
+                    val prefs = getSharedPreferences()
+                    prefs.edit().clear().apply() // Clear Shared Preferences
+                    // Perform other necessary data wiping actions (e.g., clear databases, delete files)
+
+                    // Stop the TimeMonitoringService
+                    val serviceIntent = Intent(this, TimeMonitoringService::class.java)
+                    stopService(serviceIntent)
+
+                    // Revoke all granted permissions
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        val packageManager = packageManager
+                        val packageInfo = packageManager.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS)
+                        val requestedPermissions = packageInfo.requestedPermissions
+
+                        if (requestedPermissions != null) {
+                            val permissionsToRevoke = requestedPermissions.filter { permission ->
+                                // Exclude permissions that cannot be revoked using revokeSelfPermissionsOnKill()
+                                val permissionInfo = packageManager.getPermissionInfo(permission, 0)
+                                permissionInfo.group != null && // Check if permission belongs to a group
+                                        permission != Manifest.permission.BLUETOOTH && // Exclude Bluetooth
+                                        permission != Manifest.permission.BLUETOOTH_ADMIN && // Exclude Bluetooth Admin
+                                        permission != Manifest.permission.FOREGROUND_SERVICE // Exclude Foreground Service
+                            }.toList()
+
+                            try {
+                                revokeSelfPermissionsOnKill(permissionsToRevoke)
+//                                showRevokeSuccessSnackBar() // FIX THIS !!!!!!!
+                            } catch (e: SecurityException) {
+                                // Permission revocation failed
+                                Toast.makeText(this, "Failed to remove permissions", Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            // App has no requested permissions
+                            // Handle this case as needed
+                        }
+                    } else {
+                        // Android version is not high enough
+                        Toast.makeText(this, "Android version is too low to remove permissions automatically", Toast.LENGTH_SHORT).show()
+                    }
+
+                }
+                builder.setNegativeButton("No, Go Back") { dialog: DialogInterface, which: Int ->
+                    // Dismiss the popup
+                    dialog.dismiss()
+                }
+                builder.show()
+            }
+        }
+    }
+
     private fun hideSystemUI() {
-        // Enables regular immersive mode.
-        // For "lean back" mode, remove SYSTEM_UI_FLAG_IMMERSIVE.
-        // Or for "sticky immersive," replace it with SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-        window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE
-                or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                or View.SYSTEM_UI_FLAG_FULLSCREEN)
+        // Use WindowInsetsController for Android 11+
+        window.insetsController?.let { controller ->
+            controller.hide(WindowInsets.Type.systemBars()) // Hides status and navigation bars
+            controller.systemBarsBehavior =
+                WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE // Allows bars to reappear with a swipe
+        }
     }
 
     private fun updateTimeButtonState() {
-        val timeButton: Button = findViewById(R.id.timebutton)
+        val timeButton: Button = findViewById(R.id.timeButton)
         timeButton.text = "Time Format\n\n" + timeFormatOptions[timeFormatOption]
+    }
+
+    private fun updateTimeFormatSetting() {
+        val preferenceUtils = PreferenceUtils(this)
+
+        // Determine the 12-hour time format based on timeFormatOption
+        val is12HourTime = when (timeFormatOption) {
+            1 -> true // 12-hour time format
+            2 -> false // 24-hour time format
+            0 -> isDeviceTimeIn12HourFormat() // Fetch the device's time format
+            else -> preferenceUtils.getIs12HourTimeFormat() // Default to stored value
+        }
+
+        // Save the 12-hour time format preference using PreferenceUtils
+        preferenceUtils.saveIs12HourTimeFormat(is12HourTime)
+
+        // Log for debugging
+        Log.d("Settings Activity", "Time format option saved as 12-hour: $is12HourTime")
+    }
+
+    private fun isDeviceTimeIn12HourFormat(): Boolean {
+        val timeFormat = android.text.format.DateFormat.is24HourFormat(this)
+        return !timeFormat // Returns true if 12-hour format, false if 24-hour format
     }
 
     companion object {

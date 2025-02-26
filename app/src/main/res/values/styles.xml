@@ -1,22 +1,21 @@
 <resources>
-    <style name="RoundedModeButton">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">match_parent</item>
-        <item name="android:layout_weight">1</item>
-        <item name="android:background">@drawable/mode_button_shape</item>
-        <item name="android:layout_marginLeft">5dp</item>
-        <item name="android:layout_marginRight">5dp</item>
-        <item name="android:layout_marginTop">5dp</item>
-        <item name="android:layout_marginBottom">5dp</item>
-    </style>
+    <!-- Base application theme. -->
     <style name="DarkAppTheme" parent="Theme.MaterialComponents.DayNight">
         <item name="windowActionBar">false</item>
         <item name="android:background">@color/black</item>
         <item name="windowNoTitle">true</item>
+        <item name="android:windowSplashScreenBackground">@color/black</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/off_icon</item>
+        <item name="postSplashScreenTheme">@style/DarkAppTheme</item>
     </style>
-    <style name="Theme.Splash" parent="Theme.AppCompat.NoActionBar">
-        <item name="android:windowBackground">@drawable/splash_first_icon</item>
+    <style name="Theme.LedWallGUI.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/black</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/off_icon</item>
+        <item name="postSplashScreenTheme">@style/DarkAppTheme</item>
     </style>
-
-
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/black</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/off_icon</item>
+        <item name="postSplashScreenTheme">@style/DarkAppTheme</item>
+    </style>
 </resources>

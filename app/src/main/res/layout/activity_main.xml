@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/mainContainer"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".MainActivity">
+
+    <!-- Existing content wrapped in a LinearLayout -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/imageButton1"
+                android:layout_width="75dp"
+                android:layout_height="75dp"
+                android:layout_marginStart="7dp"
+                android:layout_marginTop="3dp"
+                android:layout_marginEnd="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/transparent_background"
+                android:contentDescription="@string/powerbutton"
+                android:scaleType="centerInside"
+                android:src="@drawable/power_button_off_selector" />
+
+            <ImageButton
+                android:id="@+id/modesbutton"
+                android:layout_width="75dp"
+                android:layout_height="75dp"
+                android:layout_marginStart="35dp"
+                android:layout_marginTop="3dp"
+                android:layout_marginEnd="25dp"
+                android:layout_weight="1"
+                android:background="@drawable/transparent_background"
+                android:contentDescription="@string/modesbutton"
+                android:scaleType="centerInside"
+                android:src="@drawable/modes_button_selector" />
+
+            <TextView
+                android:id="@+id/textView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="50dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginRight="50dp"
+                android:layout_weight="1"
+                android:gravity="center_horizontal"
+                android:text="@string/led_controller"
+                android:textAlignment="center"
+                android:textSize="34sp"
+                android:textColor="@color/white"
+                android:textStyle="bold" />
+
+            <ImageView
+                android:id="@+id/imageView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="0dp"
+                android:layout_marginTop="17dp"
+                android:layout_marginRight="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/transparent_background"
+                android:contentDescription="@string/connection"
+                android:scaleType="centerInside"
+                app:srcCompat="@drawable/stat_dis_button" />
+
+            <ImageButton
+                android:id="@+id/imageButton2"
+                android:layout_width="75dp"
+                android:layout_height="75dp"
+                android:layout_marginLeft="0dp"
+                android:layout_marginTop="3dp"
+                android:layout_marginRight="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/transparent_background"
+                android:contentDescription="@string/alarmbutton"
+                android:scaleType="centerInside"
+                android:src="@drawable/alarm_button_selector" />
+
+            <ImageButton
+                android:id="@+id/imageButton3"
+                android:layout_width="75dp"
+                android:layout_height="75dp"
+                android:layout_marginStart="0dp"
+                android:layout_marginTop="3dp"
+                android:layout_marginEnd="2dp"
+                android:layout_weight="1"
+                android:background="@drawable/transparent_background"
+                android:contentDescription="@string/button"
+                android:scaleType="centerInside"
+                android:src="@drawable/settings_button_selector" />
+        </LinearLayout>
+
+        <!-- Divider between the buttons and the dynamic content -->
+        <View
+            android:id="@+id/settingModeDivider"
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:layout_marginTop="10dp"
+            android:background="@color/light_blue" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginStart="10dp"
+            android:layout_marginTop="20dp"
+            android:baselineAligned="false">
+
+            <!-- Container for dynamic layout (SeekBars) -->
+            <FrameLayout
+                android:id="@+id/dynamicLayoutContainer"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="10dp"
+                android:layout_marginTop="20dp"
+                android:layout_weight="10">
+
+                <TextView
+                    android:id="@+id/textView5"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="5dp"
+                    android:background="@drawable/transparent_background"
+                    android:gravity="center_horizontal"
+                    android:text="@string/mode"
+                    android:textAlignment="center"
+                    android:textColor="@color/white"
+                    android:textSize="34sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
+
+            <!-- Slider Section -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_marginTop="10dp"
+                android:layout_marginBottom="10dp"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center">
+                <FrameLayout
+                    android:id="@+id/sliderContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    tools:ignore="UselessParent">
+
+                    <!-- Slider Background -->
+                    <View
+                        android:id="@+id/sliderBackground"
+                        android:layout_width="match_parent"
+                        android:layout_marginTop="5dp"
+                        android:layout_marginBottom="5dp"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/slider_background" />
+
+                    <!-- Slider Thumb -->
+                    <View
+                        android:id="@+id/sliderThumb"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_margin="10dp"
+                        android:layout_marginBottom="0dp"
+                        android:layout_gravity="bottom"
+                        android:background="@drawable/slider_thumb" />
+
+                    <!-- Black Border -->
+                    <View
+                        android:id="@+id/blackBorder"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/black_border_drawable" />
+
+                    <FrameLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginBottom="10dp"
+                        android:background="@drawable/transparent_background">
+                    </FrameLayout>
+
+                    <ImageView
+                        android:id="@+id/sunIcon"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:layout_gravity="center"
+                        android:background="@drawable/transparent_background"
+                        android:contentDescription="@drawable/sun_svg"
+                        app:srcCompat="@drawable/sun_svg" />
+                </FrameLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/rgbColorWheelContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="20dp"
+            android:gravity="center">
+
+            <com.example.ledwallgui.ui.settings.ColorWheel
+                android:id="@+id/rgbColorWheel"
+                android:layout_width="300dp"
+                android:layout_height="300dp"
+                android:layout_gravity="center"
+                android:background="@android:color/holo_blue_light" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- Overlay for recording LED state -->
+    <FrameLayout
+        android:id="@+id/recordOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/red_outline"
+        android:visibility="gone">
+
+    <!-- Done button at the bottom center -->
+    <Button
+        android:id="@+id/recordDoneButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Capture LED State"
+        android:textColor="@android:color/white"
+        android:background="@drawable/rounded_background"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="20dp" />
+</FrameLayout>
+
+    </FrameLayout>

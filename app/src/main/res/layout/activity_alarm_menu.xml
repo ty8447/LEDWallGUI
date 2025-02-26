@@ -1,5 +1,6 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
@@ -18,13 +19,14 @@
 
             <ImageButton
                 android:id="@+id/aBackButton"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_marginLeft="10dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="10dp"
                 android:layout_marginTop="15dp"
-                android:layout_marginRight="25dp"
+                android:layout_marginEnd="25dp"
                 android:layout_marginBottom="5dp"
                 android:background="@drawable/transparent_background"
+                android:contentDescription="Back"
                 android:scaleType="centerInside"
                 android:src="@drawable/back_normal" />
 
@@ -32,12 +34,13 @@
                 android:id="@+id/textView2"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Alarms"
+                android:layout_marginTop="3dp"
+                android:text="@string/alarms"
                 android:textColor="#FFFFFF"
-                android:textSize="50dp" />
+                android:textSize="50sp" />
 
             <androidx.appcompat.widget.AppCompatButton
-                android:id="@+id/addAlarm"
+                android:id="@+id/addAlarmButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingLeft="0dp"
@@ -46,7 +49,7 @@
                 android:paddingBottom="0dp"
                 android:text="+"
                 android:textColor="@color/white"
-                android:textSize="40dp"
+                android:textSize="40sp"
                 android:background="@drawable/black_button_background"/>
             <LinearLayout
                 android:layout_width="0dp"
@@ -55,7 +58,7 @@
                 android:orientation="vertical">
             <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="0dp"
                 android:layout_weight="1">
 
                 <TextView
@@ -63,10 +66,10 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="end|center_vertical"
-                    android:text="current"
+                    android:text="@string/current"
                     android:textColor="#FFFFFF"
-                    android:layout_marginRight="10dp"
-                    android:textSize="30dp" />
+                    android:layout_marginEnd="10dp"
+                    android:textSize="30sp" />
 
             </FrameLayout>
                 <TextView
@@ -74,10 +77,10 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="end|center_vertical"
-                    android:text="Time till Next"
+                    android:text="@string/time_till_next"
                     android:textColor="#FFFFFF"
-                    android:layout_marginRight="10dp"
-                    android:textSize="15dp" />
+                    android:layout_marginEnd="10dp"
+                    android:textSize="15sp" />
             </LinearLayout>
         </TableRow>
 
@@ -90,12 +93,12 @@
                 android:id="@+id/emptyTextView"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginLeft="20dp"
+                android:layout_marginStart="20dp"
                 android:layout_marginTop="10dp"
                 android:layout_weight="1"
-                android:text="No alarms found..."
+                android:text="@string/no_alarms_found"
                 android:textColor="@color/white"
-                android:textSize="30dp"
+                android:textSize="30sp"
                 android:textStyle="italic"
                 android:visibility="gone"
                 />
@@ -136,7 +139,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:visibility="gone"
-            android:text="Cancel"/>
+            android:text="@string/cancel"/>
 
         <!-- Edit Button -->
         <androidx.appcompat.widget.AppCompatButton
@@ -147,7 +150,7 @@
             android:layout_height="wrap_content"
             android:visibility="gone"
             android:layout_weight="1"
-            android:text="Turn Off"/>
+            android:text="@string/turn_off"/>
 
         <!-- Delete Button -->
         <androidx.appcompat.widget.AppCompatButton
@@ -158,8 +161,23 @@
             android:background="@drawable/transparent_background"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Delete"/>
+            android:text="@string/delete"/>
     </LinearLayout>
+
+    <!-- Done button -->
+    <Button
+        android:id="@+id/doneButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:text="Done"
+        android:textColor="@color/white"
+        android:translationY="1000dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:visibility="gone" /> <!-- Initially off-screen at the bottom -->
 
 
 </androidx.constraintlayout.widget.ConstraintLayout>

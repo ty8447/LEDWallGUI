@@ -2,38 +2,34 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:background="@color/black">
 
-    <!-- Alarm Details -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
+        <TextView
+            android:id="@+id/textViewAlarmTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/white"
+            android:textSize="80dp"
+            android:text="08:00 AM"
+            android:layout_marginTop="100dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
-    <TextView
-        android:id="@+id/textViewAlarmTime"
-        android:background="@drawable/transparent_background"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/white"
-        android:layout_gravity="center_horizontal"
-        android:textSize="80dp"
-        android:layout_centerHorizontal="true"
-        android:layout_marginTop="100dp"
-        android:text="08:00 AM" />
+        <TextView
+            android:id="@+id/textViewAlarmName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/white"
+            android:textSize="35sp"
+            android:layout_marginTop="20dp"
+            android:text="Wake Up Alarm"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/textViewAlarmTime" />
 
-    <TextView
-        android:id="@+id/textViewAlarmName"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="@drawable/transparent_background"
-        android:textColor="@color/white"
-        android:layout_gravity="center_horizontal"
-        android:textSize="35sp"
-        android:layout_centerHorizontal="true"
-        android:layout_below="@id/textViewAlarmTime"
-        android:text="Wake Up Alarm" />
-
+        <!-- Dismiss Button -->
         <Button
             android:id="@+id/buttonDismiss"
             android:layout_width="wrap_content"
@@ -41,21 +37,69 @@
             android:layout_gravity="center_horizontal|bottom"
             android:backgroundTint="@color/clicked_item_background"
             android:textColor="@color/white"
-            android:layout_marginTop="20dp"
             android:text="Dismiss"
             android:textSize="40dp"
-            android:layout_centerHorizontal="true" />
-    <Button
-        android:id="@+id/buttonSnooze"
-        android:layout_width="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:layout_height="wrap_content"
-        android:text="Snooze"
-        android:layout_marginTop="20dp"
-        android:layout_centerHorizontal="true"
-        android:layout_below="@id/textViewAlarmName"
-        android:textSize="40dp"
-        android:textColor="@android:color/white"
-        android:backgroundTint="@color/clicked_item_background" />
-    </LinearLayout>
+            android:layout_marginTop="20dp"
+            android:layout_centerHorizontal="true"
+            app:layout_constraintBottom_toTopOf="@+id/linearLayoutSnooze"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginBottom="100dp"
+            android:padding="10dp"
+            android:background="@drawable/rounded_background" />
+
+        <!-- Snooze Buttons -->
+        <LinearLayout
+            android:id="@+id/linearLayoutSnooze"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginTop="20dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginBottom="20dp">
+
+            <!-- Minus Button -->
+            <Button
+                android:id="@+id/buttonSnoozeMinus"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="-"
+                android:textSize="30sp"
+                android:textColor="@color/white"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/rounded_background"
+                android:backgroundTint="@color/clicked_item_background" />
+
+            <!-- Snooze Button Text -->
+            <Button
+                android:id="@+id/buttonSnooze"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1.5"
+                android:text="Snooze 5 Minute(s)"
+                android:textSize="20sp"
+                android:textColor="@color/white"
+                android:background="@drawable/rounded_background"
+                android:backgroundTint="@color/clicked_item_background" />
+
+            <!-- Plus Button -->
+            <Button
+                android:id="@+id/buttonSnoozePlus"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="+"
+                android:layout_marginStart="8dp"
+                android:textSize="30sp"
+                android:textColor="@color/white"
+                android:background="@drawable/rounded_background"
+                android:backgroundTint="@color/clicked_item_background" />
+        </LinearLayout>
+
 </androidx.constraintlayout.widget.ConstraintLayout>

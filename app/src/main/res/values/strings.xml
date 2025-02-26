@@ -11,7 +11,12 @@
     <string name="second_fragment_label">Second Fragment</string>
     <string name="next">Next</string>
     <string name="previous">Previous</string>
-
+    <string name="time_till_next_alarm">Next alarm in %1$d hours and %2$d minutes</string>
+    <string name="no_upcoming_alarms">No upcoming alarms</string>
+    <string-array name="am_pm_values">
+        <item>AM</item>
+        <item>PM</item>
+    </string-array>
     <string name="lorem_ipsum">
         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam in scelerisque sem. Mauris
         volutpat, dolor id interdum ullamcorper, risus dolor egestas lectus, sit amet mattis purus
@@ -48,4 +53,19 @@
         libero vel nunc consequat, quis tincidunt nisl eleifend. Cras bibendum enim a justo luctus
         vestibulum. Fusce dictum libero quis erat maximus, vitae volutpat diam dignissim.
     </string>
+    <string name="led_controller">LED Controller</string>
+    <string name="connection">Connection</string>
+    <string name="mode">Mode</string>
+    <string name="modesbutton">modesButton</string>
+    <string name="powerbutton">PowerButton</string>
+    <string name="alarmbutton">AlarmButton</string>
+    <string name="parameter_title">Parameter Title</string>
+    <string name="_0">0</string>
+    <string name="alarms">Alarms</string>
+    <string name="current">current</string>
+    <string name="time_till_next">Time till Next</string>
+    <string name="no_alarms_found">No alarms found...</string>
+    <string name="cancel">Cancel</string>
+    <string name="turn_off">Turn Off</string>
+    <string name="delete">Delete</string>
 </resources>
