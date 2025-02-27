@@ -32,6 +32,20 @@ class PreferenceUtils(private val context: Context) {
         editor.apply()
     }
 
+    fun getPowerState(): Boolean {
+        return sharedPreferences.getBoolean("powerState", false)
+    }
+
+    fun setBrightness(brightness: String) {
+        val editor = sharedPreferences.edit()
+        editor.putString("brightness", brightness)
+        editor.apply()
+    }
+
+    fun getBrightness(): Int {
+        return sharedPreferences.getString("brightness", "0")?.toIntOrNull() ?: 0
+    }
+
     fun getMotionDetectionEnabled(): Boolean {
         return sharedPreferences.getBoolean(KEY_MOTION_DETECTION_ENABLED, false)
     }
@@ -108,10 +122,6 @@ class PreferenceUtils(private val context: Context) {
 
     fun saveUUID(key: String, value: String?) {
         sharedPreferences.edit().putString(key, value).apply()
-    }
-
-    fun getString(key: String, default: String? = null): String? {
-        return sharedPreferences.getString(key, default)
     }
 
     // For saving the lock state dynamically based on actionType

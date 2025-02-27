@@ -92,6 +92,7 @@ class MainActivity : AppCompatActivity() {
     private var maxBrightnessChange = 10
     private var sliderHeight = 0
     private var recordLedState = false
+    var sliderThumb: View? = null
 
     companion object {
         private const val BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE = 102
@@ -148,6 +149,8 @@ class MainActivity : AppCompatActivity() {
                     Log.d("MainActivity", "Received LED parameters: $ledParametersJson")
                     // Call a helper function to update the display based on the selected mode.
                     updateModeDisplay()
+                    powerState = preferenceUtils.getPowerState()
+                    updatePowerButtonImage()
                     Toast.makeText(this, "Mode selected", Toast.LENGTH_SHORT).show()
                 } else {
                     Log.w("MainActivity", "No mode result received.")
@@ -192,7 +195,7 @@ class MainActivity : AppCompatActivity() {
         hideSystemUI()
 
         val sliderBackground = findViewById<View>(R.id.sliderBackground)
-        val sliderThumb = findViewById<View>(R.id.sliderThumb)
+        sliderThumb = findViewById<View>(R.id.sliderThumb)
         dynamicLayoutContainer = findViewById(R.id.dynamicLayoutContainer)
 
         settingModeDivider = findViewById(R.id.settingModeDivider)
@@ -315,16 +318,19 @@ class MainActivity : AppCompatActivity() {
                             handler.postDelayed({
                                 if (!isDragging) {
                                     // If it's not dragging after the delay, it's a tap
-                                    updateThumbPosition(
-                                        sliderThumb,
-                                        currentBrightness,
-                                        isDragged = false
-                                    )
+                                    sliderThumb?.let {
+                                        updateThumbPosition(
+                                            it,
+                                            currentBrightness,
+                                            isDragged = false
+                                        )
+                                    }
                                     Log.d("Slider", "User tapped. Jumping to: $currentBrightness")
 
                                     // Set the brightness if connected
                                     if (connectState) {
                                         globalBluetoothManager.setBrightness(currentBrightness)
+                                        preferenceUtils.setBrightness(currentBrightness.toString())
                                     }
                                 }
                             }, 200) // 200ms delay to detect tap vs hold
@@ -380,11 +386,13 @@ class MainActivity : AppCompatActivity() {
                                 currentBrightness =
                                     (currentBrightness - brightnessChange).coerceIn(0, 100)
                                 Log.d("Slider", "currentBrightness: $currentBrightness")
-                                updateThumbPosition(
-                                    sliderThumb,
-                                    currentBrightness,
-                                    isDragged = true
-                                )
+                                sliderThumb?.let {
+                                    updateThumbPosition(
+                                        it,
+                                        currentBrightness,
+                                        isDragged = true
+                                    )
+                                }
                                 Log.d("Slider", "Update Thumb Position 1")
 
                                 if (connectState) {
@@ -425,11 +433,13 @@ class MainActivity : AppCompatActivity() {
                                 val percentage =
                                     ((sliderHeight - adjustedY) / sliderHeight * 100).toInt()
                                 currentBrightness = percentage
-                                updateThumbPosition(
-                                    sliderThumb,
-                                    currentBrightness,
-                                    isDragged = false
-                                )
+                                sliderThumb?.let {
+                                    updateThumbPosition(
+                                        it,
+                                        currentBrightness,
+                                        isDragged = false
+                                    )
+                                }
 
                                 // Set the brightness if connected
                                 if (connectState) {
@@ -1302,8 +1312,18 @@ class MainActivity : AppCompatActivity() {
         Log.d("MainActivity", "Requesting power state parameter")
         lifecycleScope.launch {
             globalBluetoothManager.requestValues(this@MainActivity, "Power", "None")
+            globalBluetoothManager.requestValues(this@MainActivity, "Brightness", "None")
         }
-
+        powerState = preferenceUtils.getPowerState()
+        updatePowerButtonImage()
+        currentBrightness = preferenceUtils.getBrightness()
+        sliderThumb?.let {
+            updateThumbPosition(
+                it,
+                currentBrightness,
+                isDragged = false
+            )
+        }
         globalBluetoothManager.startConnectionCheck(this)
     }
 

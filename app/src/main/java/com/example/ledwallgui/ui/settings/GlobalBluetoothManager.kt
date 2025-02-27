@@ -31,8 +31,6 @@ import no.nordicsemi.android.kotlin.ble.core.ServerDevice
 import no.nordicsemi.android.kotlin.ble.core.data.BleGattProperty
 import no.nordicsemi.android.kotlin.ble.core.data.BleWriteType
 import no.nordicsemi.android.kotlin.ble.core.data.util.DataByteArray
-import java.io.IOException
-import java.util.*  // e.g. for LinkedList if still needed
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -50,6 +48,7 @@ object BluetoothInstance {
     var ledModeListCharacteristic: ClientBleGattCharacteristic? = null
     var parameterResponseCharacteristic: ClientBleGattCharacteristic? = null
     var parameterControlCharacteristic: ClientBleGattCharacteristic? = null
+    var parameterRequestCharacteristic: ClientBleGattCharacteristic? = null
 
     fun clearCache() {
         clientBleGatt = null
@@ -58,6 +57,7 @@ object BluetoothInstance {
         ledModeListCharacteristic = null
         parameterResponseCharacteristic = null
         parameterControlCharacteristic = null
+        parameterRequestCharacteristic = null
         Log.d("BluetoothInstance", "Cache cleared")
     }
 }
@@ -217,6 +217,22 @@ class GlobalBluetoothManager(
                             )
                         }
 
+                        val parameterRequestCharacteristic =
+                            ledService.findCharacteristic(PARAMETER_REQUEST_UUID)
+                        if (parameterRequestCharacteristic != null) {
+                            BluetoothInstance.parameterRequestCharacteristic =
+                                parameterRequestCharacteristic
+                            prefs.saveUUID(
+                                "parameter_request_char_uuid",
+                                parameterRequestCharacteristic.uuid.toString()
+                            )
+                        } else {
+                            log(
+                                Log.ERROR,
+                                "Parameter Request Characteristic NOT FOUND! UUID: $PARAMETER_REQUEST_UUID"
+                            )
+                        }
+
                     } else {
                         log(Log.ERROR, "LED Service NOT FOUND! UUID: $LED_CONNECTION_SERVICE")
                     }
@@ -224,9 +240,14 @@ class GlobalBluetoothManager(
                     BluetoothInstance.parameterResponseCharacteristic
                         ?.getNotifications()
                         ?.onEach { data ->
-                            Log.d(TAG, "Notification received for parameter response: ${data.value.toHexString()}")
+                            // Convert the received byte array to a UTF-8 string.
+                            val responseString = data.value.toString(Charsets.UTF_8)
+                            Log.d(TAG, "Notification received for parameter response: $responseString")
+                            // Process the response.
+                            processParameterResponse(responseString)
                         }
                         ?.launchIn(this) ?: Log.w(TAG, "Parameter response characteristic not found in BluetoothInstance")
+
 
                     delay(2000)
 
@@ -377,7 +398,7 @@ class GlobalBluetoothManager(
                 withContext(Dispatchers.Main) {
                     if (success) {
                         log(Log.DEBUG, "Reconnect and rediscovery successful. Sending data.")
-                        sendDataToDeviceInternal(data, clearBuffer, appendNullTerminator)
+                        sendDataToDeviceInternal(data, appendNullTerminator)
                     } else {
                         log(Log.ERROR, "Failed to connect and discover services. Cannot send data.")
                     }
@@ -385,7 +406,7 @@ class GlobalBluetoothManager(
             }
         } else {
             log(Log.DEBUG, "Already connected and services discovered. Sending data directly.")
-            sendDataToDeviceInternal(data, clearBuffer, appendNullTerminator)
+            sendDataToDeviceInternal(data, appendNullTerminator)
         }
     }
 
@@ -413,36 +434,61 @@ class GlobalBluetoothManager(
      */
     private fun processParameterResponse(response: String) {
         log(Log.DEBUG, "Processing parameter response: $response")
-        val parametersMap = mutableMapOf<String, String>()
-        response.split(",").forEach { pair ->
-            val keyValue = pair.split("=")
-            if (keyValue.size == 2) {
-                parametersMap[keyValue[0].trim()] = keyValue[1].trim()
-            }
+
+        // Split the response on ":" and expect three parts: Type, Mode, and {Value}
+        val parts = response.split(":")
+        if (parts.size < 3) {
+            log(Log.WARN, "Parameter response format invalid: $response")
+            return
         }
-        val modeName = parametersMap["Name"]
-        if (modeName != null) {
-            val modeInfo = modeInfoList.find { it.name == modeName }
+        val type = parts[0].trim()
+        val modeField = parts[1].trim()
+        // Remove the curly braces from the value part.
+        val value = parts[2].trim().removePrefix("{").removeSuffix("}")
+
+        // Build a map with our parsed values.
+        // Always store the type and the value.
+        val parametersMap = mutableMapOf<String, String>()
+        parametersMap["Type"] = type
+        parametersMap["Value"] = value
+
+        if (type.equals("Mode", ignoreCase = true)) {
+            // For a Mode response, we care about the mode field.
+            parametersMap["Mode"] = modeField
+            val modeInfo = modeInfoList.find { it.name == modeField }
             if (modeInfo != null) {
                 modeInfo.parameterValues.clear()
                 modeInfo.parameterValues.putAll(parametersMap)
-                if (currentMode == modeName) {
-                    log(
-                        Log.DEBUG,
-                        "Updated parameters for current mode $modeName: ${modeInfo.parameterValues}"
-                    )
+                if (currentMode == modeField) {
+                    log(Log.DEBUG, "Updated parameters for current mode $modeField: ${modeInfo.parameterValues}")
                 }
             } else {
-                log(Log.WARN, "ModeInfo not found for mode: $modeName")
+                log(Log.WARN, "ModeInfo not found for mode: $modeField")
             }
+        } else if (type.equals("Power", ignoreCase = true)) {
+            val powerState = value.equals("1", ignoreCase = true)
+            prefs.savePowerState(powerState)
+            log(Log.DEBUG, "Updated parameters for type $type with value $value")
+
+        } else if (type.equals("Brightness", ignoreCase = true)) {
+            prefs.setBrightness(value)
+            log(Log.DEBUG, "Updated parameters for type $type with value $value")
+
         } else {
-            log(Log.WARN, "Parameter response missing mode name")
+            // For types like Message etc., we ignore the mode field.
+            val modeInfo = modeInfoList.find { it.name.equals(type, ignoreCase = true) }
+            if (modeInfo != null) {
+                modeInfo.parameterValues.clear()
+                modeInfo.parameterValues.putAll(parametersMap)
+                log(Log.DEBUG, "Updated parameters for type $type: ${modeInfo.parameterValues}")
+            } else {
+                log(Log.WARN, "ModeInfo not found for type: $type")
+            }
         }
     }
 
     private fun sendDataToDeviceInternal(
         data: String,
-        clearBuffer: Boolean = true,
         appendNullTerminator: Boolean = false
     ) {
         log(Log.DEBUG, "sendDataToDeviceInternal called.")
@@ -551,19 +597,18 @@ class GlobalBluetoothManager(
             return
         }
 
-        // Discover services on the connected device.
-        val services = clientBleGatt?.discoverServices()
-        // Find our target service.
-        val service = services?.findService(LED_CONNECTION_SERVICE)
-        // Find the parameter request characteristic.
-        val characteristic = service?.findCharacteristic(PARAMETER_REQUEST_UUID)
+        val parameterRequestCharacteristic = BluetoothInstance.parameterRequestCharacteristic
 
-        if (characteristic != null) {
+        if (parameterRequestCharacteristic != null) {
             val requestString = "$type:$modeName:{}"
             val requestBytes = requestString.toByteArray(Charsets.UTF_8)
             try {
                 // Use the spread operator (*) to pass the ByteArray as vararg.
-                characteristic.write(DataByteArray.from(*requestBytes))
+                val writeResult = parameterRequestCharacteristic.write(
+                    DataByteArray.from(*requestBytes),
+                    writeType = BleWriteType.NO_RESPONSE
+                )
+                log(Log.DEBUG, "Data sent. Result: $writeResult")
                 log(Log.DEBUG, "Requested $type values for mode: $modeName")
             } catch (e: Exception) {
                 log(Log.WARN, "Failed to request values: ${e.message}")
