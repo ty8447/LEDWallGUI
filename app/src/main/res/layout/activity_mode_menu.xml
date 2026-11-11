@@ -22,6 +22,14 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
+        <Button android:id="@+id/animationStudioButton"
+            android:layout_width="wrap_content" android:layout_height="48dp"
+            android:layout_margin="12dp" android:paddingHorizontal="18dp"
+            android:layout_marginEnd="18dp" android:text="Animation Studio"
+            android:textAllCaps="false" android:textColor="@color/white"
+            android:background="@drawable/settings_button_color_background_selector"
+            app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="parent" />
+
         <ImageButton
             android:id="@+id/mBackButton"
             android:layout_width="40dp"

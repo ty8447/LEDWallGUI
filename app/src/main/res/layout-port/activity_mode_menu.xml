@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/modeMenuContainer" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#121721">
+  <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
+      android:orientation="vertical" android:padding="10dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="56dp"
+        android:gravity="center_vertical" android:orientation="horizontal">
+      <ImageButton android:id="@+id/mBackButton" android:layout_width="48dp" android:layout_height="48dp"
+          android:background="@drawable/transparent_background" android:src="@drawable/back_normal"
+          android:contentDescription="Back" />
+      <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+          android:text="Lighting Modes" android:textSize="22sp" android:textColor="@color/white"
+          android:textStyle="bold" android:paddingStart="6dp" />
+      <Button android:id="@+id/animationStudioButton" android:layout_width="wrap_content"
+          android:layout_height="48dp" android:text="Studio" android:textColor="@color/white"
+          android:textAllCaps="false" android:background="@drawable/settings_button_color_background_selector" />
+    </LinearLayout>
+    <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:fillViewport="false" android:clipToPadding="false">
+      <GridLayout android:id="@+id/modesContainer" android:layout_width="match_parent"
+          android:layout_height="wrap_content" android:columnCount="2" android:padding="4dp" />
+    </ScrollView>
+  </LinearLayout>
+  <FrameLayout android:id="@+id/recordOverlay" android:layout_width="match_parent"
+      android:layout_height="match_parent" android:background="@drawable/red_outline" android:visibility="gone">
+    <Button android:id="@+id/recordDoneButton" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal" android:layout_marginBottom="16dp"
+        android:text="Capture LED State" android:background="@drawable/rounded_background"
+        android:textColor="@color/white" />
+  </FrameLayout>
+</FrameLayout>

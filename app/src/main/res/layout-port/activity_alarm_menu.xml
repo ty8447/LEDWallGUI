@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:layout_width="match_parent" android:layout_height="match_parent" android:background="#121721">
+  <LinearLayout android:id="@+id/tableLayout" android:layout_width="match_parent" android:layout_height="match_parent"
+      android:orientation="vertical" android:paddingHorizontal="12dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="58dp"
+        android:gravity="center_vertical" android:orientation="horizontal">
+      <ImageButton android:id="@+id/aBackButton" android:layout_width="48dp" android:layout_height="48dp"
+          android:src="@drawable/back_normal" android:contentDescription="Back"
+          android:background="@drawable/transparent_background" />
+      <TextView android:id="@+id/textView2" android:layout_width="0dp" android:layout_weight="1"
+          android:layout_height="wrap_content" android:text="@string/alarms" android:textColor="@color/white"
+          android:textSize="28sp" />
+      <androidx.appcompat.widget.AppCompatButton android:id="@+id/addAlarmButton"
+          android:layout_width="54dp" android:layout_height="54dp" android:text="+"
+          android:textSize="28sp" android:textColor="@color/white"
+          android:background="@drawable/black_button_background" />
+    </LinearLayout>
+    <TextView android:id="@+id/currentTime" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="@string/current" android:textColor="@color/white" android:textSize="22sp"
+        android:gravity="end" />
+    <TextView android:id="@+id/timeTillNext" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="@string/time_till_next" android:textColor="@color/white" android:textSize="14sp"
+        android:gravity="end" />
+    <TextView android:id="@+id/emptyTextView" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="@string/no_alarms_found" android:textSize="20sp" android:textColor="@color/white"
+        android:gravity="center" android:visibility="gone" />
+    <androidx.recyclerview.widget.RecyclerView android:id="@+id/alarmsRecyclerView"
+        android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:clipToPadding="false" android:paddingVertical="8dp" />
+    <LinearLayout android:id="@+id/buttonLayout" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:orientation="horizontal">
+      <androidx.appcompat.widget.AppCompatButton android:id="@+id/cancelButton" android:layout_width="0dp"
+          android:layout_height="48dp" android:layout_weight="1" android:visibility="gone" android:text="@string/cancel" />
+      <androidx.appcompat.widget.AppCompatButton android:id="@+id/offButton" android:layout_width="0dp"
+          android:layout_height="48dp" android:layout_weight="1" android:visibility="gone" android:text="@string/turn_off" />
+      <androidx.appcompat.widget.AppCompatButton android:id="@+id/deleteButton" android:layout_width="0dp"
+          android:layout_height="48dp" android:layout_weight="1" android:visibility="gone" android:text="@string/delete" />
+    </LinearLayout>
+  </LinearLayout>
+  <Button android:id="@+id/doneButton" android:layout_width="wrap_content" android:layout_height="wrap_content"
+      android:layout_gravity="bottom|center_horizontal" android:visibility="gone"
+      android:translationY="1000dp" android:text="Done" />
+</FrameLayout>

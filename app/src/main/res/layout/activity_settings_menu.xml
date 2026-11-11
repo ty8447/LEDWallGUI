@@ -1,149 +1,220 @@
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
-
-    <TableLayout
-        android:id="@+id/tableLayout"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <TableRow
+    android:layout_height="match_parent"
+    android:background="#121721"
+    android:fillViewport="true"
+    android:clipToPadding="false">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="36dp">
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent" >
-
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp">
             <ImageButton
                 android:id="@+id/sBackButton"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:src="@drawable/back_normal"
                 android:background="@drawable/transparent_background"
-                android:layout_marginTop="15dp"
-                android:layout_marginBottom="5dp"
-                android:layout_marginLeft="10dp"
-                android:layout_marginRight="25dp"
-                android:scaleType="centerInside" />
-
+                android:scaleType="centerInside"
+                android:contentDescription="Back to Settings" />
             <TextView
                 android:id="@+id/textView2"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:paddingStart="12dp"
                 android:text="Settings"
-                android:textColor="@color/white"
-                android:textSize="50dp" />
-        </TableRow>
+                android:textSize="30sp"
+                android:textStyle="bold"
+                android:textColor="@color/white" />
+        </LinearLayout>
 
-        <TableRow
+        <!-- Original Settings tiles, still in their original order. Layout is
+             four columns in landscape, two in portrait. Extra rows scroll. -->
+        <com.example.ledwallgui.ui.settings.SquareSettingsGrid
+            android:id="@+id/settingsTileGrid"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_marginLeft="5dp"
-            android:layout_marginTop="10dp"
-            android:layout_marginRight="5dp"
-            android:layout_weight="1">
-
+            android:layout_height="wrap_content">
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/connectButton"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginLeft="5dp"
-                android:layout_marginRight="5dp"
-                android:layout_weight="1"
-                android:textSize="20dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="0dp"
                 android:background="@drawable/settings_button_color_background_selector"
-                android:text="Connection" />
-
+                android:gravity="center"
+                android:text="Connection"
+                android:textColor="@color/white"
+                android:textAllCaps="false"
+                android:fontFamily="sans"
+                android:padding="10dp"
+                android:textSize="20sp"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="12sp"
+                android:autoSizeMaxTextSize="20sp"
+                android:autoSizeStepGranularity="1sp" />
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/micButton"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginLeft="5dp"
-                android:layout_marginRight="5dp"
-                android:layout_weight="1"
-                android:textSize="20dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="0dp"
                 android:background="@drawable/settings_button_background"
-                android:text="Mic" />
-
+                android:gravity="center"
+                android:text="Mic"
+                android:textColor="@color/white"
+                android:textAllCaps="false"
+                android:fontFamily="sans"
+                android:padding="10dp"
+                android:textSize="20sp"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="12sp"
+                android:autoSizeMaxTextSize="20sp"
+                android:autoSizeStepGranularity="1sp" />
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/timeButton"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginLeft="5dp"
-                android:layout_marginRight="5dp"
-                android:layout_weight="1"
-                android:textSize="20dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="0dp"
                 android:background="@drawable/settings_button_color_background_selector"
-                android:text="Time Format" />
-
+                android:gravity="center"
+                android:text="Time Format"
+                android:textColor="@color/white"
+                android:textAllCaps="false"
+                android:fontFamily="sans"
+                android:padding="10dp"
+                android:textSize="20sp"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="12sp"
+                android:autoSizeMaxTextSize="20sp"
+                android:autoSizeStepGranularity="1sp" />
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/locationButton"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginLeft="5dp"
-                android:layout_marginRight="5dp"
-                android:layout_weight="1"
-                android:textSize="20dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="0dp"
                 android:background="@drawable/settings_button_background"
-                android:text="Location" />
-        </TableRow>
-
-        <TableRow
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_marginLeft="5dp"
-            android:layout_marginTop="10dp"
-            android:layout_marginRight="5dp"
-            android:layout_marginBottom="10dp"
-            android:layout_weight="1">
-
+                android:gravity="center"
+                android:text="Location"
+                android:textColor="@color/white"
+                android:textAllCaps="false"
+                android:fontFamily="sans"
+                android:padding="10dp"
+                android:textSize="20sp"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="12sp"
+                android:autoSizeMaxTextSize="20sp"
+                android:autoSizeStepGranularity="1sp" />
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/syncButton"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginLeft="5dp"
-                android:layout_marginRight="5dp"
-                android:layout_weight="1"
-                android:textSize="20dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="0dp"
                 android:background="@drawable/settings_button_color_background_selector"
-                android:text="Sync LED Config" />
-
+                android:gravity="center"
+                android:text="Configuration"
+                android:textColor="@color/white"
+                android:textAllCaps="false"
+                android:fontFamily="sans"
+                android:padding="10dp"
+                android:textSize="20sp"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="12sp"
+                android:autoSizeMaxTextSize="20sp"
+                android:autoSizeStepGranularity="1sp" />
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/lockConfigButton"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginLeft="5dp"
-                android:layout_marginRight="5dp"
-                android:layout_weight="1"
-                android:textSize="20dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="0dp"
                 android:background="@drawable/settings_button_background"
-                android:text="Lock Function" />
-
+                android:gravity="center"
+                android:text="Lock Function"
+                android:textColor="@color/white"
+                android:textAllCaps="false"
+                android:fontFamily="sans"
+                android:padding="10dp"
+                android:textSize="20sp"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="12sp"
+                android:autoSizeMaxTextSize="20sp"
+                android:autoSizeStepGranularity="1sp" />
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/motionButton"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginLeft="5dp"
-                android:layout_marginRight="5dp"
-                android:layout_weight="1"
-                android:textSize="20dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="0dp"
                 android:background="@drawable/settings_button_background"
-                android:text="Motion Detection" />
-
+                android:gravity="center"
+                android:text="Motion Detection"
+                android:textColor="@color/white"
+                android:textAllCaps="false"
+                android:fontFamily="sans"
+                android:padding="10dp"
+                android:textSize="20sp"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="12sp"
+                android:autoSizeMaxTextSize="20sp"
+                android:autoSizeStepGranularity="1sp" />
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/displayButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="0dp"
+                android:background="@drawable/settings_button_color_background_selector"
+                android:gravity="center"
+                android:text="Display"
+                android:textColor="@color/white"
+                android:textAllCaps="false"
+                android:fontFamily="sans"
+                android:padding="10dp"
+                android:textSize="20sp"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="12sp"
+                android:autoSizeMaxTextSize="20sp"
+                android:autoSizeStepGranularity="1sp" />
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/aboutButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="0dp"
+                android:background="@drawable/settings_button_color_background_selector"
+                android:gravity="center"
+                android:text="About"
+                android:textColor="@color/white"
+                android:textAllCaps="false"
+                android:fontFamily="sans"
+                android:padding="10dp"
+                android:textSize="20sp"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="12sp"
+                android:autoSizeMaxTextSize="20sp"
+                android:autoSizeStepGranularity="1sp" />
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/resetButton"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginLeft="5dp"
-                android:layout_marginRight="5dp"
-                android:layout_weight="1"
-                android:textSize="20dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="0dp"
                 android:background="@drawable/settings_button_color_background_selector"
-                android:text="Reset Application" />
-        </TableRow>
-    </TableLayout>
-
-
-</androidx.constraintlayout.widget.ConstraintLayout>
+                android:gravity="center"
+                android:text="Reset Application"
+                android:textColor="@color/white"
+                android:textAllCaps="false"
+                android:fontFamily="sans"
+                android:padding="10dp"
+                android:textSize="20sp"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="12sp"
+                android:autoSizeMaxTextSize="20sp"
+                android:autoSizeStepGranularity="1sp" />
+        </com.example.ledwallgui.ui.settings.SquareSettingsGrid>
+    </LinearLayout>
+</ScrollView>

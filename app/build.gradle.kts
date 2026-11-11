@@ -1,9 +1,7 @@
-import org.gradle.internal.impldep.org.junit.experimental.categories.Categories.CategoryFilter.exclude
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("kotlin-android")
 }
 
 android {
@@ -13,8 +11,8 @@ android {
         applicationId = "com.example.ledwallgui"
         minSdk = 34
         targetSdk = 34 // Updated to the latest SDK version
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 27
+        versionName = "5.15.5"
         vectorDrawables.useSupportLibrary = true
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

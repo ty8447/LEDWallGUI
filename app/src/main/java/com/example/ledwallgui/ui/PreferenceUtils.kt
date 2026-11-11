@@ -15,6 +15,24 @@ class PreferenceUtils(private val context: Context) {
         get() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     // Save device address to SharedPreferences
+    fun knownDeviceName(address: String?): String? {
+        if (address.isNullOrBlank()) return null
+        return sharedPreferences.getString("led_name_" + address.uppercase(), null)
+    }
+    fun saveKnownDeviceName(address: String?, name: String) {
+        if (address.isNullOrBlank() || name.isBlank() || name.equals(address, true)) return
+        sharedPreferences.edit().putString("led_name_" + address.uppercase(), name).apply()
+        val (_, currentAddress, _) = loadConnectionState()
+        if (address.equals(currentAddress, true)) {
+            sharedPreferences.edit().putString(KEY_DEVICE_NAME, name).apply()
+        }
+    }
+    fun saveControllerMode(name: String) = sharedPreferences.edit().putString("controller_mode", name).apply()
+    fun controllerMode(): String? = sharedPreferences.getString("controller_mode", null)
+    fun markRemoteConfigurationChanged() {
+        context.getSharedPreferences("room_config_cache_v3", Context.MODE_PRIVATE)
+            .edit().putBoolean("remote_changed", true).apply()
+    }
     fun saveDeviceAddress(address: String) {
         val editor = sharedPreferences.edit()
         editor.putString(KEY_DEVICE_ADDRESS, address)
@@ -47,7 +65,8 @@ class PreferenceUtils(private val context: Context) {
     }
 
     fun getMotionDetectionEnabled(): Boolean {
-        return sharedPreferences.getBoolean(KEY_MOTION_DETECTION_ENABLED, false)
+        return context.getSharedPreferences("settings_prefs", Context.MODE_PRIVATE)
+            .getBoolean(KEY_MOTION_DETECTION_ENABLED, false)
     }
 
     fun saveConnectState(connectState: Boolean) {
@@ -94,7 +113,7 @@ class PreferenceUtils(private val context: Context) {
         val editor = sharedPreferences.edit()
         editor.putBoolean(KEY_IS_CONNECTED, isConnected)
         editor.putString(KEY_DEVICE_ADDRESS, deviceAddress)
-        editor.putString(KEY_DEVICE_NAME, deviceName)
+        editor.putString(KEY_DEVICE_NAME, knownDeviceName(deviceAddress) ?: deviceName)
         editor.apply()
 //        Log.d("PreferenceUtils", "Connection state saved: isConnected=$isConnected, deviceAddress=$deviceAddress, deviceName=$deviceName")
     }

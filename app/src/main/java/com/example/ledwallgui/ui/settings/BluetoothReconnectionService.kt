@@ -24,12 +24,17 @@ class BluetoothReconnectionService : Service() {
     private lateinit var handler: Handler
     private var isRetrying = false
     private var nrTries = 0
-    private val MAX_TRIES = 20
-    private val RECONNECT_INTERVAL = 5000L // 5 seconds
+    private var retryInterval = 5000L // Bounded reconnect backoff: 5, 10, 20, 30s
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this,
+                android.Manifest.permission.BLUETOOTH_CONNECT) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "Missing BLUETOOTH_CONNECT permission; cannot monitor BLE")
+            stopSelf()
+            return
+        }
         startForeground(1, createNotification())
         Log.d(TAG, "Service started")
         handler = Handler(Looper.getMainLooper())
@@ -48,7 +53,7 @@ class BluetoothReconnectionService : Service() {
                     Log.d(TAG, "Device disconnected. Attempting to reconnect...")
                     attemptReconnect(applicationContext)
                 }
-                handler.postDelayed(this, RECONNECT_INTERVAL) // Re-run after interval
+                handler.postDelayed(this, retryInterval) // Only one active retry loop
             }
         })
     }
@@ -60,7 +65,7 @@ class BluetoothReconnectionService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "Service destroyed")
-        handler.removeCallbacksAndMessages(null) // Stop the reconnection loop
+        if (::handler.isInitialized) handler.removeCallbacksAndMessages(null) // Stop the reconnection loop
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -86,11 +91,6 @@ class BluetoothReconnectionService : Service() {
     }
 
     private fun attemptReconnect(context: Context) {
-        if (nrTries >= MAX_TRIES) {
-            Log.w(TAG, "Max reconnection attempts reached. Stopping retries.")
-            return
-        }
-
         if (isRetrying) {
             Log.d(TAG, "Reconnection already in progress. Skipping this attempt.")
             return
@@ -98,11 +98,12 @@ class BluetoothReconnectionService : Service() {
 
         isRetrying = true
         nrTries++
-        Log.d(TAG, "Reconnection attempt $nrTries/$MAX_TRIES")
+        Log.d(TAG, "Reconnection attempt $nrTries")
 
         val deviceAddress = PreferenceUtils(context).fetchDeviceAddress()
         if (deviceAddress.isNullOrEmpty()) {
             isRetrying = false
+            stopSelf() // Explicitly disconnected/forgotten; no connection to monitor.
             return
         }
 
@@ -123,8 +124,10 @@ class BluetoothReconnectionService : Service() {
             if (success) {
                 Log.d(TAG, "Reconnected successfully")
                 nrTries = 0
+                retryInterval = 5000L
             } else {
-                Log.e(TAG, "Reconnection failed. Will retry in $RECONNECT_INTERVAL ms")
+                retryInterval = (retryInterval * 2).coerceAtMost(30000L)
+                Log.e(TAG, "Reconnection failed. Next retry in $retryInterval ms")
             }
         }
     }

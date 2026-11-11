@@ -107,7 +107,15 @@ class SplashScreenActivity : AppCompatActivity() {
 
         // Delay before launching main activity
         Handler(Looper.getMainLooper()).postDelayed({
-            startActivity(Intent(this, MainActivity::class.java))
+            val prefs = getSharedPreferences(WelcomeTourActivity.PREF, MODE_PRIVATE)
+            // Existing users shouldn't get an unsolicited tour just for upgrading.
+            // Fresh installs (empty settings) and explicit app resets (force flag) do.
+            val force = prefs.getBoolean("welcome_force_v59", false)
+            val complete = prefs.getBoolean(WelcomeTourActivity.DONE, false)
+            val isExistingInstallation = prefs.all.isNotEmpty() && !force
+            startActivity(Intent(this,
+                if (complete || isExistingInstallation) MainActivity::class.java
+                else WelcomeTourActivity::class.java))
             finish()
         }, splashDelay)
     }

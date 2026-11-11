@@ -66,7 +66,6 @@ class AlarmActivity : AppCompatActivity() {
     private lateinit var timeTillNext: TextView
     private lateinit var currentTime: TextView
     private lateinit var doneButton: Button
-    private val PERMISSIONREQUESTCODE = 1001
 
     private lateinit var preferenceUtils: PreferenceUtils // Declare preferenceUtils
 
@@ -110,8 +109,6 @@ class AlarmActivity : AppCompatActivity() {
         setupUI()
         configureSharedPreferences()
 
-        // Check and request permission for foreground service data sync
-        checkAndRequestPermission()
 
         // Load alarms on activity start
         val loadedAlarms = loadAlarms()
@@ -152,44 +149,6 @@ class AlarmActivity : AppCompatActivity() {
     }
 
 
-    private fun checkAndRequestPermission() {
-        //Log.d("AlarmActivity", "Checking permissions...")
-        if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.FOREGROUND_SERVICE_DATA_SYNC
-            ) == PackageManager.PERMISSION_GRANTED) {
-            //Log.d("AlarmActivity", "Permission granted.")
-        } else {
-            // Permission is not granted, so request it
-            //Log.d("AlarmActivity", "Permission not granted. Requesting...")
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.FOREGROUND_SERVICE_DATA_SYNC),
-                PERMISSIONREQUESTCODE
-            )
-        }
-    }
-
-    // Handle permission request result
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        when (requestCode) {
-            PERMISSIONREQUESTCODE -> {
-                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    // Permission granted
-                    //Log.d("AlarmActivity", "Permission granted for foreground service data sync.")
-                } else {
-                    // Permission denied
-                    //Log.d("AlarmActivity", "Permission denied for foreground service data sync.")
-                }
-            }
-        }
-    }
-
     override fun onResume() {
         super.onResume()
         Log.d("AlarmActivity", "onResume called")
@@ -197,8 +156,6 @@ class AlarmActivity : AppCompatActivity() {
         LocalBroadcastManager.getInstance(this).registerReceiver(timeUpdateReceiver, filter)
         use12HourTimeFormat = preferenceUtils.getIs12HourTimeFormat() // Reload preference
         alarmAdapter.use12HourTimeFormat = use12HourTimeFormat // Update adapter
-        // Check and request permission for foreground service data sync
-        checkAndRequestPermission()
         refreshAlarms()
         updateCurrentTime()
         updateEmptyState()

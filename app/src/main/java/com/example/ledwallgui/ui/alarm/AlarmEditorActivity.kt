@@ -10,6 +10,10 @@ import android.widget.Button
 import android.widget.NumberPicker
 import android.widget.SeekBar
 import android.widget.TextView
+import androidx.lifecycle.lifecycleScope
+import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
+import kotlinx.coroutines.launch
+import java.util.Calendar
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
@@ -29,6 +33,7 @@ class AlarmEditorActivity : AppCompatActivity() {
     private var selectedDays: BooleanArray = BooleanArray(7) { false }
     private lateinit var dayButtons: List<Button>
     private var selectedModeParams: MutableMap<String, String> = mutableMapOf()
+    private var beforeCapture: Map<String, String>? = null
 
     // Request code for recording LED state
     companion object {
@@ -53,17 +58,22 @@ class AlarmEditorActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.setMode).setOnClickListener {
             Log.d("AlarmEditorActivity", "set_mode button clicked: launching MainActivity in record mode")
-            val intent = Intent(this, MainActivity::class.java)
-            intent.putExtra("record_led_state", true)
-            // Launch the intent using the new launcher
-            recordLedStateLauncher.launch(intent)
+            lifecycleScope.launch {
+                val ble = GlobalBluetoothManager(applicationContext)
+                beforeCapture = AlarmPlayback.capture(ble)
+                if (beforeCapture == null) {
+                    android.widget.Toast.makeText(this@AlarmEditorActivity,
+                        "Connect to the controller before capturing an effect", android.widget.Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                val intent = Intent(this@AlarmEditorActivity, MainActivity::class.java)
+                    .putExtra("record_led_state", true)
+                recordLedStateLauncher.launch(intent)
+            }
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        setUpTimePicker()
-    }
+    override fun onResume() { super.onResume() }
 
     private fun initializeViews() {
         dayButtons = listOf(
@@ -110,6 +120,15 @@ class AlarmEditorActivity : AppCompatActivity() {
         Log.d("AlarmEditorActivity", "handleIntentExtras: use12HourTimeFormat = $use12HourTimeFormat")
 
         setUpTimePicker()
+        if (alarmToEdit == null) {
+            val now = Calendar.getInstance()
+            hourPicker.value = if (use12HourTimeFormat) {
+                val twelve = now.get(Calendar.HOUR)
+                if (twelve == 0) 12 else twelve
+            } else now.get(Calendar.HOUR_OF_DAY)
+            minutePicker.value = now.get(Calendar.MINUTE)
+            amPmPicker.value = now.get(Calendar.AM_PM)
+        }
     }
 
     private fun populateAlarmDetails(existingAlarm: Alarm) {
@@ -134,6 +153,11 @@ class AlarmEditorActivity : AppCompatActivity() {
         } else {
             alarmNameTextView.text = existingAlarm.alarmName
         }
+        selectedModeParams = existingAlarm.modeInfo.toMutableMap()
+        existingAlarm.modeInfo["Brightness"]?.toIntOrNull()?.let { n ->
+            findViewById<SeekBar>(R.id.brightness).progress = n.coerceIn(0, 100)
+        }
+        findViewById<SwitchCompat>(R.id.ramp_brightness).isChecked = existingAlarm.rampBright
         selectedDays = existingAlarm.selectedDays.copyOf()
         selectedDays.forEachIndexed { index, isSelected ->
             dayButtons[index].tag = isSelected
@@ -266,6 +290,14 @@ class AlarmEditorActivity : AppCompatActivity() {
     }
 
     private val recordLedStateLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        // Capturing is temporary: restore the controller's previous mode, settings, and power
+        // after OK, cancellation, or the capture activity closing with Back.
+        val previous = beforeCapture
+        beforeCapture = null
+        if (previous != null) lifecycleScope.launch {
+            val failure = AlarmPlayback.apply(GlobalBluetoothManager(applicationContext), previous)
+            if (failure != null) Log.w("AlarmEditorActivity", "Could not restore previous effect: $failure")
+        }
         if (result.resultCode == Activity.RESULT_OK) {
             val ledParametersJson = result.data?.getStringExtra("led_parameters")
 
@@ -278,6 +310,9 @@ class AlarmEditorActivity : AppCompatActivity() {
                     ) ?: mutableMapOf()
 
                     selectedModeParams = parsedParams.toMutableMap()
+                    parsedParams["Brightness"]?.toIntOrNull()?.let { amount ->
+                        findViewById<SeekBar>(R.id.brightness).progress = amount.coerceIn(0, 100)
+                    }
 
                     val modeName = parsedParams["Name"] ?: "Unknown Mode"
                     findViewById<TextView>(R.id.alarm_mode).text = modeName  // Update TextView here!
@@ -295,6 +330,12 @@ class AlarmEditorActivity : AppCompatActivity() {
 
     private fun saveAlarm() {
         val alarmNameText = findViewById<TextView>(R.id.alarmName).text.toString()
+        if (selectedModeParams["Name"].isNullOrBlank()) {
+            android.widget.Toast.makeText(this, "Capture an LED mode before saving this alarm", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        selectedModeParams["Brightness"] = findViewById<SeekBar>(R.id.brightness).progress.toString()
+        selectedModeParams["Power"] = "1"
         val rampBright = rampBrightnessSwitch.isChecked
         val minute = minutePicker.value
 

@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#121721"
+    android:fillViewport="true">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="36dp">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp">
+            <ImageButton
+                android:id="@+id/displayBackButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/back_normal"
+                android:background="@drawable/transparent_background"
+                android:scaleType="centerInside"
+                android:contentDescription="Back to Settings" />
+            <TextView
+                android:id="@+id/displayPageTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:paddingStart="12dp"
+                android:text="Display"
+                android:textSize="30sp"
+                android:textStyle="bold"
+                android:textColor="@color/white" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="8dp"
+            android:text="SCREEN DIMMING"
+            android:textColor="#A8B9CE"
+            android:textSize="14sp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:text="Dim after inactivity"
+            android:textColor="@color/white"
+            android:textSize="20sp" />
+        <Spinner
+            android:id="@+id/dimTimeoutSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="68dp"
+            android:background="@drawable/settings_button_color_background_selector"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
+            android:contentDescription="Time until the display dims" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="The display stays powered at approximately 1% brightness so the camera can monitor for motion."
+            android:textColor="#A8B9CE"
+            android:textSize="15sp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:layout_marginBottom="8dp"
+            android:text="MAP MEASUREMENT UNITS"
+            android:textColor="#A8B9CE"
+            android:textSize="14sp" />
+        <Spinner
+            android:id="@+id/roomUnitsSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="68dp"
+            android:background="@drawable/settings_button_color_background_selector"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
+            android:contentDescription="Map measurements in meters or feet" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="This changes the map labels only. Strip density remains LEDs per meter."
+            android:textColor="#A8B9CE"
+            android:textSize="15sp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:layout_marginBottom="8dp"
+            android:text="MOTION DETECTION"
+            android:textColor="#A8B9CE"
+            android:textSize="14sp" />
+        <TextView
+            android:id="@+id/displayMotionStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/white"
+            android:textSize="17sp" />
+    </LinearLayout>
+</ScrollView>

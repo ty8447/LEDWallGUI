@@ -27,6 +27,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.view.MotionEvent
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
@@ -44,7 +45,9 @@ import com.google.android.material.snackbar.Snackbar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
-import com.example.ledwallgui.ui.MotionDetectionService
+import com.example.ledwallgui.ui.TabletMotionWake
+import com.example.ledwallgui.ui.AudioReactiveService
+import com.example.ledwallgui.services.BluetoothReconnectionService
 import com.example.ledwallgui.ui.alarm.AlarmActivity
 import com.example.ledwallgui.ui.modes.ModeManager
 import com.example.ledwallgui.ui.modes.ModesActivity
@@ -60,6 +63,9 @@ import com.example.ledwallgui.ui.settings.ColorWheel
 import com.example.ledwallgui.ui.settings.ModeInfo
 import com.google.gson.Gson
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import kotlin.ranges.coerceAtLeast
 import kotlin.ranges.coerceIn
 
@@ -80,6 +86,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var modesActivityResultLauncher: ActivityResultLauncher<Intent>
     private lateinit var settingsActivityResultLauncher: ActivityResultLauncher<Intent>
     private val connectionCheckHandler = Handler(Looper.getMainLooper())
+    private var roomReconcileChecked = false
     private val connectionCheckInterval = 5000L // Check every 5 seconds
     private var isDragging = false
     private var lastY = 0f
@@ -91,55 +98,73 @@ class MainActivity : AppCompatActivity() {
     private var minBrightnessChange = 1
     private var maxBrightnessChange = 10
     private var sliderHeight = 0
+    private var motionWake: TabletMotionWake? = null
     private var recordLedState = false
+    private var powerCommandPending = false
     var sliderThumb: View? = null
 
     companion object {
-        private const val BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE = 102
+        private const val TRACE_SLIDER = false  // Enable only for interactive gesture diagnostics.
         private const val SETTINGS_REQUEST_CODE = 100
         private const val MODES_REQUEST_CODE = 101 // Add this line
     }
 
-    private lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
+    private lateinit var startupPermissionLauncher: ActivityResultLauncher<Array<String>>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        requestPermissionLauncher =
-            registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-                if (isGranted) {
-                    // Permission granted
-                } else if (ActivityCompat.shouldShowRequestPermissionRationale(
-                        this,
-                        Manifest.permission.POST_NOTIFICATIONS
-                    )
-                ) {
-                    // Show rationale
-                    AlertDialog.Builder(this)
-                        .setTitle("Notification Permission")
-                        .setMessage("Notifications are needed...")
-                        .setPositiveButton("Grant") { _, _ ->
-                            requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                        .setNegativeButton("Deny", null)
-                        .show()
-                } else {
-                    // Permission permanently denied
-                    AlertDialog.Builder(this)
-                        .setTitle("Permission Denied")
-                        .setMessage("Notification permission is permanently denied...")
-                        .setPositiveButton("OK", null)
-                        .show()
-                }
+        // Android allows one permission request at a time. Request the dangerous
+        // permissions together instead of racing a BLE popup with notifications.
+        startupPermissionLauncher = registerForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) { results ->
+            // Don't display a Toast over a permission sheet. Connections screen
+            // handles denied BLE access by returning to the parent page.
+            if (results[Manifest.permission.BLUETOOTH_CONNECT] == false) {
+                Log.w("MainActivity", "Bluetooth permission denied")
             }
+            if (results[Manifest.permission.POST_NOTIFICATIONS] == false) {
+                // The system dialog has to finish before our own UI feedback.
+                // Use an unobtrusive Snackbar after the permission result, not a Toast.
+                window.decorView.postDelayed({
+                    if (!isFinishing && !isDestroyed) showNotificationSettingsHint()
+                }, 600L)
+            }
+        }
 
         requestWindowFeature(Window.FEATURE_NO_TITLE) // Hide the title bar
         setContentView(R.layout.activity_main)
+        configurePortraitHomeControls()
 
-        if (!checkBluetoothPermission()) {
-            requestBluetoothPermission()
-        }
         globalBluetoothManager = GlobalBluetoothManager(this)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                globalBluetoothManager.liveState.collect { remote ->
+                    if (remote == null) return@collect
+                    val modeChanged = ModeManager.currentMode != remote.mode
+                    ModeManager.currentMode = remote.mode
+                    if (modeChanged || remote.parameters.isNotEmpty()) updateModeDisplay()
+                    if (modeChanged && remote.mode == "Weather") {
+                        // Also refresh when a second tablet selects Weather mode.
+                        // The updater shares an in-flight guard across Activities.
+                        com.example.ledwallgui.ui.WeatherUpdater(applicationContext, globalBluetoothManager).refreshNow()
+                    }
+                    powerState = remote.power
+                    updatePowerButtonImage()
+                    if (powerCommandPending) {
+                        powerCommandPending = false
+                        findViewById<ImageButton>(R.id.imageButton1).isEnabled = true
+                    }
+                    if (!isDragging) {
+                        // Even when the numeric brightness matches a saved value, the
+                        // slider may not have been measured when it was first drawn.
+                        currentBrightness = remote.brightness.coerceIn(0, 100)
+                        sliderThumb?.let { updateThumbPosition(it, currentBrightness, false) }
+                    }
+                }
+            }
+        }
 
         modesActivityResultLauncher =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
@@ -149,9 +174,15 @@ class MainActivity : AppCompatActivity() {
                     Log.d("MainActivity", "Received LED parameters: $ledParametersJson")
                     // Call a helper function to update the display based on the selected mode.
                     updateModeDisplay()
-                    powerState = preferenceUtils.getPowerState()
+                    // Mode changes are acknowledged by the controller; do not
+                    // overwrite its live power state with a stale local value.
+                    val latest = globalBluetoothManager.liveState.value
+                    if (latest != null) {
+                        ModeManager.currentMode = latest.mode
+                        powerState = latest.power
+                        currentBrightness = latest.brightness
+                    }
                     updatePowerButtonImage()
-                    Toast.makeText(this, "Mode selected", Toast.LENGTH_SHORT).show()
                 } else {
                     Log.w("MainActivity", "No mode result received.")
                 }
@@ -246,55 +277,49 @@ class MainActivity : AppCompatActivity() {
 
         // Handle PowerState button click
         imageButton1.setOnClickListener {
-            if (connectState) {
-                powerState = !powerState
-                Log.d("PowerState", "Power state clicked: $powerState")
-                updatePowerButtonImage()
-                globalBluetoothManager.sendPowerStateToArduino(powerState)
-            } else {
+            if (!globalBluetoothManager.isConnected) {
                 showConnectionSnackbar()
+            } else if (!powerCommandPending) {
+                // The controller is authoritative. Don't optimistically rewrite
+                // the button or let a stale preference undo an incoming state.
+                val nextPower = !(globalBluetoothManager.liveState.value?.power ?: powerState)
+                powerCommandPending = true
+                imageButton1.isEnabled = false
+                globalBluetoothManager.sendPowerStateToArduino(nextPower)
+                handler.postDelayed({
+                    if (!isDestroyed && !isFinishing && powerCommandPending) {
+                        powerCommandPending = false
+                        imageButton1.isEnabled = true
+                        // If the notification was lost, fetch the controller's state.
+                        lifecycleScope.launch { globalBluetoothManager.refreshState() }
+                    }
+                }, 2500L)
             }
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            when {
-                ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED -> {
-                    // Permission is granted.
-                }
-
-                shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS) -> {
-                    // Show rationale (as shown in the launcher callback above)
-                    AlertDialog.Builder(this)
-                        .setTitle("Notification Permission")
-                        .setMessage("Notifications are needed to alert you about memory leaks. Please grant the permission.")
-                        .setPositiveButton("Grant") { _, _ ->
-                            requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                        .setNegativeButton("Deny", null) // Or handle denial as needed
-                        .show()
-                }
-
-                else -> {
-                    // The permission is not granted, and should we request it?
-                    requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
-            }
-
-
-        }
+        // Defer the single Android runtime-permission request until UI setup
+        // finishes. This prevents the "only one set of permissions" warning.
+        window.decorView.post { requestStartupPermissions() }
 
         // Get the sliderHeight after the layout is complete
         val viewTreeObserver = sliderBackground.viewTreeObserver
         viewTreeObserver.addOnGlobalLayoutListener(object :
             ViewTreeObserver.OnGlobalLayoutListener {
             override fun onGlobalLayout() {
-                // Remove the listener to avoid multiple calls
+                // Wait for a non-zero measured height; a controller snapshot
+                // can arrive before this view has been laid out.
+                if (sliderBackground.height <= 0) return
                 sliderBackground.viewTreeObserver.removeOnGlobalLayoutListener(this)
                 sliderHeight = sliderBackground.height
                 Log.d("Slider", "sliderHeight: $sliderHeight")
+
+                // Re-render after measurement using the controller's current state,
+                // not the stale brightness previously saved on this device.
+                if (!isDragging) {
+                    currentBrightness = (globalBluetoothManager.liveState.value?.brightness
+                        ?: currentBrightness).coerceIn(0, 100)
+                    sliderThumb?.let { updateThumbPosition(it, currentBrightness, false) }
+                }
 
                 // Set the touch listener after sliderHeight is known
                 sliderBackground.setOnTouchListener { _, event ->
@@ -347,16 +372,16 @@ class MainActivity : AppCompatActivity() {
                             }
                             if (deltaY != 0f) {
                                 isDragging = true
-                                Log.d("Slider", "MotionEvent.ACTION_MOVE")
-                                Log.d("Slider", "sliderHeight: $sliderHeight")
-                                Log.d("Slider", "isDragging set to true")
-                                Log.d("Slider", "isDragging: $isDragging")
-                                Log.d("Slider", "currentY: $currentY")
-                                Log.d("Slider", "deltaY: $deltaY")
+                                if (TRACE_SLIDER) Log.d("Slider", "MotionEvent.ACTION_MOVE")
+                                if (TRACE_SLIDER) Log.d("Slider", "sliderHeight: $sliderHeight")
+                                if (TRACE_SLIDER) Log.d("Slider", "isDragging set to true")
+                                if (TRACE_SLIDER) Log.d("Slider", "isDragging: $isDragging")
+                                if (TRACE_SLIDER) Log.d("Slider", "currentY: $currentY")
+                                if (TRACE_SLIDER) Log.d("Slider", "deltaY: $deltaY")
                                 val currentTime = System.currentTimeMillis()
-                                Log.d("Slider", "currentTime: $currentTime")
+                                if (TRACE_SLIDER) Log.d("Slider", "currentTime: $currentTime")
                                 val deltaTime = currentTime - lastMoveTime
-                                Log.d("Slider", "deltaTime: $deltaTime")
+                                if (TRACE_SLIDER) Log.d("Slider", "deltaTime: $deltaTime")
 
                                 // Adjust sensitivity based on speed
                                 brightnessSensitivity = when {
@@ -364,11 +389,11 @@ class MainActivity : AppCompatActivity() {
                                     deltaTime < 100 -> 0.25f // Medium movement
                                     else -> 0.1f // Slow movement
                                 }
-                                Log.d("Slider", "brightnessSensitivity: $brightnessSensitivity")
+                                if (TRACE_SLIDER) Log.d("Slider", "brightnessSensitivity: $brightnessSensitivity")
 
                                 // Calculate brightness change
                                 var brightnessChange = (deltaY * brightnessSensitivity).toInt()
-                                Log.d(
+                                if (TRACE_SLIDER) Log.d(
                                     "Slider",
                                     "brightnessChange before coerceIn: $brightnessChange"
                                 )
@@ -377,7 +402,7 @@ class MainActivity : AppCompatActivity() {
                                         -maxBrightnessChange,
                                         maxBrightnessChange
                                     )
-                                Log.d(
+                                if (TRACE_SLIDER) Log.d(
                                     "Slider",
                                     "brightnessChange after coerceIn: $brightnessChange"
                                 )
@@ -385,7 +410,7 @@ class MainActivity : AppCompatActivity() {
                                 // Apply brightness change
                                 currentBrightness =
                                     (currentBrightness - brightnessChange).coerceIn(0, 100)
-                                Log.d("Slider", "currentBrightness: $currentBrightness")
+                                if (TRACE_SLIDER) Log.d("Slider", "currentBrightness: $currentBrightness")
                                 sliderThumb?.let {
                                     updateThumbPosition(
                                         it,
@@ -393,12 +418,12 @@ class MainActivity : AppCompatActivity() {
                                         isDragged = true
                                     )
                                 }
-                                Log.d("Slider", "Update Thumb Position 1")
+                                if (TRACE_SLIDER) Log.d("Slider", "Update Thumb Position 1")
 
                                 if (connectState) {
                                     if (currentBrightness != previousBrightness) {
                                         globalBluetoothManager.setBrightness(currentBrightness)
-                                        Log.d(
+                                        if (TRACE_SLIDER) Log.d(
                                             "Slider",
                                             "GlobalBluetoothManager.setBrightness($currentBrightness)"
                                         )
@@ -409,13 +434,13 @@ class MainActivity : AppCompatActivity() {
                                         previousBrightness = currentBrightness
                                     }
                                 }
-                                Log.d("Slider", "brightness: $currentBrightness")
+                                if (TRACE_SLIDER) Log.d("Slider", "brightness: $currentBrightness")
 
                                 // Update for next move
                                 lastY = currentY
-                                Log.d("Slider", "lastY: $lastY")
+                                if (TRACE_SLIDER) Log.d("Slider", "lastY: $lastY")
                                 lastMoveTime = currentTime
-                                Log.d("Slider", "lastMoveTime: $lastMoveTime")
+                                if (TRACE_SLIDER) Log.d("Slider", "lastMoveTime: $lastMoveTime")
                             }
                             true
                         }
@@ -478,18 +503,8 @@ class MainActivity : AppCompatActivity() {
         updatePowerButtonImage()
         startConnectionCheck()
 
-        // Handle motion detection service
-        if (motionDetectionEnabled) {
-            val intent = Intent(this, MotionDetectionService::class.java)
-            intent.putExtra("source", "MainActivity")
-            startService(intent)
-            Log.d("Motion Detection", "Detecting Motion")
-        } else {
-            val intent = Intent(this, MotionDetectionService::class.java)
-            intent.putExtra("source", "MainActivity")
-            stopService(intent)
-            Log.d("Motion Detection", "Not Detecting Motion")
-        }
+        // Camera motion analysis runs only while this Activity is visible (Android 14).
+        motionWake = TabletMotionWake(this)
         recordLedState = intent.getBooleanExtra("record_led_state", false)
         if (recordLedState) {
             val recordOverlay = findViewById<View>(R.id.recordOverlay)
@@ -506,55 +521,39 @@ class MainActivity : AppCompatActivity() {
 
             // Set up the done button click listener.
             recordDoneButton.setOnClickListener {
-                val currentMode = ModeManager.currentMode
-                val modeInfo = globalBluetoothManager.getModeInfo(currentMode)
-
-                if (modeInfo != null) {
-                    val ledParametersMap = mutableMapOf<String, String>()
-
-                    // Store Mode Name
-                    ledParametersMap["Name"] = currentMode
-
-                    // Store Parameter Names and Values
-                    modeInfo.parameterNames.forEachIndexed { _, parameterName ->
-                        val parameterValue =
-                            modeInfo.parameterValues[parameterName] // Get the value
-
-                        if (parameterValue != null) { // Check if the value exists
-                            ledParametersMap[parameterName] = parameterValue // Store name and value
-                        } else {
-                            Log.w(
-                                "RecordMode",
-                                "Parameter value not found for: $parameterName in mode: $currentMode"
-                            )
-                            // Handle the case where the value is missing (e.g., use a default value, skip it, or show an error)
-                            // Example: ledParametersMap[parameterName] = "" // Store an empty string
-                        }
+                lifecycleScope.launch {
+                    val snapshot = com.example.ledwallgui.ui.alarm.AlarmPlayback.capture(globalBluetoothManager)
+                    if (snapshot == null) {
+                        Toast.makeText(this@MainActivity, "Controller unavailable; can't capture actual effect settings", Toast.LENGTH_LONG).show()
+                        return@launch
                     }
-
-                    val gson = Gson()
-                    val ledParametersJson = gson.toJson(ledParametersMap)
-
-                    val resultIntent = Intent()
-                    resultIntent.putExtra("led_parameters", ledParametersJson)
-                    setResult(Activity.RESULT_OK, resultIntent)
+                    // The editor restores the pre-capture controller state when this Activity closes.
+                    val response = Intent().putExtra("led_parameters", Gson().toJson(snapshot))
+                    setResult(Activity.RESULT_OK, response)
                     finish()
-                } else {
-                    Log.e("RecordMode", "No mode info found for current mode: $currentMode")
-                    Toast.makeText(this, "No LED parameters available", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
 
     private fun startConnectionCheck() {
+        stopConnectionCheck() // Never create two self-reposting runnables on activity recreation.
         connectionCheckHandler.post(object : Runnable {
             override fun run() {
                 val (isConnected, deviceAddress, deviceName) = preferenceUtils.loadConnectionState()
 
                 if (isConnected && !connectState) {
                     connectState = true
+                    // Re-read the controller as the BLE connection becomes ready.
+                    // This only updates the UI and never sends local brightness
+                    // settings to the controller on connection.
+                    lifecycleScope.launch { globalBluetoothManager.refreshState() }
+                    if (!roomReconcileChecked) {
+                        roomReconcileChecked = true
+                        com.example.ledwallgui.ui.settings.RoomSync.reconcile(this@MainActivity, globalBluetoothManager)
+                    }
                 } else if (!isConnected && connectState) {
+                    roomReconcileChecked = false
                     connectState = false
                     Log.d("MainActivity", "Bluetooth connection is not active")
                 } else {
@@ -562,7 +561,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 updateConnectIcon()
-                connectionCheckHandler.postDelayed(this, connectionCheckInterval)
+                if (!isFinishing && !isDestroyed) connectionCheckHandler.postDelayed(this, connectionCheckInterval)
             }
         })
     }
@@ -571,8 +570,45 @@ class MainActivity : AppCompatActivity() {
         connectionCheckHandler.removeCallbacksAndMessages(null)
     }
 
+    private val weatherPollHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var weatherPollRunnable: Runnable? = null
+    private val weatherPreferenceListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "last_weather_poll_ms" || key == "weather_code" ||
+            key == "weather_location_label" || key == "weather_last_error" ||
+            key == "weather_is_day" || key == "last_weather_attempt_ms" ||
+            key == "weather_display_refresh_at_ms") {
+            if (!isFinishing && !isDestroyed && ModeManager.currentMode == "Weather") {
+                runOnUiThread { if (!isFinishing && !isDestroyed) updateModeDisplay() }
+            }
+        }
+    }
+    private fun startWeatherPolling() {
+        weatherPollRunnable?.let(weatherPollHandler::removeCallbacks)
+        val updater = com.example.ledwallgui.ui.WeatherUpdater(applicationContext, globalBluetoothManager)
+        val task = object : Runnable {
+            override fun run() {
+                if (!isFinishing && !isDestroyed) {
+                    updater.updateIfDue()
+                    updater.updateSunriseLevel()
+                    if (ModeManager.currentMode == "Weather") updateModeDisplay()
+                    // Refresh cached weather readout while network polling
+                    // remains rate-limited to every 30 minutes.
+                    weatherPollHandler.postDelayed(this, 30_000L)
+                }
+            }
+        }
+        weatherPollRunnable = task
+        weatherPollHandler.post(task)
+    }
+    private fun stopWeatherPolling() {
+        weatherPollRunnable?.let(weatherPollHandler::removeCallbacks)
+        weatherPollRunnable = null
+    }
+
+    private var lastModePresentation = ""
     private fun updateModeDisplay() {
         val currentMode = ModeManager.currentMode
+        textView.text = "$currentMode Parameters"
         Log.d("MainActivity", "Updating display for mode: $currentMode")
 
         // Try to get mode info from GlobalBluetoothManager.
@@ -591,8 +627,14 @@ class MainActivity : AppCompatActivity() {
             Log.d("MainActivity", "Mode info from Bluetooth: ${modeInfo.parameterValues}")
         }
 
-        // If parameter values are empty, fill in default values.
-        if (modeInfo.parameterValues.isEmpty()) {
+        val remoteState = globalBluetoothManager.liveState.value
+        if (remoteState?.mode == currentMode && remoteState.parameters.isNotEmpty()) {
+            modeInfo.parameterValues.putAll(remoteState.parameters)
+        }
+
+        // Defaults only apply while offline. An empty live snapshot means that
+        // the matching parameter notification has not arrived yet.
+        if (modeInfo.parameterValues.isEmpty() && remoteState == null) {
             Log.d("MainActivity", "Parameter values are empty. Setting default values for mode: $currentMode")
             modeInfo.parameterNames.forEach { param ->
                 modeInfo.parameterValues[param] = getDefaultForParameter(currentMode, param)
@@ -600,22 +642,85 @@ class MainActivity : AppCompatActivity() {
             Log.d("MainActivity", "Mode info after setting defaults: ${modeInfo.parameterValues}")
         }
 
+        val waitingForLiveParameters = remoteState?.mode == currentMode &&
+            remoteState.parameters.isEmpty() && modeInfo.parameterNames.isNotEmpty()
+        val weatherStatus = if (currentMode == "Weather") weatherStatusText() else ""
+        val signature = currentMode + "|" + waitingForLiveParameters + "|" + weatherStatus + "|" + modeInfo.parameterNames.joinToString { param ->
+            param + "=" + (modeInfo.parameterValues[param] ?: "")
+        }
+        if (signature == lastModePresentation) return
+        lastModePresentation = signature
+
         // Convert the mode's parameter info into a list of Parameter objects.
-        val parameterList = modeInfo.parameterNames.map { paramName ->
+        val parameterList = modeInfo.parameterNames.filterNot { currentMode == "Weather" && it == "Color" }.map { paramName ->
             Parameter(
                 name = paramName,
-                value = modeInfo.parameterValues[paramName] ?: "",
+                value = parseModeParameter(paramName, modeInfo.parameterValues[paramName]),
                 type = getParameterTypeFromName(paramName)
             )
         }
 
-        Log.d("MainActivity", "Constructed Parameter List: $parameterList")
+        val shownParameters = if (currentMode == "Weather")
+            parameterList + Parameter("Weather", "TEXT", weatherStatus)
+        else if (waitingForLiveParameters) listOf(Parameter("Sync", "TEXT", "Syncing mode values..."))
+        else parameterList
+        Log.d("MainActivity", "Constructed Parameter List: $shownParameters")
 
         // Regenerate the layout using your generateLayout() method.
-        val layout = generateLayout(this, parameterList, flexboxLayout)
+        val layout = generateLayout(this, shownParameters, flexboxLayout)
         dynamicLayoutContainer.removeAllViews()
         dynamicLayoutContainer.addView(layout)
         Log.d("MainActivity", "Dynamic layout updated for mode: $currentMode")
+    }
+
+    private fun weatherStatusText(): String {
+        val settings = getSharedPreferences("settings_prefs", MODE_PRIVATE)
+        if (!settings.getBoolean("location_enabled", false)) {
+            return "Location: Disabled\nEnable Location in Settings to receive current weather.\nNext update: Paused"
+        }
+        val stamp = settings.getLong("last_weather_poll_ms", 0L)
+        val time = if (stamp > 0L) java.text.DateFormat.getDateTimeInstance(
+            java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(stamp)) else "Not checked"
+        val code = settings.getInt("weather_code", -1)
+        val desc = when {
+            code < 0 -> "Waiting for weather"
+            code <= 1 -> "Clear"
+            code <= 3 -> "Cloudy"
+            code <= 48 -> "Fog"
+            code <= 67 -> "Rain / drizzle"
+            code <= 77 -> "Snow"
+            code <= 82 -> "Rain showers"
+            code <= 86 -> "Snow showers"
+            else -> "Thunderstorms"
+        }
+        val day = if (settings.getBoolean("weather_is_day", true)) "Day" else "Night"
+        val location = settings.getString("weather_location_label", "Location unavailable")
+        val lastAttempt = settings.getLong("last_weather_attempt_ms", 0L)
+        val lastError = settings.getString("weather_last_error", null)
+        val nextDue = com.example.ledwallgui.ui.WeatherSchedule.nextDue(
+            stamp, lastAttempt, lastError != null)
+        val next = when {
+            com.example.ledwallgui.ui.WeatherUpdater.isChecking() -> "Checking now..."
+            stamp <= 0L && lastError == null -> "As soon as location is available"
+            nextDue == null -> "As soon as location is available"
+            System.currentTimeMillis() >= nextDue -> "Due now"
+            else -> java.text.DateFormat.getDateTimeInstance(
+                java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(nextDue))
+        }
+        val error = lastError?.let { "\nStatus: $it" } ?: ""
+        return "Location: $location\nConditions: $desc ($day)\nLast checked: $time\nNext update: $next$error"
+    }
+
+    private fun parseModeParameter(name: String, raw: String?): Any = when (name) {
+        "Slot" -> "Animation slot ${(raw?.toIntOrNull() ?: 0) + 1}"
+        "Color", "SColor" -> {
+            val components = raw?.removePrefix("{")?.removeSuffix("}")?.split(',')
+                ?.mapNotNull { it.trim().toIntOrNull() }
+            if (components?.size == 3) Color.rgb(
+                components[0].coerceIn(0, 255), components[1].coerceIn(0, 255), components[2].coerceIn(0, 255)
+            ) else Color.GRAY
+        }
+        else -> raw?.toIntOrNull() ?: 0
     }
 
     private fun getParameterTypeFromName(name: String): String {
@@ -625,12 +730,30 @@ class MainActivity : AppCompatActivity() {
             "speed" -> "SPEED"
             "frequency" -> "FREQUENCY"
             "division" -> "DIVISION"
+            "sensitivity" -> "SENSITIVITY"
+            "reaction" -> "REACTION"
+            "pattern" -> "PATTERN"
+            "direction" -> "DIRECTION"
+            "palette" -> "PALETTE"
+            "bounce" -> "BOUNCE"
+            "fade" -> "FADE"
+            "spawn" -> "SPAWN"
+            "decay" -> "DECAY"
+            "length" -> "LENGTH"
+            "size" -> "SIZE"
+            "collision" -> "COLLISION"
             else -> "TEXT"
         }
     }
 
     // Helper function to provide default values for a given mode and parameter.
     private fun getDefaultForParameter(mode: String, parameter: String): String {
+        // New effect controls retain a usable default while live settings load.
+        if (parameter == "Spawn") return if (mode == "Alternating Phaser") "1" else "40"
+        if (parameter == "Decay") return "55"
+        if (parameter == "Length") return "20"
+        if (parameter == "Size") return "35"
+        if (parameter == "Collision") return "1"
         return when (mode) {
             "Rainbow" -> {
                 if (parameter == "Speed") "50" else ""
@@ -643,31 +766,86 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Portrait-only guard: keep the portrait dashboard aligned with the
+     * landscape slider style without affecting the original landscape dashboard. */
+    private fun configurePortraitHomeControls() {
+        if (resources.configuration.orientation != Configuration.ORIENTATION_PORTRAIT) return
+
+        // ColorWheel belongs in the Custom Color dialog, not on Home.
+        findViewById<View>(R.id.rgbColorWheelContainer)?.visibility = View.GONE
+
+        val holder = findViewById<FrameLayout>(R.id.sliderContainer) ?: return
+        val track = findViewById<View>(R.id.sliderBackground) ?: return
+        val fill = findViewById<View>(R.id.sliderThumb) ?: return
+        val sun = findViewById<ImageView>(R.id.sunIcon)
+        val d = resources.displayMetrics.density
+        fun pixels(dp: Int) = (dp * d + 0.5f).toInt()
+
+        holder.minimumWidth = pixels(62)
+        holder.minimumHeight = pixels(190)
+        holder.setBackgroundColor(Color.TRANSPARENT)
+
+        track.background = androidx.appcompat.content.res.AppCompatResources.getDrawable(this, R.drawable.slider_background)
+        if (track is FrameLayout) track.clipToOutline = true
+        (track.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+            params.width = ViewGroup.LayoutParams.MATCH_PARENT
+            params.height = ViewGroup.LayoutParams.MATCH_PARENT
+            params.setMargins(pixels(8), pixels(8), pixels(8), pixels(8))
+            track.layoutParams = params
+        }
+
+        (fill.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+            params.width = ViewGroup.LayoutParams.MATCH_PARENT
+            params.height = pixels(7)
+            params.gravity = android.view.Gravity.BOTTOM
+            params.setMargins(0, 0, 0, 0)
+            fill.layoutParams = params
+        }
+        fill.background = androidx.appcompat.content.res.AppCompatResources.getDrawable(this, R.drawable.slider_thumb)
+
+        findViewById<View>(R.id.blackBorder)?.visibility = View.GONE
+
+        sun?.let {
+            (it.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+                params.width = pixels(32)
+                params.height = pixels(32)
+                params.gravity = android.view.Gravity.CENTER
+                params.setMargins(0, 0, 0, 0)
+                it.layoutParams = params
+            }
+            // The sun icon must be transparent so the slider can show through it.
+            it.setPadding(0, 0, 0, 0)
+            it.background = null
+            it.bringToFront()
+        }
+        fill.requestLayout()
+        track.requestLayout()
+    }
+
     private fun updateThumbPosition(sliderThumb: View, brightness: Int, isDragged: Boolean) {
         Log.d("Slider", "brightness: $brightness")
 
-        val minHeight = 1 // Minimum height for the thumb in pixels
         val percentage = brightness.coerceIn(0, 100)
-        sliderHeight - (percentage.toFloat() / 100f * sliderHeight)
+        findViewById<TextView>(R.id.brightnessValueLabel)?.text = "$percentage%"
 
-        // Calculate the new thumb height based on the brightness percentage
-        val newHeight = (sliderHeight * (percentage / 100f)).toInt().coerceAtLeast(minHeight)
+        // A live BLE state can be delivered before the portrait rail is laid out.
+        // Keep the percentage label up to date and render the fill once measured.
+        val measuredHeight = findViewById<View>(R.id.sliderBackground)?.height ?: sliderHeight
+        if (measuredHeight <= 0) return
+        sliderHeight = measuredHeight
+
+        val minVisibleHeight = if (resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT)
+            (6 * resources.displayMetrics.density + 0.5f).toInt().coerceAtLeast(1) else 1
+        val newHeight = if (percentage == 0) 0 else
+            (measuredHeight * (percentage / 100f)).toInt()
+                .coerceAtLeast(minVisibleHeight).coerceAtMost(measuredHeight)
 
         val thumbParams = sliderThumb.layoutParams
-
-        // If it's being dragged, adjust the thumb's position relatively
-        if (isDragged) {
+        if (thumbParams.height != newHeight) {
             thumbParams.height = newHeight
-        } else {
-            // If it's tapped, jump to the new position by updating the height directly
-            thumbParams.height = newHeight
+            sliderThumb.layoutParams = thumbParams
+            sliderThumb.requestLayout()
         }
-
-        // Apply the thumb parameters to update the layout
-        sliderThumb.layoutParams = thumbParams
-        sliderThumb.requestLayout()
-
-        // Log the updated thumb height
         Log.d("Slider", "Updated thumb height: $newHeight")
     }
 
@@ -711,11 +889,7 @@ class MainActivity : AppCompatActivity() {
             Color.MAGENTA -> "Magenta"
             else -> {
                 // To provide a more consistent fallback, you can map any unknown colors to their hex values:
-                if (colorValue in 0xFF000000..0xFFFFFFFF) {
-                    String.format("#%06X", (0xFFFFFF and colorValue)) // Return hex without alpha
-                } else {
-                    "Unknown Color"
-                }
+                String.format(java.util.Locale.US, "#%06X", colorValue and 0xFFFFFF)
             }
         }
     }
@@ -724,6 +898,20 @@ class MainActivity : AppCompatActivity() {
         return (this * context.resources.displayMetrics.density).toInt()
     }
 
+
+    private fun modeChoices(type: String): Array<String>? = when (type) {
+        "REACTION" -> arrayOf("Spectrum fill", "Whole-room brightness", "Peak color pulse")
+        "PATTERN" -> if (ModeManager.currentMode == "Phaser")
+            arrayOf("One traveling bar", "Random bars")
+        else arrayOf("Normal", "Reversed", "Square / all walls")
+        "DIRECTION" -> arrayOf("Clockwise", "Counterclockwise", "Both / alternating")
+        "PALETTE" -> arrayOf("Single chosen color", "Random colors")
+        "BOUNCE" -> arrayOf("No bounce", "Bounce at landing")
+        "SPAWN" -> if (ModeManager.currentMode == "Alternating Phaser")
+            arrayOf("Alternate corners", "Both corners", "Random corner") else null
+        "COLLISION" -> arrayOf("Pass through", "White burst and remove")
+        else -> null
+    }
 
     fun generateLayout(
         context: Context,
@@ -817,7 +1005,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 // Similar changes for other parameter types like "FREQUENCY", "SPEED", etc.
-                "FREQUENCY", "SPEED", "DIVISION" -> {
+                "FREQUENCY", "SPEED", "DIVISION", "SENSITIVITY", "REACTION", "PATTERN", "DIRECTION", "PALETTE", "BOUNCE", "FADE", "SPAWN", "DECAY", "LENGTH", "SIZE", "COLLISION" -> {
                     val parameterBox = CardView(context).apply {
                         tag = parameter.name // Assign tag for visibility control
                         radius = 16f
@@ -831,7 +1019,10 @@ class MainActivity : AppCompatActivity() {
 
                         // Create a TextView to show the parameter type and its value
                         val textView = TextView(context).apply {
-                            text = "${parameter.name}: ${parameter.value}"
+                            val choices = modeChoices(parameter.type)
+                            text = if (choices != null) {
+                                "${parameter.name}: " + choices.getOrElse((parameter.value as? Int ?: 0).coerceIn(0, choices.lastIndex)) { choices[0] }
+                            } else "${parameter.name}: ${parameter.value}"
                             setTextColor(Color.WHITE)  // Text color is white
                             setBackgroundColor(Color.TRANSPARENT)
                             textSize = 18f
@@ -853,6 +1044,16 @@ class MainActivity : AppCompatActivity() {
                                     "LED Config is Locked. Please unlock to change modes.",
                                     Toast.LENGTH_SHORT
                                 ).show()
+                            } else if (modeChoices(parameter.type) != null) {
+                                val options = requireNotNull(modeChoices(parameter.type))
+                                androidx.appcompat.app.AlertDialog.Builder(context)
+                                    .setTitle(parameter.name)
+                                    .setSingleChoiceItems(options, (parameter.value as? Int ?: 0).coerceIn(0, options.lastIndex)) { dialog, which ->
+                                        parameter.value = which
+                                        textView.text = "${parameter.name}: ${options[which]}"
+                                        globalBluetoothManager.setLedParameter(parameter.name, listOf(which))
+                                        dialog.dismiss()
+                                    }.setNegativeButton("Cancel", null).show()
                             } else {
                                 showPopup(
                                     context,
@@ -861,7 +1062,7 @@ class MainActivity : AppCompatActivity() {
                                     textView,
                                     this,
                                     colorPreview
-                                )  // Pass dummy colorPreview
+                                )
                             }
                         }
                     }
@@ -1066,12 +1267,19 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            "FREQUENCY", "SPEED", "DIVISION" -> {
+            "FREQUENCY", "SPEED", "DIVISION", "SENSITIVITY", "REACTION", "PATTERN", "DIRECTION", "PALETTE", "BOUNCE", "FADE", "SPAWN", "DECAY", "LENGTH", "SIZE", "COLLISION" -> {
                 val seekBar = popup.findViewById<SeekBar>(R.id.parameterSlider)
                 val valueTextView = popup.findViewById<TextView>(R.id.parameterValue)
 
                 seekBar.visibility = View.VISIBLE
                 valueTextView.visibility = View.VISIBLE
+                seekBar.max = when {
+                    parameter.type == "REACTION" -> 2
+                    parameter.type == "COLLISION" -> 1
+                    parameter.type == "SPAWN" && ModeManager.currentMode == "Alternating Phaser" -> 2
+                    parameter.type == "PATTERN" && ModeManager.currentMode == "Phaser" -> 1
+                    else -> 100
+                }
 
                 // Set initial progress based on the parameter value
                 val initialProgress = parameter.value as? Int ?: 0
@@ -1203,33 +1411,38 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun requestBluetoothPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
-                BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE
-            )
+    private fun requestStartupPermissions() {
+        if (isFinishing || isDestroyed) return
+        val missing = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !checkBluetoothPermission()) {
+            missing.add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            // The notification dialog is shown at most once automatically.
+            // After a denial, let the user choose Settings instead of showing
+            // a fake "permanently denied" message or repeating the dialog.
+            val prefs = getSharedPreferences("ledwall_runtime_permissions", Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("notification_requested_v5", false)) {
+                missing.add(Manifest.permission.POST_NOTIFICATIONS)
+                prefs.edit().putBoolean("notification_requested_v5", true).apply()
+            }
+        }
+        if (missing.isNotEmpty()) {
+            startupPermissionLauncher.launch(missing.toTypedArray())
         }
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == BLUETOOTH_CONNECT_PERMISSION_REQUEST_CODE) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Log.d("MainActivity", "Bluetooth connect permission granted")
-            } else {
-                Toast.makeText(
-                    this,
-                    "Bluetooth permission is required for app functionality",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        }
+    private fun showNotificationSettingsHint() {
+        if (isFinishing || isDestroyed) return
+        Snackbar.make(findViewById(android.R.id.content),
+            "Notifications are off. You can enable them in Android settings.",
+            Snackbar.LENGTH_LONG)
+            .setAction("Settings") {
+                startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                })
+            }.show()
     }
 
     private fun initUI() {
@@ -1286,6 +1499,22 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        getSharedPreferences("settings_prefs", MODE_PRIVATE)
+            .registerOnSharedPreferenceChangeListener(weatherPreferenceListener)
+        startWeatherPolling()
+        startConnectionCheck() // Lifecycle owned: stop in onPause, restart onResume.
+        val panelPrefs = getSharedPreferences("settings_prefs", Context.MODE_PRIVATE)
+        if (panelPrefs.getBoolean("motion_detection_enabled", false)) motionWake?.start()
+        try {
+            if (checkBluetoothPermission() && !preferenceUtils.fetchDeviceAddress().isNullOrBlank()) {
+                ContextCompat.startForegroundService(this, Intent(this, BluetoothReconnectionService::class.java))
+            }
+            if (panelPrefs.getBoolean("mic_enabled", false) &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                ContextCompat.startForegroundService(this, Intent(this, AudioReactiveService::class.java))
+            }
+        } catch (e: Exception) { Log.w("MainActivity", "Could not start control services", e) }
+
 
         if (checkBluetoothPermission()) {
             Log.d("MainActivity", "Bluetooth permission is already granted")
@@ -1295,45 +1524,47 @@ class MainActivity : AppCompatActivity() {
         textView.text = "$currentMode Parameters"
         Log.d("MainActivity", "Current mode: ${ModeManager.currentMode}")
 
-        // Fetch mode info and request parameters
-        val modeInfo = globalBluetoothManager.getModeInfo(currentMode)
-        if (modeInfo != null) {
-            Log.d("MainActivity", "Mode info found for mode: $currentMode")
-            // Wrap the suspend call in a coroutine
-            lifecycleScope.launch {
-                globalBluetoothManager.requestValues(this@MainActivity, "Power", "None")
-            }
-            updateLayoutWithModeInfo(modeInfo)
+        // Treat the controller snapshot as authoritative for all devices.
+        // Local preferences are only the disconnected/offline fallback.
+        val remote = globalBluetoothManager.liveState.value
+        if (remote != null) {
+            ModeManager.currentMode = remote.mode
+            powerState = remote.power
+            currentBrightness = remote.brightness
         } else {
-            Log.w("MainActivity", "Mode info not found for mode: $currentMode")
+            powerState = preferenceUtils.getPowerState()
+            currentBrightness = preferenceUtils.getBrightness()
         }
-
-        // Explicitly request the power state parameter
-        Log.d("MainActivity", "Requesting power state parameter")
-        lifecycleScope.launch {
-            globalBluetoothManager.requestValues(this@MainActivity, "Power", "None")
-            globalBluetoothManager.requestValues(this@MainActivity, "Brightness", "None")
-        }
-        powerState = preferenceUtils.getPowerState()
         updatePowerButtonImage()
-        currentBrightness = preferenceUtils.getBrightness()
-        sliderThumb?.let {
-            updateThumbPosition(
-                it,
-                currentBrightness,
-                isDragged = false
-            )
+        sliderThumb?.let { updateThumbPosition(it, currentBrightness, false) }
+        updateModeDisplay()
+        if (globalBluetoothManager.isConnected) {
+            lifecycleScope.launch { globalBluetoothManager.refreshState() }
         }
         globalBluetoothManager.startConnectionCheck(this)
     }
 
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) motionWake?.wake()
+        return super.dispatchTouchEvent(event)
+    }
+
     override fun onPause() {
+        getSharedPreferences("settings_prefs", MODE_PRIVATE)
+            .unregisterOnSharedPreferenceChangeListener(weatherPreferenceListener)
+        stopWeatherPolling()
+        motionWake?.stop()
+        stopConnectionCheck()
         super.onPause()
         Log.d("MainActivity", "onPause called")
         globalBluetoothManager.stopConnectionCheck()
     }
 
     override fun onDestroy() {
+        stopWeatherPolling()
+        stopConnectionCheck() // Must cancel before destroyed Activity can be retained by the Handler.
+        handler.removeCallbacksAndMessages(null)
+        motionWake?.close()
         super.onDestroy()
         Log.d("MainActivity", "onDestroy called")
         globalBluetoothManager.stopConnectionCheck()
@@ -1395,6 +1626,11 @@ class MainActivity : AppCompatActivity() {
             "Speed" -> "SPEED"
             "Frequency" -> "FREQUENCY"
             "Division" -> "DIVISION"
+            "Spawn" -> "SPAWN"
+            "Decay" -> "DECAY"
+            "Length" -> "LENGTH"
+            "Size" -> "SIZE"
+            "Collision" -> "COLLISION"
             else -> "SLIDER" // or any other default parameter type string
         }
     }

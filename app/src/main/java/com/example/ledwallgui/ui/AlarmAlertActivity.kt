@@ -7,6 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
+import android.os.Looper
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import com.example.ledwallgui.ui.alarm.AlarmPlayback
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
@@ -28,7 +32,7 @@ import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
 import java.util.Calendar
 
-class AlarmAlertActivity : Activity() {
+class AlarmAlertActivity : androidx.activity.ComponentActivity() {
     private lateinit var globalBluetoothManager: GlobalBluetoothManager
     private lateinit var alarmTimeTextView: TextView
     private lateinit var alarmNameTextView: TextView
@@ -44,7 +48,10 @@ class AlarmAlertActivity : Activity() {
     private val maxSnoozeDuration = 60
     private val minSnoozeDuration = 1
     private var snoozeDurationMillis = snoozeDurationMinutes * 60 * 1000L
-    private val alarmHandler = Handler()
+    private val alarmHandler = Handler(Looper.getMainLooper())
+    private var previousControllerState: Map<String, String>? = null
+    private var playbackJob: kotlinx.coroutines.Job? = null
+    private var closingAfterRestore = false
     private var alarmsList: List<Alarm> = emptyList()
     private val REQUEST_CODE_ALARM_UPDATE = 1001
     private lateinit var alarmRunnable: Runnable
@@ -103,75 +110,40 @@ class AlarmAlertActivity : Activity() {
             }
         }
 
-        val previousMode = ModeManager.currentMode
-        val previousParameters = ModeManager.getModeParameters(previousMode)
-
-        if (params != null) {
-            Log.d("BeforeIntent", "Mode Parameters (onCreate) JSON: ${gson.toJson(params)}")
+        // The controller's live state is authoritative. ModeManager alone only changes UI text.
+        // A snoozed alarm has a synthetic ID. Resolve it to the original alarm's
+        // captured effect rather than silently doing nothing on the next ring.
+        val snoozedSourceId = try {
+            val json = sharedPreferences.getString(snoozedAlarmsKey, "[]")
+            val list: List<SnoozedAlarm> = gson.fromJson(
+                json, object : TypeToken<List<SnoozedAlarm>>() {}.type
+            ) ?: emptyList()
+            list.firstOrNull { it.id == alarmId }?.originalId
+        } catch (e: Exception) {
+            Log.w("AlarmAlertActivity", "Could not load snoozed alarm linkage", e)
+            null
         }
-
-        Log.d("AlarmAlertActivity", "Previous Mode: $previousMode, Parameters: $previousParameters")
-
-        val previousParamsJson = gson.toJson(previousParameters)
-        intent.putExtra("previousMode", previousMode)
-        intent.putExtra("previousParams", previousParamsJson)
-
-        // Find the alarm that triggered the alert
-        val triggeredAlarm = alarmsList.find { it.id == alarmId }
-
+        val triggeredAlarm = alarmsList.find { it.id == (snoozedSourceId ?: alarmId) }
         if (triggeredAlarm != null) {
-            // Set the LED mode and parameters from the alarm
-            val alarmMode =
-                triggeredAlarm.modeInfo["Name"] ?: "Color" // Default to "Color" if not found
-            val alarmParameters =
-                triggeredAlarm.modeInfo.filterKeys { it != "Name" } //Filter out the name parameter
-
-            ModeManager.currentMode = alarmMode // Set the current mode
-
-            // Set the parameters using the correct function calls
-            alarmParameters.forEach { (paramName, paramValue) ->
-                ModeManager.setModeParameter(alarmMode, paramName, paramValue)  // Use ModeManager
-                when (paramName) {
-                    "Color", "SColor" -> {
-                        val rgbValues = paramValue.trim('{', '}').split(",")
-                            .map { it.trim().toIntOrNull() ?: 0 }
-                        globalBluetoothManager.setLedParameter(
-                            alarmMode,
-                            rgbValues
-                        ) // Set RGB values
-                    }
-
-                    "Brightness" -> {
-                        val brightness = paramValue.toIntOrNull() ?: 0
-                        globalBluetoothManager.setBrightness(brightness)
-                    }
-                    // Handle other parameter types as needed
-                    else -> {
-                        // For other parameter types (Speed, Frequency, Division, etc.)
-                        // Call appropriate GlobalBluetoothManager functions if they exist.
-                        // Example: GlobalBluetoothManager.setSpeed(alarmMode, paramValue.toIntOrNull() ?: 0)
-                    }
-                }
+            playbackJob = lifecycleScope.launch {
+                previousControllerState = AlarmPlayback.capture(globalBluetoothManager)
+                if (closingAfterRestore) return@launch
+                val captured = triggeredAlarm.modeInfo.toMutableMap()
+                // Alarm is supposed to illuminate: an Off capture should not suppress playback.
+                captured["Power"] = "1"
+                if (!captured.containsKey("Brightness")) captured["Brightness"] = "100"
+                val failure = AlarmPlayback.apply(globalBluetoothManager, captured)
+                if (failure != null) {
+                    Log.e("AlarmAlertActivity", "Alarm $alarmId failed to update controller: $failure")
+                    Toast.makeText(this@AlarmAlertActivity, failure, Toast.LENGTH_LONG).show()
+                } else ModeManager.currentMode = captured["Name"] ?: ModeManager.currentMode
             }
-            globalBluetoothManager.setLedMode(alarmMode) // Set the mode on the device
-
-
-            Log.d("AlarmAlertActivity", "Alarm Mode set to: $alarmMode, Parameters: $alarmParameters")
-
         } else {
-            Log.w("AlarmAlertActivity", "Alarm with ID $alarmId not found in the list.")
-            // Handle the case where the alarm is not found (e.g., use default mode and parameters)
-            ModeManager.currentMode = "Color" // Or some default mode
-            globalBluetoothManager.setLedMode("Color")
-            globalBluetoothManager.setLedParameter("Color", listOf(255, 0, 0))
-            globalBluetoothManager.setBrightness(100)
-
+            Log.w("AlarmAlertActivity", "No saved effect for alarm ID $alarmId")
         }
 
         alarmRunnable = Runnable {
-            restorePreviousMode()
-            Log.d("ALARM ALERT", "Stopped")
-            finish()
+            closeWithRestore { Log.d("ALARM ALERT", "Stopped") }
         }
 
         updateSnoozeButtonText()
@@ -191,8 +163,7 @@ class AlarmAlertActivity : Activity() {
         }
 
         snoozeButton.setOnClickListener {
-            snoozeAlarm()
-            finish()
+            closeWithRestore { snoozeAlarm() }
         }
 
         dismissButton.setOnClickListener {
@@ -203,8 +174,7 @@ class AlarmAlertActivity : Activity() {
                 resultIntent.putExtra("alarmId", alarmId)
                 setResult(RESULT_OK, resultIntent)
             }
-            dismissAlarm()
-            finish()
+            closeWithRestore { dismissAlarm() }
         }
 
         alarmHandler.postDelayed(alarmRunnable, snoozeDurationMillis)
@@ -213,6 +183,11 @@ class AlarmAlertActivity : Activity() {
 
     private fun updateSnoozeButtonText() {
         snoozeButton.text = "Snooze $snoozeDurationMinutes Minute(s)"
+    }
+
+    override fun onDestroy() {
+        alarmHandler.removeCallbacksAndMessages(null)
+        super.onDestroy()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -253,39 +228,31 @@ class AlarmAlertActivity : Activity() {
         return ""
     }
 
-    private fun restorePreviousMode() {
-        Log.d("AlarmAlertActivity", "Restoring previous mode")
-
-        val previousMode = intent.getStringExtra("previousMode")
-        val previousParamsJson = intent.getStringExtra("previousParams")
-
-        if (previousMode.isNullOrEmpty() || previousParamsJson.isNullOrEmpty()) {
-            Log.e("AlarmAlertActivity", "Failed to restore previous mode due to null values")
-            return
-        }
-
-        val previousParams: Map<String, String>? = try {
-            Gson().fromJson(previousParamsJson, object : TypeToken<Map<String, String>>() {}.type)
-        } catch (e: Exception) {
-            Log.e("AlarmAlertActivity", "Failed to parse previousParamsJson: ${e.message}")
-            null
-        }
-
-        if (previousParams == null) {
-            Log.e("AlarmAlertActivity", "Parsed previousParams is null")
-            return
-        }
-
-        Log.d("AlarmAlertActivity", "Restoring Mode: $previousMode with Parameters: $previousParams")
-
-        ModeManager.currentMode = previousMode
-        globalBluetoothManager.setLedMode(previousMode)
-
-        previousParams.forEach { (param, value) ->
-            ModeManager.setModeParameter(previousMode, param, value)
-            globalBluetoothManager.setLedParameter(param,
-                value.split(",").map { it.toInt() }
-            )
+    /** Snooze/dismiss waits for playback to settle before restoring its exact snapshot.
+     * Never detach a background restore coroutine that can race the next alarm. */
+    private fun closeWithRestore(afterRestore: () -> Unit) {
+        if (closingAfterRestore) return
+        closingAfterRestore = true
+        snoozeButton.isEnabled = false
+        dismissButton.isEnabled = false
+        alarmHandler.removeCallbacksAndMessages(null)
+        lifecycleScope.launch {
+            playbackJob?.join()
+            val saved = previousControllerState
+            if (saved != null) {
+                val failure = AlarmPlayback.apply(globalBluetoothManager, saved)
+                if (failure == null) {
+                    ModeManager.currentMode = saved["Name"] ?: ModeManager.currentMode
+                } else {
+                    Log.e("AlarmAlertActivity", "Could not restore pre-alarm effect: $failure")
+                    Toast.makeText(this@AlarmAlertActivity,
+                        "Could not restore LED settings: $failure", Toast.LENGTH_LONG).show()
+                }
+            } else {
+                Log.w("AlarmAlertActivity", "No pre-alarm state was captured; leaving controller unchanged")
+            }
+            afterRestore()
+            finish()
         }
     }
 
@@ -386,7 +353,6 @@ class AlarmAlertActivity : Activity() {
         Toast.makeText(this, "Alarm will go off at $snoozeTimeFormatted", Toast.LENGTH_LONG).show()
 
         snoozeDurationMillis = snoozeDurationMinutes * 60 * 1000L
-        restorePreviousMode()
         finish()
     }
 
@@ -625,10 +591,6 @@ class AlarmAlertActivity : Activity() {
 
     override fun onBackPressed() {
         // Disable back button during alarm
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
     }
 
     private fun getAlarmsFromSharedPreferences(): List<Alarm> {

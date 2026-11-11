@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent"
+    android:layout_height="match_parent" android:background="@color/black" android:orientation="vertical"
+    android:gravity="center_horizontal" android:padding="16dp">
+  <LinearLayout android:layout_width="match_parent" android:layout_height="0dp"
+      android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+    <TextView android:id="@+id/textViewAlarmTime" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:textColor="@color/white" android:textSize="58sp" android:text="08:00 AM" android:gravity="center" />
+    <TextView android:id="@+id/textViewAlarmName" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:textColor="@color/white" android:textSize="25sp" android:text="Wake Up Alarm" android:gravity="center"
+        android:layout_marginTop="16dp" />
+  </LinearLayout>
+  <Button android:id="@+id/buttonDismiss" android:layout_width="match_parent" android:layout_height="68dp"
+      android:layout_marginBottom="20dp" android:text="Dismiss" android:textSize="24sp"
+      android:textColor="@color/white" android:background="@drawable/rounded_background" />
+  <LinearLayout android:id="@+id/linearLayoutSnooze" android:layout_width="match_parent"
+      android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+    <Button android:id="@+id/buttonSnoozeMinus" android:layout_width="62dp" android:layout_height="60dp"
+        android:text="−" android:textSize="24sp" android:textColor="@color/white" android:background="@drawable/rounded_background" />
+    <Button android:id="@+id/buttonSnooze" android:layout_width="0dp" android:layout_weight="1"
+        android:layout_height="60dp" android:layout_marginHorizontal="8dp" android:text="Snooze 5 Minute(s)"
+        android:textSize="16sp" android:textColor="@color/white" android:background="@drawable/rounded_background" />
+    <Button android:id="@+id/buttonSnoozePlus" android:layout_width="62dp" android:layout_height="60dp"
+        android:text="+" android:textSize="24sp" android:textColor="@color/white" android:background="@drawable/rounded_background" />
+  </LinearLayout>
+</LinearLayout>

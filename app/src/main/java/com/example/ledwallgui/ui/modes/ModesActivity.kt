@@ -20,6 +20,9 @@ import com.example.ledwallgui.PreferenceUtils
 import com.example.ledwallgui.R
 import com.example.ledwallgui.ui.settings.GlobalBluetoothManager
 import com.google.gson.Gson
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import com.example.ledwallgui.ui.WeatherUpdater
 
 object ModeManager {
     var currentMode: String = "" // Store the active mode
@@ -53,6 +56,11 @@ class ModesActivity : AppCompatActivity() {
 
         val backButton: ImageButton = findViewById(R.id.mBackButton)
         val modesContainer: GridLayout = findViewById(R.id.modesContainer)
+        val portrait = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
+        modesContainer.columnCount = if (portrait) 2 else 5
+        findViewById<Button>(R.id.animationStudioButton).setOnClickListener {
+            startActivity(Intent(this, AnimationStudioActivity::class.java))
+        }
 
         // Check for record mode extra
         val recordLedState = intent.getBooleanExtra("record_led_state", false)
@@ -115,14 +123,14 @@ class ModesActivity : AppCompatActivity() {
         }
 
         // Dynamically create buttons based on the mode names.
-        modeInfoList.forEach { modeInfo ->
+        modeInfoList.filterNot { it.name == "Custom Animation" }.forEach { modeInfo ->
             val button = AppCompatButton(this).apply {
                 text = modeInfo.name   // Use mode name from ModeInfo.
                 textSize = 20f
                 isEnabled = true
                 background = ContextCompat.getDrawable(this@ModesActivity, R.drawable.mode_button_shape)
                 setPadding(16, 16, 16, 16)
-                setOnClickListener {
+                setOnClickListener { selectedButton ->
                     // Log the parameters that will be made visible.
                     Log.d(
                         "ModesActivity",
@@ -131,19 +139,37 @@ class ModesActivity : AppCompatActivity() {
                                 "Current Values: ${modeInfo.parameterValues}"
                     )
 
-                    ModeManager.currentMode = modeInfo.name
-                    globalBluetoothManager.setLedMode(modeInfo.name)
-                    Toast.makeText(this@ModesActivity, "Mode changed to ${modeInfo.name}", Toast.LENGTH_SHORT).show()
-                    setResult(RESULT_OK)
-                    finish()
+                    if (!globalBluetoothManager.isConnected) {
+                        Toast.makeText(this@ModesActivity, "Connect to the LED controller first", Toast.LENGTH_SHORT).show()
+                        return@setOnClickListener
+                    }
+                    selectedButton.isEnabled = false
+                    lifecycleScope.launch {
+                        // Wait for the Arduino's acknowledgement rather than displaying
+                        // a mode that may have been rejected or overwritten elsewhere.
+                        val answer = globalBluetoothManager.controlAndAwait("Mode", "None", modeInfo.name)
+                        if (answer == "OK") {
+                            val latest = globalBluetoothManager.refreshState()
+                            ModeManager.currentMode = latest?.mode ?: modeInfo.name
+                            if (ModeManager.currentMode == "Weather") {
+                                WeatherUpdater(applicationContext, globalBluetoothManager).refreshNow()
+                            }
+                            setResult(RESULT_OK)
+                            finish()
+                        } else {
+                            selectedButton.isEnabled = true
+                            Toast.makeText(this@ModesActivity,
+                                "Controller did not accept mode change", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
             val params = GridLayout.LayoutParams().apply {
-                width = 0
-                height = 0
+                width = if (portrait) ((resources.displayMetrics.widthPixels - 48 * resources.displayMetrics.density) / 2).toInt() else 0
+                height = if (portrait) (82 * resources.displayMetrics.density).toInt() else 0
                 setMargins(8, 8, 8, 8)
-                columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
-                rowSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                columnSpec = if (portrait) GridLayout.spec(GridLayout.UNDEFINED) else GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                rowSpec = if (portrait) GridLayout.spec(GridLayout.UNDEFINED) else GridLayout.spec(GridLayout.UNDEFINED, 1f)
             }
             modesContainer.addView(button, params)
         }

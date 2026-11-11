@@ -1,117 +1,92 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:paddingLeft="16dp"
-    android:paddingRight="16dp">
+    android:background="#121721"
+    android:orientation="vertical"
+    android:paddingStart="20dp"
+    android:paddingEnd="20dp"
+    android:paddingBottom="20dp">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp">
+            <ImageButton
+                android:id="@+id/cBackButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/back_normal"
+                android:background="@drawable/transparent_background"
+                android:scaleType="centerInside"
+                android:contentDescription="Back to Settings" />
+            <TextView
+                android:id="@+id/textView2"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:paddingStart="12dp"
+                android:text="Connection"
+                android:textSize="30sp"
+                android:textStyle="bold"
+                android:textColor="@color/white" />
+        </LinearLayout>
 
-    <!-- Back Button: Positioned to the start of the parent (left side) -->
-    <ImageButton
-        android:id="@+id/cBackButton"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_alignParentStart="true"
-        android:layout_marginTop="16dp"
-        android:background="@drawable/transparent_background"
-        android:scaleType="centerInside"
-        android:src="@drawable/back_normal" />
-
-    <!-- Connection TextView: Positioned to the right of the back button -->
-    <TextView
-        android:id="@+id/textView2"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Connection"
-        android:textColor="@color/white"
-        android:textSize="50sp"
-        android:layout_toEndOf="@id/cBackButton"
-        android:layout_alignBaseline="@id/cBackButton"
-        android:layout_marginStart="10dp"
-        android:layout_alignParentTop="true" />
-
-    <!-- Scan for Devices TextView: Positioned below the first TextView -->
-    <TextView
-        android:id="@+id/textView3"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Scanning for Devices"
-        android:textColor="@color/white"
-        android:textSize="30sp"
-        android:layout_below="@id/textView2"
-        android:layout_alignParentStart="true"
-        android:layout_marginTop="10dp"/>
-
-    <!-- Rescan Button: Positioned immediately to the right of textView3 -->
-    <ImageButton
-        android:id="@+id/rescanButton"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_below="@id/textView2"
-        android:layout_marginStart="10dp"
-        android:layout_marginTop="13dp"
-        android:layout_toEndOf="@id/textView3"
-        android:background="@drawable/transparent_background"
-        android:contentDescription="Rescan for devices"
-        android:scaleType="centerInside"
-        android:src="@drawable/ic_rescan_icon" />
-
-    <ProgressBar
-        android:id="@+id/scanProgressBar"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_alignTop="@id/rescanButton"
-        android:layout_alignStart="@id/rescanButton"
-        android:layout_alignEnd="@id/rescanButton"
-        android:layout_alignBottom="@id/rescanButton"
-        android:indeterminate="true"
-        android:visibility="gone" />
-
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
+        <TextView
+            android:id="@+id/textView3"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:maxWidth="208dp"
+            android:text="Scanning for Devices"
+            android:textSize="20sp"
+            android:textColor="@color/white" />
+        <FrameLayout
+            android:layout_width="56dp"
+            android:layout_height="56dp">
+            <ImageButton
+                android:id="@+id/rescanButton"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/settings_button_color_background_selector"
+                android:padding="14dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_rescan_icon"
+                android:contentDescription="Rescan for devices" />
+            <ProgressBar
+                android:id="@+id/scanProgressBar"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center"
+                android:background="@android:color/transparent"
+                android:indeterminate="true"
+                android:visibility="gone" />
+        </FrameLayout>
+    </LinearLayout>
     <TextView
         android:id="@+id/textView4"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:paddingTop="8dp"
+        android:paddingBottom="16dp"
         android:text="Disconnected"
-        android:textColor="@color/white"
-        android:textSize="20sp"
-        android:layout_below="@id/textView3"
-        android:layout_alignParentStart="true"
-        android:layout_marginTop="10dp"/>
-
-    <!-- RecyclerView: Positioned below the Rescan button and stretched across the screen -->
+        android:textSize="16sp"
+        android:textColor="#A8B9CE" />
+    <!-- Device list owns scrolling; header and scan controls stay visible. -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/connectionlist"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_below="@id/textView4"
-        android:layout_alignParentBottom="true" />
-
-<!--    &lt;!&ndash; Layout for device name and connection status within RecyclerView &ndash;&gt;-->
-<!--    <LinearLayout-->
-<!--        android:id="@+id/deviceLayout"-->
-<!--        android:layout_width="match_parent"-->
-<!--        android:layout_height="wrap_content"-->
-<!--        android:orientation="horizontal"-->
-<!--        android:layout_below="@id/rescanButton"-->
-<!--        android:layout_marginTop="20dp">-->
-
-<!--        &lt;!&ndash; Device Name TextView: Positioned at the start &ndash;&gt;-->
-<!--        <TextView-->
-<!--            android:id="@+id/deviceNameTextView"-->
-<!--            android:layout_width="wrap_content"-->
-<!--            android:layout_height="wrap_content"-->
-<!--            android:text="Device Name"-->
-<!--            android:textColor="@color/white"-->
-<!--            android:textSize="20sp"-->
-<!--            android:layout_marginEnd="10dp"/>-->
-
-<!--        &lt;!&ndash; Connection Status TextView: Positioned next to the device name &ndash;&gt;-->
-<!--        <TextView-->
-<!--            android:id="@+id/connectionStatusTextView"-->
-<!--            android:layout_width="wrap_content"-->
-<!--            android:layout_height="wrap_content"-->
-<!--            android:text="Disconnected"-->
-<!--            android:textColor="@color/white"-->
-<!--            android:textSize="16sp"/>-->
-<!--    </LinearLayout>-->
-
-</RelativeLayout>
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingBottom="12dp" />
+</LinearLayout>
